@@ -1,0 +1,38 @@
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Environment
+.env
+.env.local
+.env*.local
+
+# Dependencies
+node_modules/
+
+# Python
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+
+# Build
+.next/
+out/
+build/
+dist/
+
+# Test
+test_results.json
+.coverage
+htmlcov/
+.pytest_cache/
