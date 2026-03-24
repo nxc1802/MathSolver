@@ -10,7 +10,7 @@ app = FastAPI(title="Visual Math Solver API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # In production, restrict this to your frontend URL
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -48,8 +48,11 @@ async def create_solve_job(request: SolveRequest):
     return SolveResponse(job_id=job_id, status="processing")
 
 async def process_job(job_id: str, request: SolveRequest):
+    async def status_update(status: str):
+        await notify_status(job_id, {"status": status})
+
     try:
-        result = await orchestrator.run(request.text, request.image_url, job_id=job_id)
+        result = await orchestrator.run(request.text, request.image_url, job_id=job_id, status_callback=status_update)
         status = "rendering" if "error" not in result else "error"
         
         # Update status in Supabase

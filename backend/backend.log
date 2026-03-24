@@ -1,0 +1,25 @@
+INFO:     Started server process [49665]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+INFO:     127.0.0.1:54416 - "OPTIONS /api/v1/solve HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54416 - "POST /api/v1/solve HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54421 - "WebSocket /ws/a596e0e8-74b8-4381-a77f-7d27052719f3" [accepted]
+INFO:     connection open
+INFO:     connection closed
+INFO:     127.0.0.1:54418 - "POST /api/v1/solve HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54443 - "WebSocket /ws/00e94359-0088-4c1d-9ceb-effb2723fa12" [accepted]
+INFO:     connection open
+INFO:     127.0.0.1:54461 - "GET /docs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54461 - "GET /openapi.json HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54485 - "POST /api/v1/solve HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54512 - "GET /api/v1/solve/90b0154a-84c4-4d60-9fdd-92def3c5779e HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54514 - "GET /api/v1/solve/90b0154a-84c4-4d60-9fdd-92def3c5779e HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54564 - "GET /api/v1/solve/90b0154a-84c4-4d60-9fdd-92def3c5779e HTTP/1.1" 200 OK
+INFO:     connection closed
+INFO:     127.0.0.1:54619 - "POST /api/v1/solve HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54623 - "WebSocket /ws/4ceb8284-f2f0-4928-bc75-06674c519a92" [accepted]
+INFO:     connection open
+INFO:     127.0.0.1:54566 - "GET /api/v1/solve/90b0154a-84c4-4d60-9fdd-92def3c5779e HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54693 - "GET /api/v1/solve/90b0154a-84c4-4d60-9fdd-92def3c5779e HTTP/1.1" 200 OK
+INFO:     connection closed

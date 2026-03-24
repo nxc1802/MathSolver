@@ -16,8 +16,10 @@ class Orchestrator:
         self.solver_engine = GeometryEngine()
         self.dsl_parser = DSLParser()
 
-    async def run(self, text: str, image_url: str = None, job_id: str = None) -> Dict[str, Any]:
+    async def run(self, text: str, image_url: str = None, job_id: str = None, status_callback=None) -> Dict[str, Any]:
         # 1. OCR if image provided
+        if status_callback: await status_callback("processing")
+        
         input_text = text
         if image_url:
             input_text = await self.ocr_agent.process_url(image_url)
@@ -27,6 +29,7 @@ class Orchestrator:
         
         for attempt in range(max_retries + 1):
             # 2. Parse text to Semantic JSON (with feedback loop)
+            if status_callback: await status_callback("solving")
             semantic_json = await self.parser_agent.process(input_text, feedback=feedback)
             semantic_json["input_text"] = input_text
             
@@ -72,7 +75,7 @@ class Orchestrator:
 
 class ParserAgent:
     """Mock Parser Agent for Phase 2 PoC"""
-    async def process(self, text: str) -> Dict[str, Any]:
+    async def process(self, text: str, feedback: str = None) -> Dict[str, Any]:
         # Simple Mock: Extracting entities from fixed triangle example
         return {
             "entities": ["A", "B", "C"],

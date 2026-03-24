@@ -1,21 +1,22 @@
 import os
 from celery import Celery
 
-REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+BROKER_URL = os.getenv("CELERY_BROKER_URL", os.getenv("REDIS_URL", "redis://localhost:6379/0"))
+RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", os.getenv("REDIS_URL", "redis://localhost:6379/1"))
 
-# For Upstash (rediss://), we need to ensure SSL settings if needed
 celery_app = Celery(
     "math_solver",
-    broker=REDIS_URL,
-    backend=REDIS_URL,
+    broker=BROKER_URL,
+    backend=RESULT_BACKEND,
     include=["worker.tasks"]
 )
 
-# Fix for Upstash SSL context if using rediss://
-if REDIS_URL.startswith("rediss://"):
+# Fix for SSL if using rediss:// or if explicitly set in URL
+if BROKER_URL.startswith("rediss://") or "ssl_cert_reqs" in BROKER_URL:
     celery_app.conf.broker_use_ssl = {
-        'ssl_cert_reqs': 'none' # Upstash handles SSL, this avoids local cert issues
+        'ssl_cert_reqs': 'none'
     }
+if RESULT_BACKEND.startswith("rediss://") or "ssl_cert_reqs" in RESULT_BACKEND:
     celery_app.conf.redis_backend_use_ssl = {
         'ssl_cert_reqs': 'none'
     }
