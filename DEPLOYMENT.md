@@ -8,7 +8,7 @@ Tài liệu này hướng dẫn cách đưa Visual Math Solver v3.0 lên môi tr
 3. Trong phần cấu hình Space, hãy thiết lập các **Variables & Secrets** (trong tab Settings) giống như file `backend/.env`.
    - `MEGALLM_API_KEY`, `MEGALLM_BASE_URL`, `SUPABASE_URL`, v.v.
    - **Lưu ý quan trọng**: Thiết lập `REDIS_URL` trỏ tới một Redis instance thực tế (như [Upstash](https://upstash.com/)).
-4. Đẩy (Push) code trong thư mục `/backend` lên repository của HF Space. **File `Dockerfile.backend` đã được tối ưu cho port 7860 của HF.**
+4. Đẩy (Push) code trong thư mục `/backend` lên repository của HF Space. **File `Dockerfile` đã được tối ưu cho port 7860 của HF.**
 5. Xem chi tiết cách setup Redis tại [REDIS_GUIDE.md](file:///d:/Workspace/Project/Math-Solver/docs/REDIS_GUIDE.md).
 
 ## 2. Frontend (Vercel)
