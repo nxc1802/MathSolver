@@ -55,23 +55,44 @@ class Orchestrator:
             "video_url": video_url
         }
 
+import os
+import json
+from openai import OpenAI
+from typing import Dict, Any, List
+
 class ParserAgent:
-    """Mock Parser Agent for Phase 2 PoC"""
+    """Real Parser Agent using MegaLLM"""
+    def __init__(self):
+        self.client = OpenAI(
+            base_url=os.environ.get("MEGALLM_BASE_URL"),
+            api_key=os.environ.get("MEGALLM_API_KEY")
+        )
+
     async def process(self, text: str) -> Dict[str, Any]:
-        # Simple Mock: Extracting entities from fixed triangle example
-        return {
-            "entities": ["A", "B", "C"],
-            "type": "triangle",
-            "values": {"AB": 5, "AC": 7, "angle_A": 60}
-        }
+        response = self.client.chat.completions.create(
+            model="gpt-5",
+            messages=[
+                {"role": "system", "content": "You are a Geometry Parser. Parse the user problem into a JSON with 'entities' (list of points), 'type' (shape type), and 'values' (dictionary of lengths and angles). Example: {'entities':['A','B','C'], 'type':'triangle', 'values':{'AB':5, 'AC':7, 'angle_A':60}}"},
+                {"role": "user", "content": text}
+            ],
+            response_format={"type": "json_object"}
+        )
+        return json.loads(response.choices[0].message.content)
 
 class GeometryAgent:
-    """Mock Geometry Agent for Phase 2 PoC"""
+    """Real Geometry Agent using MegaLLM to generate DSL"""
+    def __init__(self):
+        self.client = OpenAI(
+            base_url=os.environ.get("MEGALLM_BASE_URL"),
+            api_key=os.environ.get("MEGALLM_API_KEY")
+        )
+
     async def generate_dsl(self, semantic_data: Dict[str, Any]) -> str:
-        # Mocking DSL generation from semantic data
-        v = semantic_data["values"]
-        dsl = f"POINT(A)\nPOINT(B)\nPOINT(C)\nTRIANGLE(ABC)\n"
-        dsl += f"LENGTH(AB, {v['AB']})\n"
-        dsl += f"LENGTH(AC, {v['AC']})\n"
-        dsl += f"ANGLE(A, {v['angle_A']}deg)"
-        return dsl
+        response = self.client.chat.completions.create(
+            model="gpt-5",
+            messages=[
+                {"role": "system", "content": "You are a Geometry DSL Generator. Convert the semantic JSON into Geometry DSL code. Valid keywords: POINT(id), LINE(p1,p2), TRIANGLE(p1p2p3), LENGTH(p1p2, val), ANGLE(v, val_deg)."},
+                {"role": "user", "content": json.dumps(semantic_data)}
+            ]
+        )
+        return response.choices[0].message.content.strip()

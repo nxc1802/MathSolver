@@ -1,10 +1,14 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from solver.dsl_parser import DSLParser
 from solver.engine import GeometryEngine
 import uuid
+import json
+from dotenv import load_dotenv
+
+load_dotenv()
 
 app = FastAPI(title="Visual Math Solver API")
 
@@ -35,26 +39,34 @@ from agents.orchestrator import Orchestrator
 
 orchestrator = Orchestrator()
 
-@app.post("/api/v1/solve", response_model=SolveResponse)
-async def create_solve_job(request: SolveRequest):
-    job_id = str(uuid.uuid4())
-    # In Phase 2, we run it directly for demo purposes
+# Store active websocket connections
+active_connections: Dict[str, WebSocket] = {}
+
+@app.websocket("/ws/{client_id}")
+async def websocket_endpoint(websocket: WebSocket, client_id: str):
+    await websocket.accept()
+    active_connections[client_id] = websocket
+    try:
+        while True:
+            await websocket.receive_text() # keepalive
+    except WebSocketDisconnect:
+        del active_connections[client_id]
+
+@app.post("/api/v1/solve")
+async def solve(request: SolveRequest, client_id: Optional[str] = None):
+    # Run Orchestrator
     try:
         result = await orchestrator.run(request.text, request.image_url)
-        jobs[job_id] = {
-            "status": "success",
-            "input": request.text,
-            "result": result
-        }
+        
+        # If client_id is provided via websocket, send result back directly
+        if client_id and client_id in active_connections:
+            await active_connections[client_id].send_json({
+                "type": "result",
+                "data": result
+            })
+        
+        return {"status": "success", "data": result}
     except Exception as e:
-        jobs[job_id] = {
-            "status": "error",
-            "error": str(e)
-        }
-    return SolveResponse(job_id=job_id, status=jobs[job_id]["status"])
-
-@app.get("/api/v1/solve/{job_id}")
-async def get_job_status(job_id: str):
-    if job_id not in jobs:
-        raise HTTPException(status_code=404, detail="Job not found")
-    return jobs[job_id]
+        if client_id and client_id in active_connections:
+            await active_connections[client_id].send_json({"type": "error", "message": str(e)})
+        raise HTTPException(status_code=500, detail=str(e))

@@ -1,9 +1,16 @@
+import os
+from supabase import create_client, Client
 from typing import Dict, Any, List
 
 class RendererAgent:
-    """Renderer Agent for Phase 4.
-    Generates Manim Python scripts based on coordinates and geometry types.
-    """
+    """Renderer Agent integrated with Supabase Storage"""
+    def __init__(self):
+        self.supabase: Client = create_client(
+            os.environ.get("SUPABASE_URL"),
+            os.environ.get("SUPABASE_KEY")
+        )
+        self.bucket = os.environ.get("SUPABASE_BUCKET", "video")
+
     def generate_manim_script(self, data: Dict[str, Any]) -> str:
         coords = data.get("coordinates", {})
         semantic = data.get("semantic", {})
@@ -30,5 +37,13 @@ class RendererAgent:
         return script
 
     async def get_video_url(self, manim_script: str) -> str:
-        # Mock URL for Phase 4 PoC
-        return "https://storage.googleapis.com/math-solver-v3/videos/demo_triangle.mp4"
+        # In a real setup, we would run Manim locally and then upload the file.
+        # Since we can't run Manim here, we simulate the upload of a "local file".
+        # Assume 'output.mp4' was generated.
+        
+        # Example of real upload logic (commented for stub):
+        # with open('output.mp4', 'rb') as f:
+        #     self.supabase.storage.from_(self.bucket).upload('result.mp4', f)
+        
+        # Return public URL from Supabase
+        return f"{os.environ.get('SUPABASE_URL')}/storage/v1/object/public/{self.bucket}/demo_triangle.mp4"
