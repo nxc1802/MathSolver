@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+sympy
+numpy
+pydantic
+python-multipart
+python-dotenv
+# manim  # Sẽ cài đặt sau khi cần thiết cho Phase 4
