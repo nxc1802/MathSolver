@@ -5,16 +5,24 @@ on:
     branches: [ main ]
 
 jobs:
-  build:
+  build-and-deploy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-        
-      - name: Build Backend Image
-        run: docker build -t visual-math-backend ./backend -f ./backend/Dockerfile.backend
-        
-      - name: Build Frontend Image
-        run: docker build -t visual-math-frontend ./frontend -f ./frontend/Dockerfile.frontend
+      - name: Push to Hugging Face
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          git config --global user.email "cuong@example.com"
+          git config --global user.name "Cuong2004"
+          # Clone the HF space to a temp dir
+          git clone https://Cuong2004:$HF_TOKEN@huggingface.co/spaces/Cuong2004/math-solver hf_space
+          # Sync backend files to HF space
+          cp -r backend/* hf_space/
+          cd hf_space
+          git add .
+          git commit -m "Deploy from GitHub Actions" || echo "No changes to commit"
+          git push https://Cuong2004:$HF_TOKEN@huggingface.co/spaces/Cuong2004/math-solver main
