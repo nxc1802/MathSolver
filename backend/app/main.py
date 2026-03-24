@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional, Dict, Any
 from solver.dsl_parser import DSLParser
@@ -6,6 +7,14 @@ from solver.engine import GeometryEngine
 import uuid
 
 app = FastAPI(title="Visual Math Solver API")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], # In production, restrict this to your frontend URL
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 class SolveRequest(BaseModel):
     text: str
