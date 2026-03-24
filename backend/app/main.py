@@ -38,22 +38,33 @@ orchestrator = Orchestrator()
 @app.post("/api/v1/solve", response_model=SolveResponse)
 async def create_solve_job(request: SolveRequest):
     job_id = str(uuid.uuid4())
-    jobs[job_id] = {"status": "processing", "input": request.text}
+    # Create job in Supabase
+    supabase_client.table("jobs").insert({
+        "id": job_id,
+        "status": "processing",
+        "input_text": request.text
+    }).execute()
     
-    # Run Orchestrator in Background or Async
     asyncio.create_task(process_job(job_id, request))
-    
     return SolveResponse(job_id=job_id, status="processing")
 
 async def process_job(job_id: str, request: SolveRequest):
     try:
         result = await orchestrator.run(request.text, request.image_url, job_id=job_id)
-        jobs[job_id]["status"] = "rendering" if "error" not in result else "error"
-        jobs[job_id]["result"] = result
-        # Notify via WebSocket if listener exists
-        await notify_status(job_id, jobs[job_id])
+        status = "rendering" if "error" not in result else "error"
+        
+        # Update status in Supabase
+        supabase_client.table("jobs").update({
+            "status": status,
+            "result": result
+        }).eq("id", job_id).execute()
+        
+        await notify_status(job_id, {"status": status, "result": result})
     except Exception as e:
-        jobs[job_id] = {"status": "error", "error": str(e)}
+        supabase_client.table("jobs").update({
+            "status": "error",
+            "result": {"error": str(e)}
+        }).eq("id", job_id).execute()
 
 # WebSocket Management
 active_connections: Dict[str, List[WebSocket]] = {}
@@ -77,6 +88,7 @@ async def notify_status(job_id: str, data: dict):
 
 @app.get("/api/v1/solve/{job_id}")
 async def get_job_status(job_id: str):
-    if job_id not in jobs:
+    response = supabase_client.table("jobs").select("*").eq("id", job_id).execute()
+    if not response.data:
         raise HTTPException(status_code=404, detail="Job not found")
-    return jobs[job_id]
+    return response.data[0]

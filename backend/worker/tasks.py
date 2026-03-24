@@ -28,5 +28,13 @@ def render_geometry_video(job_id: str, data: dict):
     # 4. Get Public URL
     video_url = supabase.storage.from_(bucket_name).get_public_url(file_name)
     
-    # 5. Update Job status in Supabase/Redis
+    # 5. Update Job status and Final Result in Supabase Database
+    final_result = data.copy()
+    final_result["video_url"] = video_url
+    
+    supabase.table("jobs").update({
+        "status": "success",
+        "result": final_result
+    }).eq("id", job_id).execute()
+    
     return video_url
