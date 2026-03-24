@@ -1,8 +1,13 @@
 # Python
-venv/
-__pycache__/
+**/__pycache__/
 *.pyc
+*.pyo
+*.pyd
 .env
+
+# Logs
+*.log
+nohup.out
 
 # Node
 node_modules/
