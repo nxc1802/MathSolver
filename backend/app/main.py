@@ -31,7 +31,7 @@ async def create_solve_job(request: SolveRequest):
     job_id = str(uuid.uuid4())
     # In Phase 2, we run it directly for demo purposes
     try:
-        result = await orchestrator.run(request.text)
+        result = await orchestrator.run(request.text, request.image_url)
         jobs[job_id] = {
             "status": "success",
             "input": request.text,

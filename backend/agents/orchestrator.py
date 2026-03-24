@@ -2,18 +2,32 @@ from typing import Dict, Any, List
 from solver.dsl_parser import DSLParser
 from solver.engine import GeometryEngine
 
+from agents.ocr_agent import OCRAgent
+from agents.knowledge_agent import KnowledgeAgent
+
 class Orchestrator:
     def __init__(self):
         self.parser_agent = ParserAgent()
         self.geometry_agent = GeometryAgent()
+        self.ocr_agent = OCRAgent()
+        self.knowledge_agent = KnowledgeAgent()
         self.solver_engine = GeometryEngine()
         self.dsl_parser = DSLParser()
 
-    async def run(self, text: str) -> Dict[str, Any]:
-        # 1. Parse text to Semantic JSON
-        semantic_json = await self.parser_agent.process(text)
+    async def run(self, text: str, image_url: str = None) -> Dict[str, Any]:
+        # 1. OCR if image provided
+        input_text = text
+        if image_url:
+            input_text = await self.ocr_agent.process_url(image_url)
+
+        # 2. Parse text to Semantic JSON
+        semantic_json = await self.parser_agent.process(input_text)
+        semantic_json["input_text"] = input_text
         
-        # 2. Convert Semantic JSON to DSL
+        # 3. Augment with Knowledge
+        semantic_json = self.knowledge_agent.augment_semantic_data(semantic_json)
+        
+        # 4. Convert Semantic JSON to DSL
         dsl_code = await self.geometry_agent.generate_dsl(semantic_json)
         
         # 3. Parse DSL to Solver Models
