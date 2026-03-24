@@ -5,21 +5,39 @@ export default function Home() {
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<any>(null);
+  const [jobId, setJobId] = useState<string | null>(null);
+
+  // WebSocket for Real-time Updates
+  React.useEffect(() => {
+    if (!jobId) return;
+
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+    const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8000';
+
+    const ws = new WebSocket(`${wsUrl}/ws/${jobId}`);
+    ws.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      console.log("WebSocket Update:", data);
+      if (data.status === "success" || data.status === "rendering" || data.status === "error") {
+        setResult(data.result || data);
+      }
+    };
+
+    return () => ws.close();
+  }, [jobId]);
 
   const handleSolve = async () => {
     setLoading(true);
+    setResult(null);
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
     try {
-      const response = await fetch('http://localhost:8000/api/v1/solve', {
+      const response = await fetch(`${apiUrl}/api/v1/solve`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: inputText }),
       });
       const data = await response.json();
-      
-      // Polling or direct success for PoC
-      const res = await fetch(`http://localhost:8000/api/v1/solve/${data.job_id}`);
-      const jobResult = await res.json();
-      setResult(jobResult.result);
+      setJobId(data.job_id);
     } catch (error) {
       console.error("Error solving:", error);
     }
