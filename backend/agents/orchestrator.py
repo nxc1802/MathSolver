@@ -4,6 +4,7 @@ from solver.engine import GeometryEngine
 
 from agents.ocr_agent import OCRAgent
 from agents.knowledge_agent import KnowledgeAgent
+from agents.renderer_agent import RendererAgent
 
 class Orchestrator:
     def __init__(self):
@@ -11,6 +12,7 @@ class Orchestrator:
         self.geometry_agent = GeometryAgent()
         self.ocr_agent = OCRAgent()
         self.knowledge_agent = KnowledgeAgent()
+        self.renderer_agent = RendererAgent()
         self.solver_engine = GeometryEngine()
         self.dsl_parser = DSLParser()
 
@@ -30,16 +32,27 @@ class Orchestrator:
         # 4. Convert Semantic JSON to DSL
         dsl_code = await self.geometry_agent.generate_dsl(semantic_json)
         
-        # 3. Parse DSL to Solver Models
+        # 5. Parse DSL to Solver Models
         points, constraints = self.dsl_parser.parse(dsl_code)
         
-        # 4. Solve for coordinates
+        # 6. Solve for coordinates
         coordinates = self.solver_engine.solve(points, constraints)
+        
+        # 6. Generate Animation Script & Mock Video URL
+        result_data = {
+            "dsl": dsl_code,
+            "coordinates": coordinates,
+            "semantic": semantic_json
+        }
+        manim_script = self.renderer_agent.generate_manim_script(result_data)
+        video_url = await self.renderer_agent.get_video_url(manim_script)
         
         return {
             "dsl": dsl_code,
             "coordinates": coordinates,
-            "semantic": semantic_json
+            "semantic": semantic_json,
+            "manim_script": manim_script,
+            "video_url": video_url
         }
 
 class ParserAgent:
