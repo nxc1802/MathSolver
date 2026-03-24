@@ -18,11 +18,12 @@ jobs:
         run: |
           git config --global user.email "cuong@example.com"
           git config --global user.name "Cuong2004"
-          # Clone the HF space to a temp dir
-          git clone https://Cuong2004:$HF_TOKEN@huggingface.co/spaces/Cuong2004/math-solver hf_space
-          # Sync backend files to HF space
-          cp -r backend/* hf_space/
-          cd hf_space
+          # Use a temporary directory to avoid git-in-git issues
+          mkdir hf_copy
+          cp -r backend/* hf_copy/
+          cd hf_copy
+          git init
+          git remote add origin https://Cuong2004:$HF_TOKEN@huggingface.co/spaces/Cuong2004/math-solver
           git add .
-          git commit -m "Deploy from GitHub Actions" || echo "No changes to commit"
-          git push https://Cuong2004:$HF_TOKEN@huggingface.co/spaces/Cuong2004/math-solver main
+          git commit -m "Deploy from GitHub Actions"
+          git push --force origin master:main
