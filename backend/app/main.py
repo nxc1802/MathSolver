@@ -24,8 +24,7 @@ class SolveResponse(BaseModel):
     job_id: str
     status: str
 
-# In-memory job store for PoC
-jobs = {}
+supabase_client = get_supabase()
 
 @app.get("/")
 def read_root():
