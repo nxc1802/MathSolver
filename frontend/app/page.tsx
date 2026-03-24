@@ -1,44 +1,29 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState } from 'react';
 import Head from 'next/head';
 
 export default function Home() {
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<any>(null);
-  const [clientId] = useState(() => Math.random().toString(36).substring(7));
-  const ws = useRef<WebSocket | null>(null);
-
-  useEffect(() => {
-    const wsUrl = process.env.NEXT_PUBLIC_WS_URL || `ws://localhost:8000/ws/${clientId}`;
-    ws.current = new WebSocket(`${wsUrl}/${clientId}`);
-    
-    ws.current.onmessage = (event) => {
-      const message = JSON.parse(event.data);
-      if (message.type === 'result') {
-        setResult(message.data);
-        setLoading(false);
-      } else if (message.type === 'error') {
-        alert("Error: " + message.message);
-        setLoading(false);
-      }
-    };
-
-    return () => ws.current?.close();
-  }, [clientId]);
 
   const handleSolve = async () => {
     setLoading(true);
     try {
-      await fetch('http://localhost:8000/api/v1/solve?client_id=' + clientId, {
+      const response = await fetch('http://localhost:8000/api/v1/solve', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: inputText }),
       });
-      // Result will come via WebSocket
+      const data = await response.json();
+      
+      // Polling or direct success for PoC
+      const res = await fetch(`http://localhost:8000/api/v1/solve/${data.job_id}`);
+      const jobResult = await res.json();
+      setResult(jobResult.result);
     } catch (error) {
       console.error("Error solving:", error);
-      setLoading(false);
     }
+    setLoading(false);
   };
 
   return (

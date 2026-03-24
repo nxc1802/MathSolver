@@ -16,83 +16,77 @@ class Orchestrator:
         self.solver_engine = GeometryEngine()
         self.dsl_parser = DSLParser()
 
-    async def run(self, text: str, image_url: str = None) -> Dict[str, Any]:
+    async def run(self, text: str, image_url: str = None, job_id: str = None) -> Dict[str, Any]:
         # 1. OCR if image provided
         input_text = text
         if image_url:
             input_text = await self.ocr_agent.process_url(image_url)
 
-        # 2. Parse text to Semantic JSON
-        semantic_json = await self.parser_agent.process(input_text)
-        semantic_json["input_text"] = input_text
+        feedback = None
+        max_retries = 2
         
-        # 3. Augment with Knowledge
-        semantic_json = self.knowledge_agent.augment_semantic_data(semantic_json)
+        for attempt in range(max_retries + 1):
+            # 2. Parse text to Semantic JSON (with feedback loop)
+            semantic_json = await self.parser_agent.process(input_text, feedback=feedback)
+            semantic_json["input_text"] = input_text
+            
+            # 3. Augment with Knowledge
+            semantic_json = self.knowledge_agent.augment_semantic_data(semantic_json)
+            
+            # 4. Convert Semantic JSON to DSL
+            # (Assuming Parser already outputs something close to DSL or we have a translator)
+            # For brevity, let's say GeometryAgent handles the final refinement
+            dsl_code = await self.geometry_agent.generate_dsl(semantic_json)
+            
+            # 5. Parse DSL to Solver Models
+            points, constraints = self.dsl_parser.parse(dsl_code)
+            
+            # 6. Solve for coordinates
+            coordinates = self.solver_engine.solve(points, constraints)
+            
+            if coordinates:
+                break # Success!
+            else:
+                feedback = "Geometry solver failed to find a valid solution for the given constraints. Parallelism or lengths might be inconsistent."
+                if attempt == max_retries:
+                    return {"error": "Solver failed after multiple attempts.", "last_dsl": dsl_code}
+
+        # 7. Hand over to Background Worker for Manim Rendering
+        from worker.tasks import render_geometry_video
         
-        # 4. Convert Semantic JSON to DSL
-        dsl_code = await self.geometry_agent.generate_dsl(semantic_json)
-        
-        # 5. Parse DSL to Solver Models
-        points, constraints = self.dsl_parser.parse(dsl_code)
-        
-        # 6. Solve for coordinates
-        coordinates = self.solver_engine.solve(points, constraints)
-        
-        # 6. Generate Animation Script & Mock Video URL
-        result_data = {
+        result_payload = {
             "dsl": dsl_code,
             "coordinates": coordinates,
             "semantic": semantic_json
         }
-        manim_script = self.renderer_agent.generate_manim_script(result_data)
-        video_url = await self.renderer_agent.get_video_url(manim_script)
+        
+        # Dispatch background task
+        render_geometry_video.delay(job_id, result_payload)
         
         return {
+            "status": "rendering_queued",
             "dsl": dsl_code,
             "coordinates": coordinates,
-            "semantic": semantic_json,
-            "manim_script": manim_script,
-            "video_url": video_url
+            "semantic": semantic_json
         }
 
-import os
-import json
-from openai import OpenAI
-from typing import Dict, Any, List
-
 class ParserAgent:
-    """Real Parser Agent using MegaLLM"""
-    def __init__(self):
-        self.client = OpenAI(
-            base_url=os.environ.get("MEGALLM_BASE_URL"),
-            api_key=os.environ.get("MEGALLM_API_KEY")
-        )
-
+    """Mock Parser Agent for Phase 2 PoC"""
     async def process(self, text: str) -> Dict[str, Any]:
-        response = self.client.chat.completions.create(
-            model="gpt-5",
-            messages=[
-                {"role": "system", "content": "You are a Geometry Parser. Parse the user problem into a JSON with 'entities' (list of points), 'type' (shape type), and 'values' (dictionary of lengths and angles). Example: {'entities':['A','B','C'], 'type':'triangle', 'values':{'AB':5, 'AC':7, 'angle_A':60}}"},
-                {"role": "user", "content": text}
-            ],
-            response_format={"type": "json_object"}
-        )
-        return json.loads(response.choices[0].message.content)
+        # Simple Mock: Extracting entities from fixed triangle example
+        return {
+            "entities": ["A", "B", "C"],
+            "type": "triangle",
+            "values": {"AB": 5, "AC": 7, "angle_A": 60}
+        }
 
 class GeometryAgent:
-    """Real Geometry Agent using MegaLLM to generate DSL"""
-    def __init__(self):
-        self.client = OpenAI(
-            base_url=os.environ.get("MEGALLM_BASE_URL"),
-            api_key=os.environ.get("MEGALLM_API_KEY")
-        )
-
+    """Mock Geometry Agent for Phase 2 PoC"""
     async def generate_dsl(self, semantic_data: Dict[str, Any]) -> str:
-        response = self.client.chat.completions.create(
-            model="gpt-5",
-            messages=[
-                {"role": "system", "content": "You are a Geometry DSL Generator. Convert the semantic JSON into Geometry DSL code. Valid keywords: POINT(id), LINE(p1,p2), TRIANGLE(p1p2p3), LENGTH(p1p2, val), ANGLE(v, val_deg)."},
-                {"role": "user", "content": json.dumps(semantic_data)}
-            ]
-        )
-        return response.choices[0].message.content.strip()
+        # Mocking DSL generation from semantic data
+        v = semantic_data["values"]
+        dsl = f"POINT(A)\nPOINT(B)\nPOINT(C)\nTRIANGLE(ABC)\n"
+        dsl += f"LENGTH(AB, {v['AB']})\n"
+        dsl += f"LENGTH(AC, {v['AC']})\n"
+        dsl += f"ANGLE(A, {v['angle_A']}deg)"
+        return dsl

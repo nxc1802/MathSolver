@@ -2,13 +2,9 @@ from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
-from solver.dsl_parser import DSLParser
-from solver.engine import GeometryEngine
 import uuid
-import json
-from dotenv import load_dotenv
-
-load_dotenv()
+import asyncio
+from app.supabase_client import get_supabase
 
 app = FastAPI(title="Visual Math Solver API")
 
@@ -39,34 +35,48 @@ from agents.orchestrator import Orchestrator
 
 orchestrator = Orchestrator()
 
-# Store active websocket connections
-active_connections: Dict[str, WebSocket] = {}
+@app.post("/api/v1/solve", response_model=SolveResponse)
+async def create_solve_job(request: SolveRequest):
+    job_id = str(uuid.uuid4())
+    jobs[job_id] = {"status": "processing", "input": request.text}
+    
+    # Run Orchestrator in Background or Async
+    asyncio.create_task(process_job(job_id, request))
+    
+    return SolveResponse(job_id=job_id, status="processing")
 
-@app.websocket("/ws/{client_id}")
-async def websocket_endpoint(websocket: WebSocket, client_id: str):
+async def process_job(job_id: str, request: SolveRequest):
+    try:
+        result = await orchestrator.run(request.text, request.image_url, job_id=job_id)
+        jobs[job_id]["status"] = "rendering" if "error" not in result else "error"
+        jobs[job_id]["result"] = result
+        # Notify via WebSocket if listener exists
+        await notify_status(job_id, jobs[job_id])
+    except Exception as e:
+        jobs[job_id] = {"status": "error", "error": str(e)}
+
+# WebSocket Management
+active_connections: Dict[str, List[WebSocket]] = {}
+
+@app.websocket("/ws/{job_id}")
+async def websocket_endpoint(websocket: WebSocket, job_id: str):
     await websocket.accept()
-    active_connections[client_id] = websocket
+    if job_id not in active_connections:
+        active_connections[job_id] = []
+    active_connections[job_id].append(websocket)
     try:
         while True:
-            await websocket.receive_text() # keepalive
+            await websocket.receive_text() # Keep connection alive
     except WebSocketDisconnect:
-        del active_connections[client_id]
+        active_connections[job_id].remove(websocket)
 
-@app.post("/api/v1/solve")
-async def solve(request: SolveRequest, client_id: Optional[str] = None):
-    # Run Orchestrator
-    try:
-        result = await orchestrator.run(request.text, request.image_url)
-        
-        # If client_id is provided via websocket, send result back directly
-        if client_id and client_id in active_connections:
-            await active_connections[client_id].send_json({
-                "type": "result",
-                "data": result
-            })
-        
-        return {"status": "success", "data": result}
-    except Exception as e:
-        if client_id and client_id in active_connections:
-            await active_connections[client_id].send_json({"type": "error", "message": str(e)})
-        raise HTTPException(status_code=500, detail=str(e))
+async def notify_status(job_id: str, data: dict):
+    if job_id in active_connections:
+        for connection in active_connections[job_id]:
+            await connection.send_json(data)
+
+@app.get("/api/v1/solve/{job_id}")
+async def get_job_status(job_id: str):
+    if job_id not in jobs:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return jobs[job_id]

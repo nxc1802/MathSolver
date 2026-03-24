@@ -1,15 +1,26 @@
-import base64
-from typing import Optional
+import os
+from PIL import Image
+try:
+    from pix2tex.cli import LatexOCR
+except ImportError:
+    LatexOCR = None
 
 class OCRAgent:
-    """OCR Agent Stub for Phase 3.
-    In production, this would use Pix2Tex or TrOCR via a separate service or local model.
-    """
-    async def process_image(self, image_data: str) -> str:
-        # Mock behavior: If image is provided, return a predefined math text
-        # In a real scenario, this would decode base64 and run inference
-        return "Cho tam giác ABC đều cạnh 5"
+    """Real OCR Agent using Pix2Tex for LaTeX recognition."""
+    def __init__(self):
+        if LatexOCR:
+            self.model = LatexOCR()
+        else:
+            self.model = None
+
+    async def process_image(self, image_path: str) -> str:
+        if not self.model:
+            return "OCR Engine (Pix2Tex) not installed. Please install it to use this feature."
+        
+        img = Image.open(image_path)
+        return self.model(img)
 
     async def process_url(self, url: str) -> str:
-        # Mock behavior
-        return "Cho hình vuông ABCD có cạnh bằng 4"
+        # For production, we would download the image first
+        # For now, we return a stub text or download logic
+        return "OCR from URL requires image download. (Pix2Tex implementation pending)"
