@@ -23,4 +23,12 @@ Thumbs.db
 # Media (Manim output)
 media/
 video/
+videos/
 images/
+texts/
+Tex/
+*.mp4
+*.png
+*.svg
+diag_manim.py
+celery_worker.log
