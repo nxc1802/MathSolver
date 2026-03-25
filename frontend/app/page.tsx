@@ -127,6 +127,7 @@ export default function Home() {
 
               <AnimationPreview 
                 videoUrl={result.video_url} 
+                imageUrl={result.image_url}
                 loading={status === "rendering"}
               />
             </motion.div>

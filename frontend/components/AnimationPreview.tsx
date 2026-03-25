@@ -5,10 +5,11 @@ import { PlayCircle, Loader2 } from "lucide-react";
 
 interface AnimationPreviewProps {
   videoUrl?: string;
+  imageUrl?: string;
   loading?: boolean;
 }
 
-export default function AnimationPreview({ videoUrl, loading }: AnimationPreviewProps) {
+export default function AnimationPreview({ videoUrl, imageUrl, loading }: AnimationPreviewProps) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -25,6 +26,18 @@ export default function AnimationPreview({ videoUrl, loading }: AnimationPreview
           muted
           loop
         />
+      ) : imageUrl ? (
+        <div className="relative w-full h-full flex flex-col">
+          <img 
+            src={imageUrl} 
+            alt="Geometry Result" 
+            className="w-full h-full object-contain p-4"
+          />
+          <div className="absolute top-4 right-4 bg-black/60 backdrop-blur-md px-3 py-1 rounded-full border border-white/10 flex items-center gap-2">
+            <Loader2 className="w-3 h-3 text-indigo-400 animate-spin" />
+            <span className="text-[10px] text-zinc-300 font-bold uppercase tracking-wider">Rendering MP4...</span>
+          </div>
+        </div>
       ) : (
         <div className="flex flex-col items-center gap-4 p-12 text-center">
           <div className="w-16 h-16 rounded-3xl bg-white/5 border border-white/10 flex items-center justify-center shadow-2xl">
@@ -40,8 +53,8 @@ export default function AnimationPreview({ videoUrl, loading }: AnimationPreview
             </h4>
             <p className="text-zinc-500 text-sm max-w-[280px]">
               {loading 
-                ? "Manim Engine đang mô tả hóa bài toán của bạn thành video từng bước." 
-                : "Animation sẽ xuất hiện tại đây sau khi GPU xử lý xong."}
+                ? "Hệ thống đang giải và vẽ mô phỏng bài toán." 
+                : "Kết quả hình ảnh và video sẽ xuất hiện tại đây."}
             </p>
           </div>
         </div>
