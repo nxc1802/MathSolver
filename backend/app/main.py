@@ -5,7 +5,24 @@ from typing import Optional, Dict, Any, List
 import uuid
 import asyncio
 import os
+import logging
 from app.supabase_client import get_supabase
+
+# ── Logging Configuration ──────────────────────────────────────────────────────
+# Set to logging.DEBUG for full agent traces, logging.INFO for production.
+LOG_LEVEL = os.getenv("LOG_LEVEL", "DEBUG").upper()
+logging.basicConfig(
+    level=getattr(logging, LOG_LEVEL, logging.DEBUG),
+    format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
+    datefmt="%H:%M:%S",
+)
+# Quiet down noisy 3rd-party loggers
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("openai").setLevel(logging.WARNING)
+logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+
+logger = logging.getLogger(__name__)
+logger.info(f"[App] Logging configured at level: {LOG_LEVEL}")
 
 app = FastAPI(title="Visual Math Solver API")
 

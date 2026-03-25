@@ -1,9 +1,12 @@
 import os
+import json
+import logging
 from openai import AsyncOpenAI
 from typing import Dict, Any
 from dotenv import load_dotenv
 
 load_dotenv()
+logger = logging.getLogger(__name__)
 
 class GeometryAgent:
     def __init__(self):
@@ -14,6 +17,9 @@ class GeometryAgent:
         self.model = os.getenv("MEGALLM_MODEL", "openai-gpt-oss-20b").strip()
 
     async def generate_dsl(self, semantic_data: Dict[str, Any]) -> str:
+        logger.info("==[GeometryAgent] Generating DSL from semantic data==")
+        logger.debug(f"[GeometryAgent] Input semantic data: {json.dumps(semantic_data, ensure_ascii=False, indent=2)}")
+
         system_prompt = """
         You are a Geometry DSL Generator. Your task is to convert semantic geometric data into a structured Geometry DSL.
         
@@ -27,7 +33,7 @@ class GeometryAgent:
         - PARALLEL(p1p2, p3p4)
         - PERPENDICULAR(p1p2, p3p4)
 
-        Output ONLY the DSL lines.
+        Output ONLY the DSL lines, no explanation, no markdown code blocks.
         Example Input: {"entities": ["A", "B", "C"], "type": "triangle", "values": {"AB": 5, "AC": 7, "angle_A": 60}}
         Example Output:
         POINT(A)
@@ -38,7 +44,8 @@ class GeometryAgent:
         LENGTH(AC, 7)
         ANGLE(A, 60)
         """
-        
+
+        logger.debug(f"[GeometryAgent] Calling LLM ({self.model}) ...")
         response = await self.client.chat.completions.create(
             model=self.model,
             messages=[
@@ -46,5 +53,8 @@ class GeometryAgent:
                 {"role": "user", "content": f"Semantic Data: {semantic_data}"}
             ]
         )
-        
-        return response.choices[0].message.content.strip()
+
+        dsl = response.choices[0].message.content.strip()
+        logger.info(f"[GeometryAgent] DSL generated ({len(dsl.splitlines())} lines).")
+        logger.debug(f"[GeometryAgent] DSL output:\n{dsl}")
+        return dsl

@@ -1,11 +1,12 @@
+import logging
 from typing import Dict, Any
 
+logger = logging.getLogger(__name__)
+
 class KnowledgeAgent:
-    """Knowledge Agent for Phase 3.
-    Stores geometric theorems and common patterns to augment the Parser's output.
-    """
+    """Knowledge Agent: Stores geometric theorems and common patterns to augment Parser output."""
+
     def __init__(self):
-        # Basic rule-based knowledge
         self.rules = {
             "triangle_equilateral": {
                 "constraints": ["AB=BC", "BC=CA", "Angle_A=60", "Angle_B=60", "Angle_C=60"]
@@ -16,16 +17,23 @@ class KnowledgeAgent:
         }
 
     def augment_semantic_data(self, semantic_data: Dict[str, Any]) -> Dict[str, Any]:
+        logger.info("==[KnowledgeAgent] Augmenting semantic data==")
         text = str(semantic_data.get("input_text", "")).lower()
-        
-        # Simple keyword matching to apply rules
+        logger.debug(f"[KnowledgeAgent] Input text for matching: '{text[:200]}'")
+
         if "đều" in text or "equilateral" in text:
+            logger.info("[KnowledgeAgent] Rule MATCH: Equilateral triangle detected.")
             semantic_data["type"] = "triangle_equilateral"
-            # If side length is known, apply it to all sides
             values = semantic_data.get("values", {})
             side = values.get("side") or values.get("AB")
             if side:
                 values.update({"AB": side, "BC": side, "CA": side, "angle_A": 60})
                 semantic_data["values"] = values
-        
+                logger.info(f"[KnowledgeAgent] Applied equilateral rule: all sides={side}, angle_A=60°")
+            else:
+                logger.warning("[KnowledgeAgent] Equilateral triangle detected but no side length found in values.")
+        else:
+            logger.info("[KnowledgeAgent] No special rule matched. Returning data unchanged.")
+
+        logger.debug(f"[KnowledgeAgent] Output semantic data: {semantic_data}")
         return semantic_data
