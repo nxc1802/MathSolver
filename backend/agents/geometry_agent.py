@@ -8,10 +8,10 @@ load_dotenv()
 class GeometryAgent:
     def __init__(self):
         self.client = AsyncOpenAI(
-            api_key=os.getenv("MEGALLM_API_KEY"),
-            base_url=os.getenv("MEGALLM_BASE_URL")
+            api_key=os.getenv("MEGALLM_API_KEY", "").strip(),
+            base_url=os.getenv("MEGALLM_BASE_URL", "").strip()
         )
-        self.model = os.getenv("MEGALLM_MODEL", "openai-gpt-oss-20b")
+        self.model = os.getenv("MEGALLM_MODEL", "openai-gpt-oss-20b").strip()
 
     async def generate_dsl(self, semantic_data: Dict[str, Any]) -> str:
         system_prompt = """

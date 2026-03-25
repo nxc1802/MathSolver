@@ -8,10 +8,10 @@ load_dotenv()
 class ParserAgent:
     def __init__(self):
         self.client = AsyncOpenAI(
-            api_key=os.getenv("MEGALLM_API_KEY"),
-            base_url=os.getenv("MEGALLM_BASE_URL")
+            api_key=os.getenv("MEGALLM_API_KEY", "").strip(),
+            base_url=os.getenv("MEGALLM_BASE_URL", "").strip()
         )
-        self.model = os.getenv("MEGALLM_MODEL", "openai-gpt-oss-20b")
+        self.model = os.getenv("MEGALLM_MODEL", "openai-gpt-oss-20b").strip()
 
     async def process(self, text: str, feedback: str = None) -> Dict[str, Any]:
         system_prompt = """
