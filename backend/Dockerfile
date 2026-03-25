@@ -4,11 +4,13 @@ FROM manimcommunity/manim:latest
 USER root
 WORKDIR /app
 
-# Install system dependencies for LaTeX and FFmpeg (already in manim image but for safety)
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
     ffmpeg \
     texlive \
     texlive-latex-extra \
+    build-essential \
+    python3-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python requirements
