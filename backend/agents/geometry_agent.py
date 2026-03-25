@@ -33,6 +33,7 @@ class GeometryAgent:
         - PARALLEL(p1p2, p3p4)
         - PERPENDICULAR(p1p2, p3p4)
 
+        Avoid Redundancy: Do not output redundant constraints. For example, if all side lengths of an equilateral triangle are specified, do not also output all internal angles as constraints unless explicitly needed.
         Output ONLY the DSL lines, no explanation, no markdown code blocks.
         Example Input: {"entities": ["A", "B", "C"], "type": "triangle", "values": {"AB": 5, "AC": 7, "angle_A": 60}}
         Example Output:
@@ -54,7 +55,8 @@ class GeometryAgent:
             ]
         )
 
-        dsl = response.choices[0].message.content.strip()
+        content = response.choices[0].message.content
+        dsl = content.strip() if content else ""
         logger.info(f"[GeometryAgent] DSL generated ({len(dsl.splitlines())} lines).")
         logger.debug(f"[GeometryAgent] DSL output:\n{dsl}")
         return dsl

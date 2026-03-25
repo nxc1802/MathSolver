@@ -143,29 +143,29 @@ class GeometryEngine:
             # Lambdify all equations for fast evaluation
             eq_funcs = [sp.lambdify(all_vars, eq, 'numpy') for eq in equations]
 
-            def residuals_sq(x):
+            def objective(x):
                 return sum(float(f(*x))**2 for f in eq_funcs)
 
-            best_result = None
+            best_res = None
             best_val = float('inf')
-            MAX_LS_ATTEMPTS = 20
-            for attempt in range(MAX_LS_ATTEMPTS):
-                np.random.seed(attempt + 100)
-                x0 = np.random.uniform(-10, 10, n_vars)
-                result = minimize(residuals_sq, x0, method='L-BFGS-B', 
-                                  options={'maxiter': 1000, 'ftol': 1e-14, 'gtol': 1e-10})
-                if result.fun < best_val:
-                    best_val = result.fun
-                    best_result = result
-
-            TOLERANCE = 1e-4
-            logger.info(f"[GeometryEngine] Strategy 3: best residual sum = {best_val:.2e} (tolerance={TOLERANCE})")
-            if best_val < TOLERANCE:
-                res = {var: float(val) for var, val in zip(all_vars, best_result.x)}
+            
+            # Multi-start to avoid local minima
+            for i in range(5):
+                x0 = [np.random.uniform(-10, 10) for _ in range(n_vars)] if i > 0 else [1.0]*n_vars
+                res = minimize(objective, x0, method='L-BFGS-B')
+                if res.fun < best_val:
+                    best_val = res.fun
+                    best_res = res
+                if best_val < 1e-4: break # Early exit if a good solution is found
+            
+            TOLERANCE_LSQ = 1e-4 # More lenient for over-determined systems
+            logger.info(f"[GeometryEngine] Strategy 3: best residual sum = {best_val:.2e} (tolerance={TOLERANCE_LSQ})")
+            if best_val < TOLERANCE_LSQ:
+                res = {var: float(val) for var, val in zip(all_vars, best_res.x)}
                 logger.info("[GeometryEngine] Strategy 3 (least-squares): SUCCESS.")
                 return {pid: [float(res.get(vx, 0)), float(res.get(vy, 0))] for pid, (vx, vy) in point_vars.items()}
             else:
-                logger.warning(f"[GeometryEngine] Strategy 3 failed: residual {best_val:.2e} > tolerance {TOLERANCE}. Trying Strategy 4...")
+                logger.warning(f"[GeometryEngine] Strategy 3 failed: residual {best_val:.2e} > tolerance {TOLERANCE_LSQ}. Trying Strategy 4...")
         except Exception as e:
             logger.error(f"[GeometryEngine] Strategy 3 threw exception: {e}")
 
