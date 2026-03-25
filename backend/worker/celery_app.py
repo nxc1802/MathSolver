@@ -11,12 +11,12 @@ celery_app = Celery(
     include=["worker.tasks"]
 )
 
-# Fix for SSL if using rediss:// or if explicitly set in URL
-if BROKER_URL.startswith("rediss://") or "ssl_cert_reqs" in BROKER_URL:
+# Fix for SSL if using rediss://
+if BROKER_URL.startswith("rediss://"):
     celery_app.conf.broker_use_ssl = {
         'ssl_cert_reqs': 'none'
     }
-if RESULT_BACKEND.startswith("rediss://") or "ssl_cert_reqs" in RESULT_BACKEND:
+if RESULT_BACKEND.startswith("rediss://"):
     celery_app.conf.redis_backend_use_ssl = {
         'ssl_cert_reqs': 'none'
     }

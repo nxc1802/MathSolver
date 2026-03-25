@@ -66,10 +66,17 @@ class GeometryEngine:
                     dx1, dy1 = p1_vars[0] - pV[0], p1_vars[1] - pV[1]
                     dx2, dy2 = p2_vars[0] - pV[0], p2_vars[1] - pV[1]
 
-                    rad = sp.pi * c.value / 180
-                    eq = (dy2*dx1 - dy1*dx2) - sp.tan(rad) * (dx1*dx2 + dy1*dy2)
+                    if abs(c.value - 90.0) < 1e-9:
+                        # Special case: 90° angle → perpendicular vectors → dot product = 0
+                        eq = dx1 * dx2 + dy1 * dy2
+                        logger.debug(f"[GeometryEngine]     -> Angle eq at vertex {v_name} (90° → dot product = 0) added.")
+                    else:
+                        rad = sp.pi * c.value / 180
+                        # cross = tan(θ) * dot  →  cross - tan(θ)*dot = 0
+                        eq = (dy2*dx1 - dy1*dx2) - sp.tan(rad) * (dx1*dx2 + dy1*dy2)
+                        logger.debug(f"[GeometryEngine]     -> Angle eq at vertex {v_name} ({c.value}°) added.")
                     equations.append(eq)
-                    logger.debug(f"[GeometryEngine]     -> Angle eq at vertex {v_name} ({c.value}°) added.")
+
 
             elif c.type == 'parallel' and len(c.targets) == 4:
                 pA, pB, pC, pD = c.targets
@@ -93,36 +100,107 @@ class GeometryEngine:
         for v in point_vars.values():
             all_vars.extend(v)
 
-        logger.info(f"[GeometryEngine] Built {len(equations)} equations for {len(all_vars)} unknowns. Solving with SymPy...")
+        n_eqs = len(equations)
+        n_vars = len(all_vars)
+        logger.info(f"[GeometryEngine] Built {n_eqs} equations for {n_vars} unknowns.")
 
-        # --- Strategy 1: Symbolic solve ---
+        # --- Strategy 1: Symbolic solve (works best for well-determined systems) ---
         try:
             solution = sp.solve(equations, all_vars, dict=True)
             if solution:
                 res = solution[0]
-                logger.info("[GeometryEngine] SymPy symbolic solve: SUCCESS.")
+                logger.info("[GeometryEngine] Strategy 1 (SymPy symbolic): SUCCESS.")
                 logger.debug(f"[GeometryEngine] Symbolic solution: {res}")
                 return {pid: [float(res.get(vx, 0)), float(res.get(vy, 0))] for pid, (vx, vy) in point_vars.items()}
             else:
-                logger.warning("[GeometryEngine] SymPy symbolic solve returned no solution. Falling back to numerical solver.")
+                logger.warning("[GeometryEngine] Strategy 1 returned no solution. Trying numerical...")
         except Exception as e:
-            logger.warning(f"[GeometryEngine] SymPy symbolic solve threw exception: {e}. Falling back to numerical solver.")
+            logger.warning(f"[GeometryEngine] Strategy 1 threw exception: {e}. Trying numerical...")
 
-        # --- Strategy 2: Numerical nsolve with multiple starting points ---
+        # --- Strategy 2: Numerical nsolve (works for square systems) ---
+        # Only works when n_eqs == n_vars
         MAX_NSOLVE_ATTEMPTS = 10
-        logger.info(f"[GeometryEngine] Attempting nsolve with up to {MAX_NSOLVE_ATTEMPTS} random starting points...")
-        for attempt in range(MAX_NSOLVE_ATTEMPTS):
-            try:
-                np.random.seed(attempt)  # Reproducible seeds
-                # Use a tighter range for initial guesses based on expected geometry scale
-                guesses = [np.random.uniform(-10, 10) for _ in range(len(all_vars))]
-                sol_vals = sp.nsolve(equations, all_vars, guesses, tol=1e-6, maxsteps=500)
-                res = {var: float(val) for var, val in zip(all_vars, sol_vals)}
-                logger.info(f"[GeometryEngine] nsolve SUCCESS on attempt {attempt + 1}.")
-                logger.debug(f"[GeometryEngine] Numerical solution: {res}")
-                return {pid: [float(res.get(vx, 0)), float(res.get(vy, 0))] for pid, (vx, vy) in point_vars.items()}
-            except Exception as e:
-                logger.debug(f"[GeometryEngine]   nsolve attempt {attempt + 1} failed: {e}")
+        if n_eqs == n_vars:
+            logger.info(f"[GeometryEngine] Strategy 2 (nsolve): system is square ({n_eqs}x{n_vars}). Trying {MAX_NSOLVE_ATTEMPTS} random starts...")
+            for attempt in range(MAX_NSOLVE_ATTEMPTS):
+                try:
+                    np.random.seed(attempt)
+                    guesses = [np.random.uniform(-10, 10) for _ in range(n_vars)]
+                    sol_vals = sp.nsolve(equations, all_vars, guesses, tol=1e-6, maxsteps=500)
+                    res = {var: float(val) for var, val in zip(all_vars, sol_vals)}
+                    logger.info(f"[GeometryEngine] Strategy 2 (nsolve): SUCCESS on attempt {attempt + 1}.")
+                    return {pid: [float(res.get(vx, 0)), float(res.get(vy, 0))] for pid, (vx, vy) in point_vars.items()}
+                except Exception as e:
+                    logger.debug(f"[GeometryEngine]   nsolve attempt {attempt + 1} failed: {e}")
+        else:
+            logger.warning(f"[GeometryEngine] Strategy 2 (nsolve) skipped: over/under-determined ({n_eqs} eqs, {n_vars} vars).")
 
-        logger.error(f"[GeometryEngine] All {MAX_NSOLVE_ATTEMPTS} nsolve attempts failed. Could not find solution.")
+        # --- Strategy 3: Least-squares (handles over-determined & redundant systems) ---
+        logger.info(f"[GeometryEngine] Strategy 3 (scipy least-squares): minimizing sum of squared residuals...")
+        try:
+            from scipy.optimize import minimize
+
+            # Lambdify all equations for fast evaluation
+            eq_funcs = [sp.lambdify(all_vars, eq, 'numpy') for eq in equations]
+
+            def residuals_sq(x):
+                return sum(float(f(*x))**2 for f in eq_funcs)
+
+            best_result = None
+            best_val = float('inf')
+            MAX_LS_ATTEMPTS = 20
+            for attempt in range(MAX_LS_ATTEMPTS):
+                np.random.seed(attempt + 100)
+                x0 = np.random.uniform(-10, 10, n_vars)
+                result = minimize(residuals_sq, x0, method='L-BFGS-B', 
+                                  options={'maxiter': 1000, 'ftol': 1e-14, 'gtol': 1e-10})
+                if result.fun < best_val:
+                    best_val = result.fun
+                    best_result = result
+
+            TOLERANCE = 1e-4
+            logger.info(f"[GeometryEngine] Strategy 3: best residual sum = {best_val:.2e} (tolerance={TOLERANCE})")
+            if best_val < TOLERANCE:
+                res = {var: float(val) for var, val in zip(all_vars, best_result.x)}
+                logger.info("[GeometryEngine] Strategy 3 (least-squares): SUCCESS.")
+                return {pid: [float(res.get(vx, 0)), float(res.get(vy, 0))] for pid, (vx, vy) in point_vars.items()}
+            else:
+                logger.warning(f"[GeometryEngine] Strategy 3 failed: residual {best_val:.2e} > tolerance {TOLERANCE}. Trying Strategy 4...")
+        except Exception as e:
+            logger.error(f"[GeometryEngine] Strategy 3 threw exception: {e}")
+
+        # --- Strategy 4: Global Optimization (Differential Evolution) ---
+        logger.info("[GeometryEngine] Strategy 4 (Global Opt / Differential Evolution): exploring domain...")
+        try:
+            from scipy.optimize import differential_evolution
+            
+            # Use a slightly wider bound for global search
+            bounds = [(-20, 20)] * n_vars
+            
+            # Update residuals_sq to be robust
+            eq_funcs = [sp.lambdify(all_vars, eq, 'numpy') for eq in equations]
+            def obj(x):
+                s = 0.0
+                for f in eq_funcs:
+                    try:
+                        val = float(f(*x))
+                        s += val**2
+                    except:
+                        s += 1e6
+                return s
+
+            result = differential_evolution(obj, bounds, maxiter=50, popsize=10, mutation=(0.5, 1), recombination=0.7)
+            
+            TOLERANCE_GLOBAL = 1e-3
+            logger.info(f"[GeometryEngine] Strategy 4: best residual sum = {result.fun:.2e} (tolerance={TOLERANCE_GLOBAL})")
+            if result.fun < TOLERANCE_GLOBAL:
+                res = {var: float(val) for var, val in zip(all_vars, result.x)}
+                logger.info("[GeometryEngine] Strategy 4 (global opt): SUCCESS.")
+                return {pid: [float(res.get(vx, 0)), float(res.get(vy, 0))] for pid, (vx, vy) in point_vars.items()}
+        except Exception as e:
+            logger.error(f"[GeometryEngine] Strategy 4 threw exception: {e}")
+
+        logger.error("[GeometryEngine] All strategies exhausted. Could not find a valid solution.")
         return None
+
+

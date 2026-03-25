@@ -87,9 +87,10 @@ class Orchestrator:
             logger.info("[Orchestrator] Step 7: Dispatching video render task to Celery worker...")
             from worker.tasks import render_geometry_video
             result_payload = {
-                "dsl": dsl_code,
+                "geometry_dsl": dsl_code,
                 "coordinates": coordinates,
-                "semantic": semantic_json
+                "semantic": semantic_json,
+                "semantic_analysis": semantic_json.get("input_text", "")
             }
             render_geometry_video.delay(job_id, result_payload)
             status = "rendering_queued"

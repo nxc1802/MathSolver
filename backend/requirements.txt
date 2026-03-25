@@ -2,6 +2,7 @@ fastapi
 uvicorn
 sympy
 numpy
+scipy
 pydantic
 python-multipart
 python-dotenv

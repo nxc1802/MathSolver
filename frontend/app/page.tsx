@@ -35,8 +35,30 @@ export default function Home() {
       if (data.result) setResult(data.result);
     };
 
-    return () => ws.close();
-  }, [jobId, mounted]);
+    // Polling fallback for Celery tasks (since worker can't easily push to WS)
+    let pollInterval: any;
+    if (status === "rendering_queued" || status === "rendering" || status === "processing") {
+      pollInterval = setInterval(async () => {
+        try {
+          const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+          const res = await fetch(`${apiUrl}/api/v1/solve/${jobId}`);
+          const data = await res.json();
+          if (data.status === "success" || data.status === "error") {
+            setStatus(data.status);
+            setResult(data.result);
+            clearInterval(pollInterval);
+          }
+        } catch (err) {
+          console.error("Polling error:", err);
+        }
+      }, 3000);
+    }
+
+    return () => {
+      ws.close();
+      if (pollInterval) clearInterval(pollInterval);
+    };
+  }, [jobId, mounted, status]);
 
   const handleSolve = async () => {
     if (!inputText.trim()) return;
