@@ -11,50 +11,39 @@ def render_geometry_video(job_id: str, data: dict):
     # 1. Generate Manim script
     script = renderer.generate_manim_script(data)
     
-    # 2. Run Manim and get paths (video and image)
-    paths = renderer.run_manim(script, job_id)
-    video_path = paths.get("video")
-    image_path = paths.get("image")
+    # 2. Run Manim and get video file path
+    video_path = renderer.run_manim(script, job_id)
     
     if not video_path or not os.path.exists(video_path):
         raise Exception(f"Manim rendering failed for job {job_id}")
 
+    with open(video_path, "rb") as f:
+        video_content = f.read()
+    
     # 3. Upload to Supabase
     bucket_name = os.getenv("SUPABASE_BUCKET", "video")
+    file_name = f"{job_id}.mp4"
     
-    # Upload Video
-    with open(video_path, "rb") as f:
-        supabase.storage.from_(bucket_name).upload(
-            path=f"{job_id}.mp4",
-            file=f.read(),
-            file_options={"content-type": "video/mp4"}
-        )
-    video_url = supabase.storage.from_(bucket_name).get_public_url(f"{job_id}.mp4")
-
-    # Upload Image (if exists)
-    image_url = ""
-    if image_path and os.path.exists(image_path):
-        with open(image_path, "rb") as f:
-            supabase.storage.from_(bucket_name).upload(
-                path=f"{job_id}.png",
-                file=f.read(),
-                file_options={"content-type": "image/png"}
-            )
-        image_url = supabase.storage.from_(bucket_name).get_public_url(f"{job_id}.png")
-
-    # 4. Cleanup local files
-    for p in [video_path, image_path]:
-        if p and os.path.exists(p):
-            os.remove(p)
+    supabase.storage.from_(bucket_name).upload(
+        path=file_name,
+        file=video_content,
+        file_options={"content-type": "video/mp4"}
+    )
+    
+    # 4. Cleanup local file
+    if os.path.exists(video_path):
+        os.remove(video_path)
+    
+    # 5. Get Public URL
+    video_url = supabase.storage.from_(bucket_name).get_public_url(file_name)
     
     # 5. Update Job status and Final Result in Supabase Database
     final_result = data.copy()
     final_result["video_url"] = video_url
-    final_result["image_url"] = image_url
     
     supabase.table("jobs").update({
         "status": "success",
         "result": final_result
     }).eq("id", job_id).execute()
     
-    return {"video_url": video_url, "image_url": image_url}
+    return video_url

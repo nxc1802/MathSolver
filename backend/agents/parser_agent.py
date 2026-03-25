@@ -14,21 +14,29 @@ class ParserAgent:
         self.model = os.getenv("MEGALLM_MODEL", "openai-gpt-oss-20b").strip()
 
     async def process(self, text: str, feedback: str = None) -> Dict[str, Any]:
-        prompt = f"Problem: {text}"
-        if feedback:
-            prompt += f"\nFeedback from previous attempt: {feedback}"
+        system_prompt = """
+        You are a Geometry Parser Agent. Your task is to extract geometric entities and constraints from natural language text.
+        Output ONLY a JSON object with the following structure:
+        {
+            "entities": ["Point A", "Point B", ...],
+            "type": "triangle",
+            "values": {"AB": 5, "AC": 7, "angle_A": 60}
+        }
+        If feedback is provided, correct the previous logic.
+        """
         
-        print(f"[ParserAgent] Sending prompt to LLM...")
+        user_content = f"Text: {text}"
+        if feedback:
+            user_content += f"\nFeedback from previous attempt: {feedback}. Please correct the constraints."
+
         response = await self.client.chat.completions.create(
             model=self.model,
             messages=[
-                {"role": "system", "content": "You are a geometry expert. Extract points, lengths, angles, and constraints into JSON."},
-                {"role": "user", "content": prompt}
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_content}
             ],
             response_format={"type": "json_object"}
         )
         
         import json
-        raw_content = response.choices[0].message.content
-        print(f"[ParserAgent] Raw LLM Response: {raw_content}")
-        return json.loads(raw_content)
+        return json.loads(response.choices[0].message.content)

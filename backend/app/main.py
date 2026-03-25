@@ -20,6 +20,7 @@ app.add_middleware(
 class SolveRequest(BaseModel):
     text: str
     image_url: Optional[str] = None
+    request_video: bool = False
 
 class SolveResponse(BaseModel):
     job_id: str
@@ -69,8 +70,14 @@ async def process_job(job_id: str, request: SolveRequest):
         await notify_status(job_id, {"status": status})
 
     try:
-        result = await orchestrator.run(request.text, request.image_url, job_id=job_id, status_callback=status_update)
-        status = "rendering" if "error" not in result else "error"
+        result = await orchestrator.run(
+            request.text, 
+            request.image_url, 
+            job_id=job_id, 
+            status_callback=status_update,
+            request_video=request.request_video
+        )
+        status = result.get("status", "error") if "error" not in result else "error"
         
         # Update status in Supabase
         supabase_client.table("jobs").update({

@@ -22,8 +22,10 @@ class KnowledgeAgent:
         if "đều" in text or "equilateral" in text:
             semantic_data["type"] = "triangle_equilateral"
             # If side length is known, apply it to all sides
-            side = semantic_data["values"].get("side") or semantic_data["values"].get("AB")
+            values = semantic_data.get("values", {})
+            side = values.get("side") or values.get("AB")
             if side:
-                semantic_data["values"].update({"AB": side, "BC": side, "CA": side, "angle_A": 60})
+                values.update({"AB": side, "BC": side, "CA": side, "angle_A": 60})
+                semantic_data["values"] = values
         
         return semantic_data

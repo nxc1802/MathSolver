@@ -8,9 +8,11 @@ interface SolverFormProps {
   loading: boolean;
   onSolve: () => void;
   onExample: () => void;
+  requestVideo: boolean;
+  setRequestVideo: (val: boolean) => void;
 }
 
-export default function SolverForm({ input, setInput, loading, onSolve, onExample }: SolverFormProps) {
+export default function SolverForm({ input, setInput, loading, onSolve, onExample, requestVideo, setRequestVideo }: SolverFormProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [ocrLoading, setOcrLoading] = useState(false);
 
@@ -86,6 +88,17 @@ export default function SolverForm({ input, setInput, loading, onSolve, onExampl
           >
             <Sparkles className="w-4 h-4 text-indigo-400" />
             Dùng ví dụ
+          </button>
+          
+          <button 
+            type="button"
+            onClick={() => setRequestVideo(!requestVideo)}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border transition-all text-sm font-medium ${requestVideo ? 'bg-indigo-500/20 border-indigo-500/50 text-indigo-300' : 'bg-white/5 border-white/5 text-zinc-400 hover:text-white hover:bg-white/10'}`}
+          >
+            <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${requestVideo ? 'border-indigo-400' : 'border-zinc-500'}`}>
+              {requestVideo && <div className="w-2 h-2 rounded-full bg-indigo-400" />}
+            </div>
+            Tạo Video Animation (Chậm)
           </button>
         </div>
 

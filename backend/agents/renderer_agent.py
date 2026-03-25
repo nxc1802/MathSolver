@@ -28,7 +28,7 @@ class RendererAgent:
 
         return script
 
-    def run_manim(self, script_content: str, job_id: str) -> Dict[str, str]:
+    def run_manim(self, script_content: str, job_id: str) -> str:
         import subprocess
         import os
         import glob
@@ -37,40 +37,40 @@ class RendererAgent:
         with open(script_file, "w") as f:
             f.write(script_content)
         
-        paths = {"video": "", "image": ""}
-        
         try:
             print(f"Running Manim for job {job_id}...")
-            # Run for Video
-            result_v = subprocess.run(
+            # Use -ql for faster testing locally, can switch back to -qm for prod
+            result = subprocess.run(
                 ["manim", "-ql", "--media_dir", ".", "-o", f"{job_id}.mp4", script_file, "GeometryScene"],
-                capture_output=True, text=True
+                capture_output=True,
+                text=True
             )
-            print(f"Manim Video Code: {result_v.returncode}")
-
-            # Run for Static Image (-s saves the last frame)
-            result_i = subprocess.run(
-                ["manim", "-ql", "-s", "--media_dir", ".", "-o", f"{job_id}.png", script_file, "GeometryScene"],
-                capture_output=True, text=True
-            )
-            print(f"Manim Image Code: {result_i.returncode}")
-
-            # Find video
-            found_v = glob.glob(f"**/videos/**/{job_id}.mp4", recursive=True)
-            if found_v: paths["video"] = found_v[0]
-
-            # Find image (Manim -s usually puts it in images/...)
-            found_i = glob.glob(f"**/images/**/{job_id}.png", recursive=True)
-            if not found_i: # Fallback search for any png with job_id
-                found_i = glob.glob(f"**/{job_id}*.png", recursive=True)
-            if found_i: paths["image"] = found_i[0]
-
-            print(f"Manim Paths: {paths}")
-            return paths
             
+            print(f"Manim STDOUT: {result.stdout}")
+            print(f"Manim STDERR: {result.stderr}")
+
+            # Recursive search for the created .mp4 file
+            search_pattern = f"**/videos/**/{job_id}.mp4"
+            found_files = glob.glob(search_pattern, recursive=True)
+            
+            if found_files:
+                video_path = found_files[0]
+                print(f"Manim Success: Found {video_path}")
+                return video_path
+            else:
+                # Fallback: search for any .mp4 with job_id in the name
+                search_pattern_fallback = f"**/{job_id}*.mp4"
+                found_files_fallback = glob.glob(search_pattern_fallback, recursive=True)
+                if found_files_fallback:
+                    video_path = found_files_fallback[0]
+                    print(f"Manim Success (Fallback): Found {video_path}")
+                    return video_path
+                
+                print(f"Manim file could not be found for job {job_id}")
+                return ""
         except Exception as e:
             print(f"Manim Execution Error: {e}")
-            return paths
+            return ""
         finally:
             if os.path.exists(script_file):
                 os.remove(script_file)

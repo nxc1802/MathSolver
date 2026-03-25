@@ -14,17 +14,37 @@ class GeometryAgent:
         self.model = os.getenv("MEGALLM_MODEL", "openai-gpt-oss-20b").strip()
 
     async def generate_dsl(self, semantic_data: Dict[str, Any]) -> str:
-        print(f"[GeometryAgent] Generating DSL from semantic data: {semantic_data}")
-        system_prompt = "Convert geometry JSON to DSL: POINT(A), LINE(A,B), TRIANGLE(A,B,C), LENGTH(A,B,5), ANGLE(vertex,60), PARALLEL(AB,CD), PERPENDICULAR(AB,CD)."
+        system_prompt = """
+        You are a Geometry DSL Generator. Your task is to convert semantic geometric data into a structured Geometry DSL.
+        
+        Supported DSL Commands:
+        - POINT(id)
+        - LINE(p1, p2)
+        - TRIANGLE(p1, p2, p3)
+        - CIRCLE(center, radius_value)
+        - LENGTH(p1p2, value)
+        - ANGLE(vertex, degree_value)
+        - PARALLEL(p1p2, p3p4)
+        - PERPENDICULAR(p1p2, p3p4)
+
+        Output ONLY the DSL lines.
+        Example Input: {"entities": ["A", "B", "C"], "type": "triangle", "values": {"AB": 5, "AC": 7, "angle_A": 60}}
+        Example Output:
+        POINT(A)
+        POINT(B)
+        POINT(C)
+        TRIANGLE(ABC)
+        LENGTH(AB, 5)
+        LENGTH(AC, 7)
+        ANGLE(A, 60)
+        """
         
         response = await self.client.chat.completions.create(
             model=self.model,
             messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": str(semantic_data)}
+                {"role": "user", "content": f"Semantic Data: {semantic_data}"}
             ]
         )
         
-        dsl = response.choices[0].message.content.strip()
-        print(f"[GeometryAgent] Generated DSL: {dsl}")
-        return dsl
+        return response.choices[0].message.content.strip()

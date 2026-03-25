@@ -7,6 +7,7 @@ import SolverForm from "@/components/SolverForm";
 import StatusStepper from "@/components/StatusStepper";
 import ResultCard from "@/components/ResultCard";
 import AnimationPreview from "@/components/AnimationPreview";
+import StaticGeometryCanvas from "@/components/StaticGeometryCanvas";
 
 export default function Home() {
   const [inputText, setInputText] = useState('');
@@ -15,6 +16,7 @@ export default function Home() {
   const [jobId, setJobId] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
   const [status, setStatus] = useState("idle");
+  const [requestVideo, setRequestVideo] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -48,7 +50,7 @@ export default function Home() {
       const response = await fetch(`${apiUrl}/api/v1/solve`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: inputText }),
+        body: JSON.stringify({ text: inputText, request_video: requestVideo }),
       });
       const data = await response.json();
       setJobId(data.job_id);
@@ -92,6 +94,8 @@ export default function Home() {
           loading={loading}
           onSolve={handleSolve}
           onExample={() => setInputText("Cho tam giác ABC đều cạnh bằng 5.")}
+          requestVideo={requestVideo}
+          setRequestVideo={setRequestVideo}
         />
 
         <AnimatePresence>
@@ -125,11 +129,14 @@ export default function Home() {
                 />
               </div>
 
-              <AnimationPreview 
-                videoUrl={result.video_url} 
-                imageUrl={result.image_url}
-                loading={status === "rendering"}
-              />
+              {requestVideo || status === "rendering" ? (
+                <AnimationPreview 
+                  videoUrl={result.video_url} 
+                  loading={status === "rendering"}
+                />
+              ) : (
+                <StaticGeometryCanvas coordinates={result.coordinates} />
+              )}
             </motion.div>
           )}
         </AnimatePresence>
