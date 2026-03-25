@@ -21,6 +21,15 @@ class OCRAgent:
         return self.model(img)
 
     async def process_url(self, url: str) -> str:
-        # For production, we would download the image first
-        # For now, we return a stub text or download logic
-        return "OCR from URL requires image download. (Pix2Tex implementation pending)"
+        if not self.model:
+            return "OCR Engine not installed."
+        
+        import httpx
+        import io
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(url)
+            if resp.status_code == 200:
+                img = Image.open(io.BytesIO(resp.content))
+                return self.model(img)
+            else:
+                return f"Failed to download image from {url}"

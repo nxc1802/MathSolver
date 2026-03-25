@@ -11,4 +11,5 @@ celery
 redis
 websockets
 httpx
-# pix2tex  # Install separately if needed due to size
+pix2tex
+manim

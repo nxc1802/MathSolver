@@ -70,8 +70,9 @@ class Orchestrator:
         
         return {
             "status": "rendering_queued",
-            "dsl": dsl_code,
+            "geometry_dsl": dsl_code,
             "coordinates": coordinates,
-            "semantic": semantic_json
+            "semantic": semantic_json,
+            "semantic_analysis": semantic_json.get("input_text", "")
         }
 
