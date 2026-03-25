@@ -1,9 +1,10 @@
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
 import uuid
 import asyncio
+import os
 from app.supabase_client import get_supabase
 
 app = FastAPI(title="Visual Math Solver API")
@@ -31,8 +32,24 @@ def read_root():
     return {"message": "Visual Math Solver API v3.0 is running"}
 
 from agents.orchestrator import Orchestrator
+from agents.ocr_agent import OCRAgent
 
 orchestrator = Orchestrator()
+ocr_agent = OCRAgent()
+
+@app.post("/api/v1/ocr")
+async def upload_ocr(file: UploadFile = File(...)):
+    # Save temp file
+    temp_path = f"temp_{uuid.uuid4()}.png"
+    with open(temp_path, "wb") as buffer:
+        buffer.write(await file.read())
+    
+    try:
+        text = await ocr_agent.process_image(temp_path)
+        return {"text": text}
+    finally:
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
 
 @app.post("/api/v1/solve", response_model=SolveResponse)
 async def create_solve_job(request: SolveRequest):

@@ -11,9 +11,14 @@ def render_geometry_video(job_id: str, data: dict):
     # 1. Generate Manim script
     script = renderer.generate_manim_script(data)
     
-    # 2. Run Manim and get video file path (Mocking execution here)
-    # real_path = renderer.run_manim(script)
-    video_content = b"fake video data"
+    # 2. Run Manim and get video file path
+    video_path = renderer.run_manim(script, job_id)
+    
+    if not video_path or not os.path.exists(video_path):
+        raise Exception(f"Manim rendering failed for job {job_id}")
+
+    with open(video_path, "rb") as f:
+        video_content = f.read()
     
     # 3. Upload to Supabase
     bucket_name = os.getenv("SUPABASE_BUCKET", "video")
@@ -25,7 +30,11 @@ def render_geometry_video(job_id: str, data: dict):
         file_options={"content-type": "video/mp4"}
     )
     
-    # 4. Get Public URL
+    # 4. Cleanup local file
+    if os.path.exists(video_path):
+        os.remove(video_path)
+    
+    # 5. Get Public URL
     video_url = supabase.storage.from_(bucket_name).get_public_url(file_name)
     
     # 5. Update Job status and Final Result in Supabase Database

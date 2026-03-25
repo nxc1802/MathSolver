@@ -1,7 +1,6 @@
-"use client";
-
+import React, { useRef, useState } from "react";
 import { motion } from "framer-motion";
-import { Upload, Sparkles, Image as ImageIcon } from "lucide-react";
+import { Upload, Sparkles, Image as ImageIcon, Loader2 } from "lucide-react";
 
 interface SolverFormProps {
   input: string;
@@ -12,6 +11,34 @@ interface SolverFormProps {
 }
 
 export default function SolverForm({ input, setInput, loading, onSolve, onExample }: SolverFormProps) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [ocrLoading, setOcrLoading] = useState(false);
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setOcrLoading(true);
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+    try {
+      const res = await fetch(`${apiUrl}/api/v1/ocr`, {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json();
+      if (data.text) {
+        setInput(data.text);
+      }
+    } catch (err) {
+      console.error("OCR Error:", err);
+    } finally {
+      setOcrLoading(false);
+    }
+  };
+
   return (
     <motion.div 
       initial={{ opacity: 0, y: 20 }}
@@ -32,12 +59,25 @@ export default function SolverForm({ input, setInput, loading, onSolve, onExampl
 
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex gap-2">
+          <input 
+            type="file" 
+            ref={fileInputRef} 
+            onChange={handleFileChange} 
+            className="hidden" 
+            accept="image/*"
+          />
           <button 
             type="button"
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/5 border border-white/5 text-zinc-400 hover:text-white hover:bg-white/10 transition-all text-sm font-medium group"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={ocrLoading}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/5 border border-white/5 text-zinc-400 hover:text-white hover:bg-white/10 transition-all text-sm font-medium group disabled:opacity-50"
           >
-            <ImageIcon className="w-4 h-4 group-hover:scale-110 transition-transform" />
-            Upload OCR
+            {ocrLoading ? (
+              <Loader2 className="w-4 h-4 animate-spin text-indigo-400" />
+            ) : (
+              <ImageIcon className="w-4 h-4 group-hover:scale-110 transition-transform" />
+            )}
+            {ocrLoading ? "Đang quét..." : "Upload OCR"}
           </button>
           <button 
             type="button"
@@ -60,7 +100,7 @@ export default function SolverForm({ input, setInput, loading, onSolve, onExampl
           ) : (
             <Sparkles className="w-5 h-5" />
           )}
-          {loading ? "Đang xử lý..." : "GIẢI NGAY BÂY GIỜ"}
+          {loading ? "Đang giải..." : "GIẢI NGAY BÂY GIỜ"}
         </button>
       </div>
     </motion.div>

@@ -5,6 +5,8 @@ from solver.engine import GeometryEngine
 from agents.ocr_agent import OCRAgent
 from agents.knowledge_agent import KnowledgeAgent
 from agents.renderer_agent import RendererAgent
+from agents.parser_agent import ParserAgent
+from agents.geometry_agent import GeometryAgent
 
 class Orchestrator:
     def __init__(self):
@@ -73,23 +75,3 @@ class Orchestrator:
             "semantic": semantic_json
         }
 
-class ParserAgent:
-    """Mock Parser Agent for Phase 2 PoC"""
-    async def process(self, text: str, feedback: str = None) -> Dict[str, Any]:
-        # Simple Mock: Extracting entities from fixed triangle example
-        return {
-            "entities": ["A", "B", "C"],
-            "type": "triangle",
-            "values": {"AB": 5, "AC": 7, "angle_A": 60}
-        }
-
-class GeometryAgent:
-    """Mock Geometry Agent for Phase 2 PoC"""
-    async def generate_dsl(self, semantic_data: Dict[str, Any]) -> str:
-        # Mocking DSL generation from semantic data
-        v = semantic_data["values"]
-        dsl = f"POINT(A)\nPOINT(B)\nPOINT(C)\nTRIANGLE(ABC)\n"
-        dsl += f"LENGTH(AB, {v['AB']})\n"
-        dsl += f"LENGTH(AC, {v['AC']})\n"
-        dsl += f"ANGLE(A, {v['angle_A']}deg)"
-        return dsl
