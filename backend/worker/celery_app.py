@@ -1,5 +1,9 @@
 import os
 from celery import Celery
+from dotenv import load_dotenv
+
+# Load environment variables early
+load_dotenv()
 
 BROKER_URL = os.getenv("CELERY_BROKER_URL", os.getenv("REDIS_URL", "redis://localhost:6379/0"))
 RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", os.getenv("REDIS_URL", "redis://localhost:6379/1"))
