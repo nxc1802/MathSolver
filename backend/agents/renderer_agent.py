@@ -36,7 +36,7 @@ class RendererAgent:
         script += "        self.camera.frame.move_to(all_mobs)\n\n"
 
         # Animations
-        script += f"        self.add(*{[p for p in pt_objs]}, *{[l for l in labels]})\n"
+        script += f"        self.add({all_mobs_str})\n"
         if poly_objs:
             script += "        self.play(Create(poly), run_time=2)\n"
         script += "        self.wait(2)\n"
