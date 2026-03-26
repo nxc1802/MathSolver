@@ -4,7 +4,14 @@ on:
   push:
     branches: [ main ]
     paths:
-      - 'backend/**'
+      - 'backend/app/**'
+      - 'backend/agents/parser_agent.py'
+      - 'backend/agents/geometry_agent.py'
+      - 'backend/agents/ocr_agent.py'
+      - 'backend/agents/orchestrator.py'
+      - 'backend/solver/**'
+      - 'backend/requirements.txt'
+      - 'backend/Dockerfile'
       - '.github/workflows/deploy-api.yml'
 
 jobs:
@@ -23,6 +30,9 @@ jobs:
           git config --global user.name "Cuong2004"
           
           mkdir hf_api_copy
+          # Use rsync-style copying to only include what we want, 
+          # but for simplicity in GA, we can just copy backend/ and rely on .gitignore 
+          # or just copy the whole thing as before, but the trigger is now granular.
           cp -r backend/* hf_api_copy/
           
           cd hf_api_copy

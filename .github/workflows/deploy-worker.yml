@@ -4,7 +4,11 @@ on:
   push:
     branches: [ main ]
     paths:
-      - 'backend/**'
+      - 'backend/worker/**'
+      - 'backend/agents/renderer_agent.py'
+      - 'backend/solver/**'
+      - 'backend/requirements.txt'
+      - 'backend/Dockerfile.worker'
       - '.github/workflows/deploy-worker.yml'
 
 jobs:
