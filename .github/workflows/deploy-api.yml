@@ -1,29 +1,33 @@
-name: CI/CD Pipeline
+name: Deploy API to Hugging Face
 
 on:
   push:
     branches: [ main ]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/deploy-api.yml'
 
 jobs:
-  build-and-deploy:
+  deploy-api:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
       
-      - name: Push to Hugging Face
+      - name: Push to Hugging Face Spaces (API)
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
           git config --global user.email "cuong@example.com"
           git config --global user.name "Cuong2004"
-          # Use a temporary directory to avoid git-in-git issues
-          mkdir hf_copy
-          cp -r backend/* hf_copy/
-          cd hf_copy
+          
+          mkdir hf_api_copy
+          cp -r backend/* hf_api_copy/
+          
+          cd hf_api_copy
           git init
           git remote add origin https://Cuong2004:$HF_TOKEN@huggingface.co/spaces/Cuong2004/math-solver
           git add .
-          git commit -m "Deploy from GitHub Actions"
+          git commit -m "Deploy API from GitHub Actions"
           git push --force origin master:main
