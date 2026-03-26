@@ -64,3 +64,20 @@ cd frontend
 npm run dev
 ```
 Truy cập: [http://localhost:3000](http://localhost:3000)
+
+## Production Deployment (Hugging Face)
+
+Để đạt hiệu suất tốt nhất, dự án nên được tách thành 2 Spaces trên Hugging Face:
+
+### 1. Space Backend (API)
+- **Dockerfile**: `Dockerfile.api`
+- **Nhiệm vụ**: Nhận request từ Frontend, OCR, Phân tích dữ liệu và gửi Task lên Cloud Redis.
+- **Biến môi trường cần thiết**: `REDIS_URL`, `SUPABASE_URL`, `SUPABASE_KEY`, `MEGALLM_*`.
+
+### 2. Space Worker (Rendering)
+- **Dockerfile**: `Dockerfile.worker`
+- **Nhiệm vụ**: Lắng nghe Task từ Cloud Redis và render video Manim.
+- **Biến môi trường cần thiết**: `REDIS_URL`, `SUPABASE_URL`, `SUPABASE_KEY`.
+
+**Lưu ý**: Khi deploy lên HF, hãy đổi tên file Docker tương ứng thành `Dockerfile` trong mỗi Space.
+```

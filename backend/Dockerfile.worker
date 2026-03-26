@@ -1,16 +1,12 @@
-# Use a Python image with Manim dependencies
+# Heavy Dockerfile for Manim Worker
 FROM manimcommunity/manim:latest
 
 USER root
 WORKDIR /app
 
-# Install system dependencies
+# Install additional system dependencies if needed
 RUN apt-get update && apt-get install -y \
     ffmpeg \
-    texlive \
-    texlive-latex-extra \
-    build-essential \
-    python3-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python requirements
@@ -20,8 +16,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY . .
 
-# Expose port (Hugging Face Spaces uses 7860)
-EXPOSE 7860
-
 # Start command
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "7860"]
+# We use celery to process rendering tasks
+CMD ["celery", "-A", "worker.celery_app", "worker", "--loglevel=info"]
