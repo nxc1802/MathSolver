@@ -156,13 +156,17 @@ export default function Home() {
         pollInterval = setInterval(async () => {
           try {
             const res = await fetch(`${apiUrl}/api/v1/solve/${jobId}`);
+            if (!res.ok) {
+              console.warn(`[Poll] Backend returned ${res.status}. Retrying...`);
+              return;
+            }
             const polled = await res.json();
             if (polled.status === "success" || polled.status === "error") {
               clearInterval(pollInterval);
               const r = polled.result || {};
 
               if (polled.status === "success") {
-                setCurrentStatus(null); // Success status is handled by final results
+                setCurrentStatus(null);
               } else {
                 setCurrentStatus(null);
                 pushMessage({
@@ -201,7 +205,7 @@ export default function Home() {
               ws.close();
             }
           } catch (err) {
-            console.error("Poll error:", err);
+            console.error("[Poll] Network error (possibly backend reloading):", err);
           }
         }, 3000);
       };
