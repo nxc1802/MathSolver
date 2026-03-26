@@ -35,6 +35,10 @@ logger.info(f"🚀 [App] Logging configured at level: {LOG_LEVEL}")
 
 app = FastAPI(title="Visual Math Solver API")
 
+# Confirm Redis config on startup
+from worker.celery_app import BROKER_URL
+logger.info(f"📍 [Backend] Redis Configuration: {BROKER_URL.split('@')[-1] if '@' in BROKER_URL else BROKER_URL}")
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"], # Allow all origins for production (Vercel/HuggingFace)
