@@ -8,7 +8,7 @@ class RendererAgent:
         coords = data.get("coordinates", {})
         
         script = "from manim import *\n\n"
-        script += "class GeometryScene(Scene):\n"
+        script += "class GeometryScene(MovingCameraScene):\n"
         script += "    def construct(self):\n"
         
         # Draw all points and labels
