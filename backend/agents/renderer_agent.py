@@ -13,18 +13,33 @@ class RendererAgent:
         
         # Draw all points and labels
         pt_objs = []
+        labels = []
         for pid, pos in coords.items():
             script += f"        p_{pid} = Dot(point=[{pos[0]}, {pos[1]}, 0], color=WHITE)\n"
             script += f"        l_{pid} = Text('{pid}', font='Arial', font_size=24).next_to(p_{pid}, UR, buff=0.2)\n"
-            script += f"        self.add(p_{pid}, l_{pid})\n"
             pt_objs.append(f"p_{pid}")
+            labels.append(f"l_{pid}")
         
-        # Draw polygons (e.g., triangle A-B-C)
+        # Draw polygons
+        poly_objs = []
         if len(pt_objs) >= 3:
             pts_str = ", ".join([f"{p}.get_center()" for p in pt_objs])
             script += f"        poly = Polygon({pts_str}, color=BLUE, fill_opacity=0.3)\n"
+            poly_objs.append("poly")
+
+        # Create a group for all objects to center and scale
+        all_mobs_str = ", ".join(pt_objs + labels + poly_objs)
+        script += f"        all_mobs = VGroup({all_mobs_str})\n"
+        script += "        all_mobs.center()\n"
+        script += "        # Auto-scale camera to fit the group with some buffer\n"
+        script += "        self.camera.frame.set_width(max(all_mobs.width * 1.5, 8))\n"
+        script += "        self.camera.frame.move_to(all_mobs)\n\n"
+
+        # Animations
+        script += f"        self.add(*{[p for p in pt_objs]}, *{[l for l in labels]})\n"
+        if poly_objs:
             script += "        self.play(Create(poly), run_time=2)\n"
-            script += "        self.wait(1)\n"
+        script += "        self.wait(2)\n"
 
         return script
 

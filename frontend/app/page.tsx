@@ -293,9 +293,17 @@ export default function Home() {
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.95 }}
-                className="w-full max-w-3xl"
+                className="w-full max-w-3xl relative"
               >
                 <StaticGeometryCanvas coordinates={coordinates} />
+                {renderingVideo && (
+                  <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px] rounded-xl flex items-center justify-center border border-white/5">
+                    <div className="text-center space-y-3">
+                      <div className="w-10 h-10 border-2 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin mx-auto" />
+                      <p className="text-xs font-bold text-white uppercase tracking-widest">🎬 Đang tạo video...</p>
+                    </div>
+                  </div>
+                )}
               </motion.div>
             ) : renderingVideo ? (
               <motion.div
