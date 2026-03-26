@@ -18,3 +18,26 @@ Hệ thống giải toán hình học và trực quan hóa bằng AI (Multi-Agen
 
 ## Quy trình phát triển
 Dự án được triển khai theo 5 giai đoạn (Phases) như trong `docs/Architecture.md`.
+
+## Hướng dẫn chạy Locally
+
+### 1. Backend (FastAPI)
+```bash
+cd backend
+source venv/bin/activate
+uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+
+### 2. Worker (Celery/Manim)
+```bash
+cd backend
+source venv/bin/activate
+celery -A worker.celery_app worker --loglevel=info
+```
+
+### 3. Frontend (Next.js)
+```bash
+cd frontend
+npm run dev
+```
+Truy cập: [http://localhost:3000](http://localhost:3000)
