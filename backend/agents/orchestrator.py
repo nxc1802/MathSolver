@@ -88,7 +88,9 @@ class Orchestrator:
             try:
                 from worker.tasks import render_geometry_video
                 from worker.celery_app import BROKER_URL
-                logger.debug(f"[Orchestrator] Using Celery Broker: {BROKER_URL[:20]}...")
+                # Mask credentials for logging
+                masked_broker = BROKER_URL.split('@')[-1] if '@' in BROKER_URL else BROKER_URL
+                logger.debug(f"🎬 [Orchestrator] Targeting Celery Broker: {masked_broker}")
                 
                 result_payload = {
                     "geometry_dsl": dsl_code,
