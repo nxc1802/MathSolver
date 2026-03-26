@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useRef, useState, useEffect } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Send,
   Image as ImageIcon,
@@ -9,6 +9,7 @@ import {
   Loader2,
   Film,
   Calculator,
+  Bot,
 } from "lucide-react";
 import type { ChatMessage } from "@/types/chat";
 import ChatMessageComponent from "./ChatMessage";
@@ -21,7 +22,17 @@ interface ChatSidebarProps {
   onSolve: () => void;
   requestVideo: boolean;
   setRequestVideo: (val: boolean) => void;
+  currentStatus: string | null;
 }
+
+const statusLabels: Record<string, string> = {
+  processing: "🔄 Đang xử lý bài toán...",
+  solving: "🧮 Đang giải hệ phương trình...",
+  rendering_queued: "🎬 Đã gửi yêu cầu render video...",
+  rendering: "🎬 Đang dựng animation Manim...",
+  success: "✅ Hoàn thành!",
+  error: "❌ Có lỗi xảy ra.",
+};
 
 export default function ChatSidebar({
   messages,
@@ -31,6 +42,7 @@ export default function ChatSidebar({
   onSolve,
   requestVideo,
   setRequestVideo,
+  currentStatus,
 }: ChatSidebarProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -38,7 +50,7 @@ export default function ChatSidebar({
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  }, [messages, currentStatus]);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -108,6 +120,31 @@ export default function ChatSidebar({
         {messages.map((msg) => (
           <ChatMessageComponent key={msg.id} message={msg} />
         ))}
+
+        {/* Thinking / Status Bubble */}
+        <div className="space-y-4">
+          <AnimatePresence>
+            {currentStatus && currentStatus !== "success" && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                className="flex gap-3"
+              >
+                <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center flex-shrink-0 animate-pulse">
+                  <Bot className="w-4 h-4 text-white" />
+                </div>
+                <div className="bg-zinc-900/40 border border-white/5 rounded-2xl px-4 py-3 flex items-center gap-2">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-400" />
+                  <span className="text-sm text-zinc-400 italic">
+                    {statusLabels[currentStatus] || currentStatus}
+                  </span>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+
         <div ref={messagesEndRef} />
       </div>
 
@@ -149,16 +186,6 @@ export default function ChatSidebar({
           >
             <Film className="w-3.5 h-3.5" />
             Video
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setInput("Cho tam giác ABC đều cạnh bằng 5.")}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white/5 border border-white/5 text-zinc-500 hover:text-white hover:bg-white/10 transition-all text-xs font-medium"
-            title="Dùng ví dụ"
-          >
-            <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
-            Ví dụ
           </button>
         </div>
 

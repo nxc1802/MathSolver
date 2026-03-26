@@ -17,6 +17,7 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [requestVideo, setRequestVideo] = useState(false);
+  const [currentStatus, setCurrentStatus] = useState<string | null>(null);
 
   // Media state (latest from messages)
   const [coordinates, setCoordinates] = useState<Record<string, [number, number]> | null>(null);
@@ -78,7 +79,7 @@ export default function Home() {
 
     // User message
     pushMessage({ role: "user", type: "text", content: inputText });
-    pushMessage({ role: "assistant", type: "status", content: "processing" });
+    setCurrentStatus("processing");
 
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
     try {
@@ -103,7 +104,7 @@ export default function Home() {
         console.log("WS Update:", wsData);
 
         if (wsData.status) {
-          pushMessage({ role: "assistant", type: "status", content: wsData.status });
+          setCurrentStatus(wsData.status);
 
           if (wsData.status === "rendering" || wsData.status === "rendering_queued") {
             setRenderingVideo(true);
@@ -138,6 +139,7 @@ export default function Home() {
           if (r.video_url) {
             setVideoUrl(r.video_url);
             setRenderingVideo(false);
+            setCurrentStatus(null);
             pushMessage({
               role: "assistant",
               type: "text",
@@ -160,8 +162,9 @@ export default function Home() {
               const r = polled.result || {};
 
               if (polled.status === "success") {
-                pushMessage({ role: "assistant", type: "status", content: "success" });
+                setCurrentStatus(null); // Success status is handled by final results
               } else {
+                setCurrentStatus(null);
                 pushMessage({
                   role: "assistant",
                   type: "error",
@@ -187,6 +190,7 @@ export default function Home() {
               if (r.video_url) {
                 setVideoUrl(r.video_url);
                 setRenderingVideo(false);
+                setCurrentStatus(null);
                 pushMessage({
                   role: "assistant",
                   type: "text",
@@ -244,6 +248,7 @@ export default function Home() {
           onSolve={handleSolve}
           requestVideo={requestVideo}
           setRequestVideo={setRequestVideo}
+          currentStatus={currentStatus}
         />
       </div>
 
