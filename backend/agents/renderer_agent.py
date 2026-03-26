@@ -15,7 +15,7 @@ class RendererAgent:
         pt_objs = []
         for pid, pos in coords.items():
             script += f"        p_{pid} = Dot(point=[{pos[0]}, {pos[1]}, 0], color=WHITE)\n"
-            script += f"        l_{pid} = Text('{pid}', font_size=24).next_to(p_{pid}, UR, buff=0.2)\n"
+            script += f"        l_{pid} = Text('{pid}', font='Arial', font_size=24).next_to(p_{pid}, UR, buff=0.2)\n"
             script += f"        self.add(p_{pid}, l_{pid})\n"
             pt_objs.append(f"p_{pid}")
         

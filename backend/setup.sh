@@ -35,5 +35,9 @@ echo "📦 Installing Python packages..."
 pip install --upgrade pip
 pip install -r requirements.txt
 
+# 5. Fix ManimPango (Crucial for macOS arm64)
+echo "🛠️ Rebuilding ManimPango from source to ensure library linking..."
+pip install --no-cache-dir --force-reinstall --no-binary manimpango manimpango
+
 echo "✅ Setup Complete!"
 echo "To start the backend, run: source venv/bin/activate && uvicorn app.main:app --reload"
