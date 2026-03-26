@@ -84,17 +84,25 @@ class Orchestrator:
         # --- Step 7: Rendering (optional) ---
         status = "success"
         if request_video:
-            logger.info("[Orchestrator] Step 7: Dispatching video render task to Celery worker...")
-            from worker.tasks import render_geometry_video
-            result_payload = {
-                "geometry_dsl": dsl_code,
-                "coordinates": coordinates,
-                "semantic": semantic_json,
-                "semantic_analysis": semantic_json.get("input_text", "")
-            }
-            render_geometry_video.delay(job_id, result_payload)
-            status = "rendering_queued"
-            logger.info(f"[Orchestrator] Step 7 DONE: Manim render task queued for job {job_id}.")
+            logger.info(f"🎬 [Orchestrator] Step 7: Dispatching video render task to Celery for Job {job_id}...")
+            try:
+                from worker.tasks import render_geometry_video
+                from worker.celery_app import BROKER_URL
+                logger.debug(f"[Orchestrator] Using Celery Broker: {BROKER_URL[:20]}...")
+                
+                result_payload = {
+                    "geometry_dsl": dsl_code,
+                    "coordinates": coordinates,
+                    "semantic": semantic_json,
+                    "semantic_analysis": semantic_json.get("input_text", "")
+                }
+                task = render_geometry_video.delay(job_id, result_payload)
+                status = "rendering_queued"
+                logger.info(f"✅ [Orchestrator] Step 7 DONE: Task {task.id} queued successfully.")
+            except Exception as e:
+                logger.error(f"❌ [Orchestrator] Step 7 FAILED to queue task: {str(e)}")
+                # Don't fail the whole job, but revert status
+                status = "success" 
         else:
             logger.info("[Orchestrator] Step 7: Video not requested. Skipping Manim render.")
 
