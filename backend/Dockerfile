@@ -23,5 +23,8 @@ COPY . .
 # Expose port (Hugging Face Spaces uses 7860)
 EXPOSE 7860
 
+# Make start script executable
+RUN chmod +x start.sh
+
 # Start command
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "7860"]
+CMD ["./start.sh"]
