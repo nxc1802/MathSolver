@@ -26,12 +26,21 @@ chmod +x setup.sh
 ./setup.sh
 ```
 
-### 2. Dọn dẹp Port (Nếu cần)
-
-### 0. Dọn dẹp Port (Nếu cần)
+### 2. Dọn dẹp Port (LSOF)
+Nếu bạn gặp lỗi `Address already in use`, hãy chạy lệnh sau:
 ```bash
+# LƯU Ý: lsof (viết tắt của list open files), không phải sof
 lsof -ti :8000,3000 | xargs kill -9
 ```
+
+## Troubleshooting (Sửa lỗi thường gặp)
+
+| Lỗi | Nguyên nhân | Giải pháp |
+|---|---|---|
+| `Failed to fetch` | Backend đang khởi động hoặc reload | Chờ vài giây và thử lại. Đảm bảo Backend đang chạy ở port 8000. |
+| `zsh: command not found: sof` | Gõ thiếu chữ 'l' | Gõ chính xác `lsof` (L-S-O-F). |
+| `Internal Server Error` | Redis chưa kết nối | Kiểm tra file `.env` đã có `REDIS_URL` chính xác chưa. |
+| `ParseError` (Manim) | Thiếu Pango/Cairo | Chạy lại `./setup.sh` trong folder backend. |
 
 ### 1. Backend (FastAPI - Debug Mode)
 ```bash
