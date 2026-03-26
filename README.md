@@ -21,21 +21,28 @@ Dự án được triển khai theo 5 giai đoạn (Phases) như trong `docs/Arc
 
 ## Hướng dẫn chạy Locally
 
-### 1. Backend (FastAPI)
+### 0. Dọn dẹp Port (Nếu cần)
+```bash
+lsof -ti :8000,3000 | xargs kill -9
+```
+
+### 1. Backend (FastAPI - Debug Mode)
 ```bash
 cd backend
 source venv/bin/activate
-uvicorn app.main:app --host 0.0.0.0 --port 8000
+# Chạy với reload và log info/debug
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-### 2. Worker (Celery/Manim)
+### 2. Worker (Celery - Debug Mode)
 ```bash
 cd backend
 source venv/bin/activate
-celery -A worker.celery_app worker --loglevel=info
+# Loglevel debug để xem chi tiết quá trình render
+celery -A worker.celery_app worker --loglevel=debug
 ```
 
-### 3. Frontend (Next.js)
+### 3. Frontend (Next.js - Dev/Log Mode)
 ```bash
 cd frontend
 npm run dev
