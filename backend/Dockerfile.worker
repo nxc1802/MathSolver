@@ -1,15 +1,11 @@
 # Use a Python image with Manim dependencies
 FROM manimcommunity/manim:latest
 
+# Use root briefly to install dependencies if needed, but the base image is fine
 USER root
-WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    ffmpeg \
-    build-essential \
-    python3-dev \
-    && rm -rf /var/lib/apt/lists/*
+# Install system dependencies (already in base but useful to keep explicit)
+RUN apt-get update && apt-get install -y ffmpeg build-essential python3-dev && rm -rf /var/lib/apt/lists/*
 
 # Install Python requirements
 COPY requirements.txt .
@@ -18,6 +14,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY . .
 
-# Celery Worker Start Command
-# Note: No port needed for a background worker, but HF might expect something.
-CMD ["celery", "-A", "worker.celery_app", "worker", "--loglevel=info"]
+# HF Spaces requires a web server on port 7860 to stay "Running"
+EXPOSE 7860
+
+# Revert to the default manim user for security
+USER manim
+
+# Start the health check server + worker
+CMD ["python3", "worker_health.py"]
