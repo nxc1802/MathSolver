@@ -16,10 +16,17 @@ Hệ thống giải toán hình học và trực quan hóa bằng AI (Multi-Agen
 - `/frontend`: Next.js web application.
 - `/docs`: Tài liệu chi tiết dự án.
 
-## Quy trình phát triển
-Dự án được triển khai theo 5 giai đoạn (Phases) như trong `docs/Architecture.md`.
+## Hướng dẫn cài đặt & Chạy Locally
 
-## Hướng dẫn chạy Locally
+### 1. Cài đặt môi trường (macOS)
+Dự án yêu cầu các thư viện hệ thống (Pango, Cairo) để render video. Chạy script sau để tự động cài đặt:
+```bash
+cd backend
+chmod +x setup.sh
+./setup.sh
+```
+
+### 2. Dọn dẹp Port (Nếu cần)
 
 ### 0. Dọn dẹp Port (Nếu cần)
 ```bash
