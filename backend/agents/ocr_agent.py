@@ -13,22 +13,15 @@ logger = logging.getLogger(__name__)
 class OCRAgent:
     """Real OCR Agent using Pix2Tex for LaTeX recognition."""
     def __init__(self):
-        self.model = None
-        self._initialized = False
-
-    def _ensure_initialized(self):
-        if not self._initialized:
-            if LatexOCR:
-                logger.info("[OCRAgent] Loading Pix2Tex model (lazy)...")
-                self.model = LatexOCR()
-                self._initialized = True
-                logger.info("[OCRAgent] Pix2Tex model loaded successfully.")
-            else:
-                logger.warning("[OCRAgent] Pix2Tex not installed.")
-                self._initialized = True # Mark as tried
+        if LatexOCR:
+            logger.info("[OCRAgent] Loading Pix2Tex model...")
+            self.model = LatexOCR()
+            logger.info("[OCRAgent] Pix2Tex model loaded successfully.")
+        else:
+            self.model = None
+            logger.warning("[OCRAgent] Pix2Tex not installed. OCR features will be unavailable.")
 
     async def process_image(self, image_path: str) -> str:
-        self._ensure_initialized()
         logger.info(f"==[OCRAgent] Processing local image: {image_path}==")
         if not self.model:
             logger.error("[OCRAgent] OCR model not available.")
@@ -39,7 +32,6 @@ class OCRAgent:
         return result
 
     async def process_url(self, url: str) -> str:
-        self._ensure_initialized()
         logger.info(f"==[OCRAgent] Processing image from URL: {url}==")
         if not self.model:
             logger.error("[OCRAgent] OCR model not available.")

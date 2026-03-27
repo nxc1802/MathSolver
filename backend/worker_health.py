@@ -7,17 +7,18 @@ from contextlib import asynccontextmanager
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Start Celery worker in the background
-    print("🚀 [Health] Starting Celery worker in background...")
+    print("🚀 Starting Celery worker in background...")
     # Using subprocess.Popen to avoid blocking the main thread
-    # Redirect stderr to stdout to see errors in HF logs
-    process = subprocess.Popen(
-        ["celery", "-A", "worker.celery_app", "worker", "--loglevel=info", "--concurrency=1"],
-        stdout=None, 
-        stderr=None
-    )
+    process = subprocess.Popen([
+        "celery", 
+        "-A", "worker.celery_app", 
+        "worker", 
+        "--loglevel=info",
+        "--concurrency=1"  # Set to 1 to minimize RAM spikes on HF Spaces
+    ])
     yield
     # Cleanup
-    print("🛑 [Health] Shutting down Celery worker...")
+    print("🛑 Shutting down Celery worker...")
     process.terminate()
 
 app = FastAPI(lifespan=lifespan)
