@@ -20,5 +20,11 @@ EXPOSE 7860
 # Revert to the default manim user for security
 USER manim
 
-# Start the health check server + worker
-CMD ["python3", "worker_health.py"]
+# Ensure we are in the right directory
+WORKDIR /manim
+
+# Override base image entrypoint to ensure our CMD runs directly
+ENTRYPOINT []
+
+# Use python -u for unbuffered output so logs show up immediately
+CMD ["python3", "-u", "worker_health.py"]
