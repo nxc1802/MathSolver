@@ -14,17 +14,22 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY . .
 
-# HF Spaces requires a web server on port 7860 to stay "Running"
+# Set environment variables for better logging
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+
+# Expose port (HF standard)
 EXPOSE 7860
 
 # Revert to the default manim user for security
 USER manim
-
-# Ensure we are in the right directory
 WORKDIR /manim
 
-# Override base image entrypoint to ensure our CMD runs directly
+# Sanity check: list files to ensure we are where we think we are
+RUN ls -la
+
+# Override entrypoint
 ENTRYPOINT []
 
-# Use python -u for unbuffered output so logs show up immediately
-CMD ["python3", "-u", "worker_health.py"]
+# Start with a shell to list files again and then run python
+CMD ["sh", "-c", "ls -l && python3 -u worker_health.py"]
