@@ -31,10 +31,14 @@ jobs:
           
           cd hf_worker_copy
           
-          # Crucial: HF expects 'Dockerfile' at the root. 
-          # We rename our worker-specific Dockerfile to 'Dockerfile' for this Space.
+          # Rename Dockerfile.worker to Dockerfile
           if [ -f "Dockerfile.worker" ]; then
             mv Dockerfile.worker Dockerfile
+          fi
+          
+          # Rename README_HF_WORKER.md to README.md for metadata
+          if [ -f "README_HF_WORKER.md" ]; then
+            mv README_HF_WORKER.md README.md
           fi
           
           git init
