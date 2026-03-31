@@ -30,5 +30,7 @@ Tex/
 *.mp4
 *.png
 *.svg
+*.pt
+*.pth
 diag_manim.py
 celery_worker.log
