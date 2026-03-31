@@ -65,11 +65,19 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   const signInWithGoogle = async () => {
-    await supabase.auth.signInWithOAuth({ provider: 'google' });
+    const origin = typeof window !== "undefined" ? window.location.origin : "";
+    await supabase.auth.signInWithOAuth({ 
+      provider: 'google',
+      options: { redirectTo: `${origin}/login` }
+    });
   };
 
   const signInWithGithub = async () => {
-    await supabase.auth.signInWithOAuth({ provider: 'github' });
+    const origin = typeof window !== "undefined" ? window.location.origin : "";
+    await supabase.auth.signInWithOAuth({ 
+      provider: 'github',
+      options: { redirectTo: `${origin}/login` }
+    });
   };
 
   return (

@@ -109,9 +109,33 @@ export default function ChatMessageComponent({ message }: ChatMessageProps) {
         )}
 
         {message.type === "text" && (
-          <p className="text-sm leading-relaxed whitespace-pre-wrap">
-            {message.content}
-          </p>
+          <div className="space-y-3">
+            <p className="text-sm leading-relaxed whitespace-pre-wrap">
+              {message.content}
+            </p>
+            
+            {/* Render Image from Metadata (User upload or AI result) */}
+            {message.metadata?.image_url && (
+              <div className="rounded-xl overflow-hidden border border-white/5 bg-black/20">
+                <img 
+                  src={message.metadata.image_url} 
+                  alt="Math problem" 
+                  className="max-w-full h-auto object-contain max-h-64 mx-auto"
+                />
+              </div>
+            )}
+
+            {/* Render Video from Metadata (AI Animation Result) */}
+            {message.metadata?.videoUrl && (
+              <div className="rounded-xl overflow-hidden border border-white/5 bg-black/20">
+                <video 
+                  src={message.metadata.videoUrl} 
+                  controls 
+                  className="w-full h-auto aspect-video"
+                />
+              </div>
+            )}
+          </div>
         )}
 
         {/* Timestamp */}
