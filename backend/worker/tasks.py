@@ -46,4 +46,20 @@ def render_geometry_video(job_id: str, data: dict):
         "result": final_result
     }).eq("id", job_id).execute()
     
+    # 6. Lưu tin nhắn vào history (nếu có session_id)
+    session_id = data.get("session_id")
+    if session_id:
+        supabase.table("messages").insert({
+            "session_id": session_id,
+            "role": "assistant",
+            "type": "analysis",
+            "content": data.get("semantic_analysis", "🎬 Video minh họa đã sẵn sàng."),
+            "metadata": {
+                "job_id": job_id,
+                "video_url": video_url,
+                "coordinates": data.get("coordinates"),
+                "geometry_dsl": data.get("geometry_dsl")
+            }
+        }).execute()
+    
     return video_url

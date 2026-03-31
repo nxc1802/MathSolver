@@ -1,5 +1,5 @@
 -- ============================================================
--- SQL Schema for Visual Math Solver v4.0 (Multi-Session)
+-- MATHSOLVER v4.0 - Migration Script (Multi-Session & History)
 -- ============================================================
 
 -- 1. Profiles Table (Extends Supabase Auth)
@@ -26,6 +26,7 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- Trigger for profile creation
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
     AFTER INSERT ON auth.users
     FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
@@ -39,6 +40,7 @@ CREATE TABLE IF NOT EXISTS public.sessions (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- Index for sessions
 CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON public.sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_updated_at ON public.sessions(updated_at DESC);
 
@@ -53,41 +55,41 @@ CREATE TABLE IF NOT EXISTS public.messages (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- Index for messages
 CREATE INDEX IF NOT EXISTS idx_messages_session_id ON public.messages(session_id);
 CREATE INDEX IF NOT EXISTS idx_messages_created_at ON public.messages(session_id, created_at);
 
--- 4. Jobs Table
-CREATE TABLE IF NOT EXISTS public.jobs (
-    id UUID PRIMARY KEY,
-    user_id UUID REFERENCES auth.users(id),
-    session_id UUID REFERENCES public.sessions(id),
-    status TEXT NOT NULL DEFAULT 'processing',
-    input_text TEXT,
-    result JSONB DEFAULT '{}'::jsonb,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
+-- 4. Update Jobs Table
+ALTER TABLE public.jobs ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES auth.users(id);
+ALTER TABLE public.jobs ADD COLUMN IF NOT EXISTS session_id UUID REFERENCES public.sessions(id);
 
--- ============================================================
--- ROW LEVEL SECURITY (RLS)
--- ============================================================
-
+-- 5. Row Level Security (RLS)
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.jobs ENABLE ROW LEVEL SECURITY;
 
--- Profiles: Users view own profile
+-- Polices for public.profiles
+DROP POLICY IF EXISTS "Users view own profile" ON public.profiles;
 CREATE POLICY "Users view own profile" ON public.profiles FOR SELECT USING (auth.uid() = id);
+DROP POLICY IF EXISTS "Users update own profile" ON public.profiles;
 CREATE POLICY "Users update own profile" ON public.profiles FOR UPDATE USING (auth.uid() = id);
 
--- Sessions: Users manage own sessions
+-- Policies for public.sessions
+DROP POLICY IF EXISTS "Users manage own sessions" ON public.sessions;
 CREATE POLICY "Users manage own sessions" ON public.sessions FOR ALL USING (auth.uid() = user_id);
 
--- Messages: Users view own messages
+-- Policies for public.messages
+DROP POLICY IF EXISTS "Users view own messages" ON public.messages;
 CREATE POLICY "Users view own messages" ON public.messages FOR ALL USING (
     session_id IN (SELECT id FROM public.sessions WHERE user_id = auth.uid())
 );
 
--- Jobs: Users view own jobs
+-- Policies for public.jobs
+DROP POLICY IF EXISTS "Users view own jobs" ON public.jobs;
 CREATE POLICY "Users view own jobs" ON public.jobs FOR ALL USING (auth.uid() = user_id OR user_id IS NULL);
+
+-- Grant permissions to public/authenticated
+GRANT ALL ON public.profiles TO authenticated;
+GRANT ALL ON public.sessions TO authenticated;
+GRANT ALL ON public.messages TO authenticated;
+GRANT ALL ON public.jobs TO authenticated;

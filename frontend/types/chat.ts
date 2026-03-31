@@ -7,7 +7,6 @@ export type MessageType =
   | 'analysis' 
   | 'error'
   | 'coordinates'
-  // Future extensibility for tutoring app
   | 'quiz'
   | 'hint'
   | 'step_solution';
@@ -22,5 +21,15 @@ export interface ChatMessage {
     coordinates?: Record<string, [number, number]>;
     videoUrl?: string;
     jobId?: string;
+    geometry_dsl?: string;
+    image_url?: string;
   };
+}
+
+export interface ChatSession {
+  id: string;
+  user_id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
 }

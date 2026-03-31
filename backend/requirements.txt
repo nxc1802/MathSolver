@@ -3,7 +3,7 @@ uvicorn
 sympy
 numpy
 scipy
-pydantic
+pydantic[email]
 python-multipart
 python-dotenv
 openai
@@ -14,3 +14,4 @@ websockets
 httpx
 pix2tex
 manim
+email-validator

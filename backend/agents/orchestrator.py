@@ -22,7 +22,7 @@ class Orchestrator:
         self.solver_engine = GeometryEngine()
         self.dsl_parser = DSLParser()
 
-    async def run(self, text: str, image_url: str = None, job_id: str = None, status_callback=None, request_video: bool = False) -> Dict[str, Any]:
+    async def run(self, text: str, image_url: str = None, job_id: str = None, session_id: str = None, status_callback=None, request_video: bool = False) -> Dict[str, Any]:
         logger.info(f"====== [Orchestrator] Job {job_id} STARTED ======")
         logger.info(f"[Orchestrator] Input: text_len={len(text)}, image_url={image_url}, request_video={request_video}")
 
@@ -96,7 +96,8 @@ class Orchestrator:
                     "geometry_dsl": dsl_code,
                     "coordinates": coordinates,
                     "semantic": semantic_json,
-                    "semantic_analysis": semantic_json.get("input_text", "")
+                    "semantic_analysis": semantic_json.get("input_text", ""),
+                    "session_id": session_id
                 }
                 task = render_geometry_video.delay(job_id, result_payload)
                 status = "rendering_queued"
