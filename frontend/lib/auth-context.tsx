@@ -31,17 +31,32 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const pathname = usePathname();
 
   useEffect(() => {
-    // Check initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      setLoading(false);
-      
-      // Redirect logic: If not logged in and not on login page, go to login
-      if (!session && pathname !== "/login") {
-        router.push("/login");
+    // Safety Timeout: Force loading to false if Supabase takes too long (> 5s)
+    const timeoutId = setTimeout(() => {
+      if (loading) {
+        console.warn("Auth initialization timed out. Forcing UI load.");
+        setLoading(false);
       }
-    });
+    }, 5000);
+
+    const checkSession = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        setSession(session);
+        setUser(session?.user ?? null);
+        
+        if (!session && pathname !== "/login") {
+          router.push("/login");
+        }
+      } catch (err) {
+        console.error("Auth session check failed:", err);
+      } finally {
+        setLoading(false);
+        clearTimeout(timeoutId);
+      }
+    };
+
+    checkSession();
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -56,7 +71,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      subscription.unsubscribe();
+      clearTimeout(timeoutId);
+    };
   }, [router, pathname]);
 
   const signOut = async () => {
