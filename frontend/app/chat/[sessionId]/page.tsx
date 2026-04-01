@@ -12,7 +12,8 @@ import {
   Bot,
   ArrowLeft,
   ChevronRight,
-  Maximize2
+  Maximize2,
+  AlertCircle
 } from "lucide-react";
 
 import ChatSidebar from "@/components/ChatSidebar";
@@ -34,6 +35,7 @@ export default function ChatSessionPage() {
   const [ocrLoading, setOcrLoading] = useState(false);
   const [requestVideo, setRequestVideo] = useState(false);
   const [currentStatus, setCurrentStatus] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   
   // Media state
   const [coordinates, setCoordinates] = useState<Record<string, [number, number]> | null>(null);
@@ -60,6 +62,7 @@ export default function ChatSessionPage() {
   const fetchHistory = useCallback(async () => {
     if (!userSession?.access_token || !sessionId) return;
     setLoading(true);
+    setError(null);
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
       const res = await fetch(`${apiUrl}/api/v1/sessions/${sessionId}/messages`, {
@@ -78,14 +81,17 @@ export default function ChatSessionPage() {
         setMessages(formatted);
         
         // Load latest media from history
-        const lastWithMedia = [...formatted].reverse().find(m => m.metadata?.coordinates || m.metadata?.video_url);
+        const lastWithMedia = [...formatted].reverse().find(m => m.metadata?.coordinates || m.metadata?.videoUrl);
         if (lastWithMedia) {
           if (lastWithMedia.metadata.coordinates) setCoordinates(lastWithMedia.metadata.coordinates);
-          if (lastWithMedia.metadata.video_url) setVideoUrl(lastWithMedia.metadata.video_url);
+          if (lastWithMedia.metadata.videoUrl) setVideoUrl(lastWithMedia.metadata.videoUrl);
         }
+      } else {
+        setError("Không thể kết nối với máy chủ giải toán.");
       }
     } catch (err) {
       console.error("Fetch history error:", err);
+      setError("Lỗi kết nối mạng hoặc máy chủ chưa sẵn sàng.");
     } finally {
       setLoading(false);
     }
@@ -104,6 +110,7 @@ export default function ChatSessionPage() {
     if (!inputText.trim() || !userSession?.access_token) return;
     setLoading(true);
     setCurrentStatus("processing");
+    setError(null);
 
     // Add UI message immediately 
     const tempMsg: ChatMessage = {
@@ -126,6 +133,8 @@ export default function ChatSessionPage() {
         },
         body: JSON.stringify({ text: inputText, request_video: requestVideo }),
       });
+      if (!response.ok) throw new Error("API solve error");
+      
       const data = await response.json();
       const jobId = data.job_id;
 
@@ -158,6 +167,7 @@ export default function ChatSessionPage() {
     } catch (err) {
       console.error(err);
       setCurrentStatus("error");
+      setError("Gửi yêu cầu thất bại. Kiểm tra kết nối Backend.");
     } finally {
       setLoading(false);
     }
@@ -228,7 +238,7 @@ export default function ChatSessionPage() {
             {/* Conversation Column */}
             <div className="flex-1 flex flex-col border-r border-white/5 min-w-0 bg-[#0c0c14]/40">
                 <div className="flex-1 overflow-y-auto p-4 space-y-6 scrollbar-thin">
-                    {messages.length === 0 && !loading && (
+                    {messages.length === 0 && !loading && !error && (
                         <div className="h-full flex flex-col items-center justify-center text-center gap-4 opacity-50">
                             <Sparkles className="w-12 h-12 text-indigo-500/30" />
                             <div>
@@ -241,6 +251,19 @@ export default function ChatSessionPage() {
                     {messages.map((msg) => (
                         <ChatMessageComponent key={msg.id} message={msg} />
                     ))}
+
+                    {error && (
+                        <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm flex items-center gap-3">
+                            <AlertCircle className="w-5 h-5 flex-shrink-0" />
+                            <div className="flex-1">
+                                <p className="font-bold">Lỗi kết nối Backend</p>
+                                <p className="text-xs opacity-80">{error}. Vui lòng kiểm tra cấu hình `NEXT_PUBLIC_API_URL` trên Vercel.</p>
+                            </div>
+                            <button onClick={() => { setError(null); fetchHistory(); }} className="px-3 py-1 bg-red-500/20 hover:bg-red-500/30 rounded-lg text-xs font-bold transition-all">
+                                Thử lại
+                            </button>
+                        </div>
+                    )}
 
                     <AnimatePresence>
                         {currentStatus && currentStatus !== "success" && (

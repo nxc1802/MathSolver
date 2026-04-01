@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { Loader2 } from "lucide-react";
@@ -11,6 +11,7 @@ import { Loader2 } from "lucide-react";
 export default function IndexPage() {
   const { user, session: userSession, loading } = useAuth();
   const router = useRouter();
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (loading) return;
@@ -45,16 +46,45 @@ export default function IndexPage() {
                     if (createRes.ok) {
                         const newSession = await createRes.json();
                         router.push(`/chat/${newSession.id}`);
+                    } else {
+                      setError("Không thể tạo phiên làm việc mới.");
                     }
                 }
+            } else {
+                setError("Không thể kết nối với máy chủ giải toán.");
             }
         } catch (err) {
             console.error("Failed to initialize session:", err);
+            setError("Lỗi kết nối mạng hoặc máy chủ chưa sẵn sàng.");
         }
     };
 
     initApp();
   }, [user, userSession, loading, router]);
+
+  if (error) {
+    return (
+      <div className="h-screen w-screen flex items-center justify-center bg-[#0a0a0f] p-6 text-center">
+        <div className="max-w-sm space-y-6">
+          <div className="w-16 h-16 bg-red-500/10 rounded-2xl flex items-center justify-center mx-auto">
+            <div className="w-8 h-8 border-2 border-red-500/50 rounded-full flex items-center justify-center text-red-500">!</div>
+          </div>
+          <div className="space-y-2">
+            <h3 className="text-white font-bold text-lg">Lỗi khởi tạo</h3>
+            <p className="text-zinc-500 text-sm leading-relaxed">
+              {error}. Hãy đảm bảo bạn đã cấu hình `NEXT_PUBLIC_API_URL` trên Vercel.
+            </p>
+          </div>
+          <button 
+            onClick={() => window.location.reload()}
+            className="w-full py-3 bg-white/5 hover:bg-white/10 text-white rounded-xl text-sm font-bold transition-all border border-white/5"
+          >
+            Thử lại
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="h-screen w-screen flex items-center justify-center bg-[#0a0a0f]">
