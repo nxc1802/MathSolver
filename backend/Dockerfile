@@ -3,6 +3,8 @@ FROM manimcommunity/manim:v0.18.0
 
 USER root
 WORKDIR /app
+# Docker / HF: silence pip “running as root” noise (no venv in slim images)
+ENV PIP_ROOT_USER_ACTION=ignore
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \

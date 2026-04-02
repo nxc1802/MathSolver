@@ -5,11 +5,12 @@
 fastapi>=0.115.0,<1
 uvicorn[standard]>=0.30.0
 sympy>=1.12
-# OpenCV / Paddle / many scientific wheels still expect NumPy 1.x ABI
-numpy>=1.26.0,<2
-# Newer opencv headless pins numpy>=2; cap major series for numpy 1.x stacks
+# NumPy 1.26+ needs Python 3.9+; manimcommunity/manim:v0.18.0 uses Python 3.8 (numpy max 1.24.x on PyPI).
+# OpenCV / Paddle stacks stay on NumPy 1.x ABI.
+numpy>=1.24.0,<2
+# scipy 1.11+ requires Python 3.9+
 opencv-python-headless>=4.6,<4.10
-scipy>=1.11.0
+scipy>=1.10.0,<2
 pydantic[email]>=2.0
 python-multipart>=0.0.9
 python-dotenv>=1.0.0
