@@ -4,6 +4,11 @@
 *.pyo
 *.pyd
 .env
+venv/
+.venv/
+env/
+.env.local
+.env.*.local
 
 # Logs
 *.log
