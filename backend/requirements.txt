@@ -15,3 +15,6 @@ httpx
 pix2tex
 manim
 email-validator
+paddleocr
+paddlepaddle
+ultralytics
