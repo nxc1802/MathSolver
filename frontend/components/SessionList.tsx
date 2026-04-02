@@ -4,6 +4,7 @@ import React, { useEffect, useState, useCallback } from "react";
 import { Plus, MessageSquare, Trash2, Loader2, ChevronRight } from "lucide-react";
 import { useRouter, useParams } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
+import { getApiBaseUrl } from "@/lib/api-config";
 
 interface Session {
   id: string;
@@ -24,7 +25,7 @@ export default function SessionList() {
     if (!userSession?.access_token) return;
     
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      const apiUrl = getApiBaseUrl();
       const res = await fetch(`${apiUrl}/api/v1/sessions`, {
         headers: {
             "Authorization": `Bearer ${userSession.access_token}`
@@ -50,7 +51,7 @@ export default function SessionList() {
     setCreating(true);
 
     try {
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+        const apiUrl = getApiBaseUrl();
         const res = await fetch(`${apiUrl}/api/v1/sessions`, {
             method: "POST",
             headers: {
@@ -74,7 +75,7 @@ export default function SessionList() {
     if (!userSession?.access_token || !confirm("Bạn có chắc chắn muốn xóa session này?")) return;
 
     try {
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+        const apiUrl = getApiBaseUrl();
         const res = await fetch(`${apiUrl}/api/v1/sessions/${id}`, {
             method: "DELETE",
             headers: {

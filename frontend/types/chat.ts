@@ -19,7 +19,12 @@ export interface ChatMessage {
   timestamp: number;
   metadata?: {
     coordinates?: Record<string, [number, number]>;
+    /** Primary key from API / DB (snake_case) */
+    video_url?: string;
+    /** @deprecated Prefer video_url */
     videoUrl?: string;
+    job_id?: string;
+    /** @deprecated Prefer job_id */
     jobId?: string;
     geometry_dsl?: string;
     image_url?: string;

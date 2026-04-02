@@ -33,10 +33,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   useEffect(() => {
     // Safety Timeout: Force loading to false if Supabase takes too long (> 5s)
     const timeoutId = setTimeout(() => {
-      if (loading) {
-        console.warn("Auth initialization timed out. Forcing UI load.");
-        setLoading(false);
-      }
+      setLoading((prev) => {
+        if (prev) {
+          console.warn("Auth initialization timed out. Forcing UI load.");
+          return false;
+        }
+        return prev;
+      });
     }, 5000);
 
     const checkSession = async () => {

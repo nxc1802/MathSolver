@@ -1,4 +1,7 @@
+"use client";
+
 import React, { useRef, useState } from "react";
+import { getApiBaseUrl } from "@/lib/api-config";
 import { motion } from "framer-motion";
 import { Upload, Sparkles, Image as ImageIcon, Loader2 } from "lucide-react";
 
@@ -24,7 +27,7 @@ export default function SolverForm({ input, setInput, loading, onSolve, onExampl
     const formData = new FormData();
     formData.append("file", file);
 
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+    const apiUrl = getApiBaseUrl();
     try {
       const res = await fetch(`${apiUrl}/api/v1/ocr`, {
         method: "POST",

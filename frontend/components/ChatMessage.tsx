@@ -125,11 +125,11 @@ export default function ChatMessageComponent({ message }: ChatMessageProps) {
               </div>
             )}
 
-            {/* Render Video from Metadata (AI Animation Result) */}
-            {message.metadata?.videoUrl && (
+            {/* Render Video from Metadata (AI Animation Result); API uses video_url */}
+            {(message.metadata?.video_url ?? message.metadata?.videoUrl) && (
               <div className="rounded-xl overflow-hidden border border-white/5 bg-black/20">
                 <video 
-                  src={message.metadata.videoUrl} 
+                  src={message.metadata?.video_url ?? message.metadata?.videoUrl} 
                   controls 
                   className="w-full h-auto aspect-video"
                 />

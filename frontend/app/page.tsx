@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
+import { getApiBaseUrl } from "@/lib/api-config";
 import { Loader2 } from "lucide-react";
 
 /**
@@ -25,7 +26,7 @@ export default function IndexPage() {
     const initApp = async () => {
         try {
             setError(null);
-            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+            const apiUrl = getApiBaseUrl();
             
             // Timeout after 8 seconds
             const controller = new AbortController();
