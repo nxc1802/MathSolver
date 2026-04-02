@@ -1,33 +1,33 @@
-# Docker (manimcommunity/manim) already ships the `manim` CLI — do not install the PyPI `manim`
-# package in those images (avoids version clashes and redundant heavy deps).
-# paddlepaddle: 2.6.1 wheels are no longer published on PyPI for many platforms; use 2.6.2+.
-#
-# tokenizers 0.22+ may use a PEP517 chain that installs `puccinialin` (Python >=3.9 only). The
-# manimcommunity/manim image uses Python 3.8 — pin HF stack so wheels resolve without that build dep.
-tokenizers>=0.13.0,<0.22
-transformers>=4.18.0,<5.0
-huggingface-hub>=0.19.0,<1.0
+# Target: Python 3.11 (see Dockerfile). Used by: FastAPI API, Celery worker, Manim render, OCR/vision stack.
+# Install: pip install -r requirements.txt
 
-fastapi>=0.115.0,<1
-uvicorn[standard]>=0.30.0
-sympy>=1.12
-# NumPy 1.26+ needs Python 3.9+; manimcommunity/manim:v0.18.0 uses Python 3.8 (numpy max 1.24.x on PyPI).
-# OpenCV / Paddle stacks stay on NumPy 1.x ABI.
-numpy>=1.24.0,<2
-# scipy 1.11+ requires Python 3.9+
-opencv-python-headless>=4.6,<4.10
-scipy>=1.10.0,<2
-pydantic[email]>=2.0
+# --- HTTP API ---
+fastapi>=0.115,<1
+uvicorn[standard]>=0.30
 python-multipart>=0.0.9
-python-dotenv>=1.0.0
-openai>=1.0.0
-supabase>=2.0.0
-celery>=5.3.0
-redis>=5.0.0
-websockets>=12.0
-httpx>=0.27.0
+python-dotenv>=1.0
+pydantic[email]>=2.4
+email-validator>=2
+
+# --- Auth / data / queue ---
+openai>=1.40
+supabase>=2.0
+celery>=5.3
+redis>=5
+httpx>=0.27
+websockets>=12
+
+# --- Math & symbolic solver ---
+sympy>=1.12
+numpy>=1.26,<2
+scipy>=1.11
+opencv-python-headless>=4.8,<4.10
+
+# --- Video (GeometryScene via CLI) ---
+manim>=0.18,<0.20
+
+# --- OCR & vision (orchestrator / legacy /ocr) ---
 pix2tex>=0.1.4
-email-validator>=2.0.0
 paddleocr==2.7.3
 paddlepaddle==2.6.2
 ultralytics==8.2.2
