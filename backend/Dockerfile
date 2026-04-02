@@ -1,5 +1,5 @@
 # Use a Python image with Manim dependencies
-FROM manimcommunity/manim:latest
+FROM manimcommunity/manim:v0.18.0
 
 USER root
 WORKDIR /app
