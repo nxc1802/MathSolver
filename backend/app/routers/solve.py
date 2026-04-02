@@ -1,15 +1,25 @@
+from __future__ import annotations
+
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from app.dependencies import get_current_user_id
 from app.supabase_client import get_supabase
 from app.models.schemas import SolveRequest, SolveResponse
 from agents.orchestrator import Orchestrator
 import uuid
-import asyncio
 import logging
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/sessions", tags=["Solve"])
-orchestrator = Orchestrator()
+
+_orchestrator: Orchestrator | None = None
+
+
+def get_orchestrator() -> Orchestrator:
+    """Defer heavy agent/model init until first solve (faster API startup)."""
+    global _orchestrator
+    if _orchestrator is None:
+        _orchestrator = Orchestrator()
+    return _orchestrator
 
 @router.post("/{session_id}/solve", response_model=SolveResponse)
 async def solve_problem(
@@ -65,15 +75,14 @@ async def process_session_job(job_id: str, session_id: str, request: SolveReques
     """
     Tiến trình giải toán ngầm, cập nhật cả bảng jobs và bảng messages (history).
     """
-    from app.main import notify_status # Import ngầm để tránh loop
-    
+    from app.websocket_manager import notify_status
+
     async def status_update(status: str):
         await notify_status(job_id, {"status": status})
 
     supabase = get_supabase()
     try:
-        # Chạy Orchestrator
-        result = await orchestrator.run(
+        result = await get_orchestrator().run(
             request.text, 
             request.image_url, 
             job_id=job_id, 

@@ -1,6 +1,7 @@
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, File, UploadFile
+from __future__ import annotations
+
+from fastapi import FastAPI, HTTPException, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from typing import Optional, Dict, Any, List
 import uuid
 import os
 import logging
@@ -10,6 +11,7 @@ from dotenv import load_dotenv
 # Routers
 from app.routers import auth, sessions, solve
 from app.supabase_client import get_supabase
+from app.websocket_manager import register_websocket_routes
 from agents.ocr_agent import OCRAgent
 
 # ── Environment & Warnings ───────────────────────────────────────────────────
@@ -52,8 +54,20 @@ app.include_router(auth.router)
 app.include_router(sessions.router)
 app.include_router(solve.router)
 
+register_websocket_routes(app)
+
 # ── Shared Instances ──────────────────────────────────────────────────────────
-ocr_agent = OCRAgent()
+_ocr_agent: OCRAgent | None = None
+
+
+def get_ocr_agent() -> OCRAgent:
+    """Lazy init: OCR loads YOLO/Paddle/Pix2Tex and is heavy; defer until first use."""
+    global _ocr_agent
+    if _ocr_agent is None:
+        _ocr_agent = OCRAgent()
+    return _ocr_agent
+
+
 supabase_client = get_supabase()
 
 # ── Routes ───────────────────────────────────────────────────────────────────
@@ -68,9 +82,9 @@ async def upload_ocr(file: UploadFile = File(...)):
     temp_path = f"temp_{uuid.uuid4()}.png"
     with open(temp_path, "wb") as buffer:
         buffer.write(await file.read())
-    
+
     try:
-        text = await ocr_agent.process_image(temp_path)
+        text = await get_ocr_agent().process_image(temp_path)
         return {"text": text}
     finally:
         if os.path.exists(temp_path):
@@ -83,27 +97,3 @@ async def get_job_status(job_id: str):
     if not response.data:
         raise HTTPException(status_code=404, detail="Job not found")
     return response.data[0]
-
-# ── WebSocket Management ─────────────────────────────────────────────────────
-# We keep this in main.py so it can be easily shared across routers via imports
-active_connections: Dict[str, List[WebSocket]] = {}
-
-@app.websocket("/ws/{job_id}")
-async def websocket_endpoint(websocket: WebSocket, job_id: str):
-    await websocket.accept()
-    if job_id not in active_connections:
-        active_connections[job_id] = []
-    active_connections[job_id].append(websocket)
-    try:
-        while True:
-            await websocket.receive_text() # Keep connection alive
-    except WebSocketDisconnect:
-        active_connections[job_id].remove(websocket)
-
-async def notify_status(job_id: str, data: dict):
-    if job_id in active_connections:
-        for connection in active_connections[job_id]:
-            try:
-                await connection.send_json(data)
-            except Exception as e:
-                logger.error(f"WS error sending to {job_id}: {e}")
