@@ -9,7 +9,7 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
-# Runtime + *-dev: Manim pulls pycairo (meson); needs pkg-config + cairo/pango headers to build
+# Runtime + *-dev: Manim/pycairo need pkg-config + cairo headers; libpango1.0-dev covers PangoCairo on Bookworm (no libpangocairo-*-dev package).
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     pkg-config \
@@ -19,7 +19,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpango-1.0-0 \
     libpango1.0-dev \
     libpangocairo-1.0-0 \
-    libpangocairo-1.0-dev \
     libgdk-pixbuf-2.0-0 \
     libffi-dev \
     python3-dev \
