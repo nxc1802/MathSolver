@@ -9,13 +9,20 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
-# Runtime libs for Manim / Cairo / LaTeX; build-essential for occasional wheel builds
+# Runtime + *-dev: Manim pulls pycairo (meson); needs pkg-config + cairo/pango headers to build
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
+    pkg-config \
+    cmake \
     libcairo2 \
+    libcairo2-dev \
     libpango-1.0-0 \
+    libpango1.0-dev \
     libpangocairo-1.0-0 \
+    libpangocairo-1.0-dev \
     libgdk-pixbuf-2.0-0 \
+    libffi-dev \
+    python3-dev \
     texlive-latex-base \
     texlive-fonts-recommended \
     texlive-latex-extra \
