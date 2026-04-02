@@ -1,6 +1,12 @@
 # Docker (manimcommunity/manim) already ships the `manim` CLI — do not install the PyPI `manim`
 # package in those images (avoids version clashes and redundant heavy deps).
 # paddlepaddle: 2.6.1 wheels are no longer published on PyPI for many platforms; use 2.6.2+.
+#
+# tokenizers 0.22+ may use a PEP517 chain that installs `puccinialin` (Python >=3.9 only). The
+# manimcommunity/manim image uses Python 3.8 — pin HF stack so wheels resolve without that build dep.
+tokenizers>=0.13.0,<0.22
+transformers>=4.18.0,<5.0
+huggingface-hub>=0.19.0,<1.0
 
 fastapi>=0.115.0,<1
 uvicorn[standard]>=0.30.0

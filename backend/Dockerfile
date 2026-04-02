@@ -5,6 +5,8 @@ USER root
 WORKDIR /app
 # Docker / HF: silence pip “running as root” noise (no venv in slim images)
 ENV PIP_ROOT_USER_ACTION=ignore
+# Base image runs as user `manim`; default pip cache dir may be unwritable → use /tmp
+ENV PIP_CACHE_DIR=/tmp/pip-cache
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
@@ -17,7 +19,8 @@ RUN apt-get update && apt-get install -y \
 
 # Install Python requirements (manim CLI comes from the base image, not pip)
 COPY requirements.txt .
-RUN pip install --upgrade pip setuptools wheel \
+RUN mkdir -p /tmp/pip-cache && chmod 1777 /tmp/pip-cache \
+    && pip install --upgrade pip setuptools wheel \
     && pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
