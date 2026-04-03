@@ -1,8 +1,15 @@
 import os
 import subprocess
+from contextlib import asynccontextmanager
+
+from dotenv import load_dotenv
 from fastapi import FastAPI
 import uvicorn
-from contextlib import asynccontextmanager
+
+load_dotenv()
+from app.logging_setup import setup_application_logging
+
+setup_application_logging()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):

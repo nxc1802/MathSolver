@@ -2,6 +2,7 @@
 # Install: pip install -r requirements.txt
 
 # --- HTTP API ---
+cachetools>=5.3
 fastapi>=0.115,<1
 uvicorn[standard]>=0.30
 python-multipart>=0.0.9

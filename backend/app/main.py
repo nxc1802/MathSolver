@@ -1,45 +1,40 @@
 from __future__ import annotations
 
-from fastapi import FastAPI, HTTPException, File, UploadFile
-from fastapi.middleware.cors import CORSMiddleware
-import uuid
-import os
 import logging
+import os
+import uuid
 import warnings
+
 from dotenv import load_dotenv
+from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 
-# Routers
-from app.routers import auth, sessions, solve
-from app.supabase_client import get_supabase
-from app.websocket_manager import register_websocket_routes
-from agents.ocr_agent import OCRAgent
-
-# ── Environment & Warnings ───────────────────────────────────────────────────
 load_dotenv()
 os.environ["NO_ALBUMENTATIONS_UPDATE"] = "1"
 warnings.filterwarnings("ignore", category=UserWarning, module="pydantic")
 warnings.filterwarnings("ignore", category=UserWarning, module="albumentations")
 
-# ── Logging Configuration ──────────────────────────────────────────────────────
-LOG_LEVEL = os.getenv("LOG_LEVEL", "DEBUG").upper()
-logging.basicConfig(
-    level=getattr(logging, LOG_LEVEL, logging.DEBUG),
-    format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
-    datefmt="%H:%M:%S",
-)
-logging.getLogger("httpx").setLevel(logging.WARNING)
-logging.getLogger("openai").setLevel(logging.WARNING)
-logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
-logging.getLogger("uvicorn.error").setLevel(logging.INFO)
+from app.logging_setup import setup_application_logging
+
+setup_application_logging()
+
+# Routers (after logging)
+from app.routers import auth, sessions, solve
+from app.supabase_client import get_supabase
+from app.websocket_manager import register_websocket_routes
+from agents.ocr_agent import OCRAgent
 
 logger = logging.getLogger("app.main")
-logger.info(f"🚀 [App] System v4.0 starting - Logging level: {LOG_LEVEL}")
+logger.info("App starting (APP_LOG_MODE=%s)", os.getenv("APP_LOG_MODE", "production"))
 
 app = FastAPI(title="Visual Math Solver API v4.0")
 
-# Confirm Redis config on startup
 from worker.celery_app import BROKER_URL
-logger.info(f"📍 [Backend] Redis Configuration: {BROKER_URL.split('@')[-1] if '@' in BROKER_URL else BROKER_URL}")
+
+logger.info(
+    "Redis broker: %s",
+    BROKER_URL.split("@")[-1] if "@" in BROKER_URL else BROKER_URL,
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -49,14 +44,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ── Include Routers ──────────────────────────────────────────────────────────
 app.include_router(auth.router)
 app.include_router(sessions.router)
 app.include_router(solve.router)
 
 register_websocket_routes(app)
 
-# ── Shared Instances ──────────────────────────────────────────────────────────
 _ocr_agent: OCRAgent | None = None
 
 
@@ -70,11 +63,11 @@ def get_ocr_agent() -> OCRAgent:
 
 supabase_client = get_supabase()
 
-# ── Routes ───────────────────────────────────────────────────────────────────
 
 @app.get("/")
 def read_root():
     return {"message": "Visual Math Solver API v4.0 is running"}
+
 
 @app.post("/api/v1/ocr")
 async def upload_ocr(file: UploadFile = File(...)):
@@ -89,6 +82,7 @@ async def upload_ocr(file: UploadFile = File(...)):
     finally:
         if os.path.exists(temp_path):
             os.remove(temp_path)
+
 
 @app.get("/api/v1/solve/{job_id}")
 async def get_job_status(job_id: str):
