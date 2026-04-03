@@ -5,6 +5,7 @@ from app.dependencies import get_current_user_id
 from app.supabase_client import get_supabase
 from app.models.schemas import SolveRequest, SolveResponse
 from agents.orchestrator import Orchestrator
+from app.errors import format_error_for_user
 import uuid
 import logging
 
@@ -118,10 +119,11 @@ async def process_session_job(job_id: str, session_id: str, request: SolveReques
         await notify_status(job_id, {"status": status, "result": result})
         
     except Exception as e:
-        logger.error(f"Error processing session job {job_id}: {str(e)}")
+        logger.exception("Error processing session job %s", job_id)
+        safe = format_error_for_user(e)
         supabase.table("jobs").update({
             "status": "error",
-            "result": {"error": str(e)}
+            "result": {"error": safe}
         }).eq("id", job_id).execute()
         
         # Lưu tin nhắn lỗi vào history
@@ -129,8 +131,8 @@ async def process_session_job(job_id: str, session_id: str, request: SolveReques
             "session_id": session_id,
             "role": "assistant",
             "type": "error",
-            "content": f"Lỗi hệ thống: {str(e)}",
+            "content": f"Lỗi hệ thống: {safe}",
             "metadata": {"job_id": job_id}
         }).execute()
         
-        await notify_status(job_id, {"status": "error", "message": str(e)})
+        await notify_status(job_id, {"status": "error", "message": safe})
