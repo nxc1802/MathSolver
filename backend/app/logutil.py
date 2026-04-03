@@ -1,4 +1,4 @@
-"""Structured step logging (debug) và outcome (production)."""
+"""log_step (debug), pipeline (debug), access log ở middleware."""
 
 from __future__ import annotations
 
@@ -14,7 +14,8 @@ _steps = logging.getLogger(STEPS_LOGGER_NAME)
 
 
 def is_debug_mode() -> bool:
-    return os.getenv("APP_LOG_MODE", "production").strip().lower() == "debug"
+    """Chi tiết từng bước chỉ khi LOG_LEVEL=debug."""
+    return os.getenv("LOG_LEVEL", "info").strip().lower() == "debug"
 
 
 def _truncate(val: Any, max_len: int = 2000) -> Any:
@@ -29,7 +30,7 @@ def _truncate(val: Any, max_len: int = 2000) -> Any:
 
 
 def log_step(step: str, **fields: Any) -> None:
-    """Debug only: step name + fields (DB/cache/orchestrator); dùng logger app.steps."""
+    """Chỉ khi LOG_LEVEL=debug: DB / cache / orchestrator."""
     if not is_debug_mode():
         return
     safe = {k: _truncate(v) for k, v in fields.items()}
@@ -41,22 +42,26 @@ def log_step(step: str, **fields: Any) -> None:
 
 
 def log_pipeline_success(operation: str, **fields: Any) -> None:
-    """Production: một dòng SUCCESS; debug: kèm fields."""
-    if is_debug_mode():
-        safe = {k: _truncate(v, 500) for k, v in fields.items()}
-        _pipeline.info("SUCCESS %s %s", operation, json.dumps(safe, ensure_ascii=False, default=str))
-    else:
-        _pipeline.info("SUCCESS %s", operation)
+    """Chỉ hiện khi debug (pipeline SUCCESS không dùng ở info — đã có app.access)."""
+    if not is_debug_mode():
+        return
+    safe = {k: _truncate(v, 500) for k, v in fields.items()}
+    _pipeline.info(
+        "SUCCESS %s %s",
+        operation,
+        json.dumps(safe, ensure_ascii=False, default=str),
+    )
 
 
 def log_pipeline_failure(operation: str, error: str | None = None, **fields: Any) -> None:
+    """Thất bại pipeline: luôn dùng WARNING để vẫn thấy khi LOG_LEVEL=warning."""
     if is_debug_mode():
         safe = {k: _truncate(v, 500) for k, v in fields.items()}
-        _pipeline.error(
+        _pipeline.warning(
             "FAIL %s err=%s %s",
             operation,
             _truncate(error, 300),
             json.dumps(safe, ensure_ascii=False, default=str),
         )
     else:
-        _pipeline.error("FAIL %s", operation)
+        _pipeline.warning("FAIL %s", operation)

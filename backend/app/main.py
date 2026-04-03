@@ -2,19 +2,21 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 import uuid
 import warnings
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.requests import Request
 
 load_dotenv()
 os.environ["NO_ALBUMENTATIONS_UPDATE"] = "1"
 warnings.filterwarnings("ignore", category=UserWarning, module="pydantic")
 warnings.filterwarnings("ignore", category=UserWarning, module="albumentations")
 
-from app.logging_setup import setup_application_logging
+from app.logging_setup import ACCESS_LOGGER_NAME, get_log_level, setup_application_logging
 
 setup_application_logging()
 
@@ -25,16 +27,45 @@ from app.websocket_manager import register_websocket_routes
 from agents.ocr_agent import OCRAgent
 
 logger = logging.getLogger("app.main")
-logger.info("App starting (APP_LOG_MODE=%s)", os.getenv("APP_LOG_MODE", "production"))
+_access = logging.getLogger(ACCESS_LOGGER_NAME)
 
 app = FastAPI(title="Visual Math Solver API v4.0")
 
+
+@app.middleware("http")
+async def access_log_middleware(request: Request, call_next):
+    """LOG_LEVEL=info/debug: mọi request; warning: chỉ 4xx/5xx; error: chỉ 4xx/5xx ở mức error."""
+    start = time.perf_counter()
+    response = await call_next(request)
+    ms = (time.perf_counter() - start) * 1000
+    mode = get_log_level()
+    method = request.method
+    path = request.url.path
+    status = response.status_code
+
+    if mode in ("debug", "info"):
+        _access.info("%s %s -> %s (%.0fms)", method, path, status, ms)
+    elif mode == "warning":
+        if status >= 500:
+            _access.error("%s %s -> %s (%.0fms)", method, path, status, ms)
+        elif status >= 400:
+            _access.warning("%s %s -> %s (%.0fms)", method, path, status, ms)
+    elif mode == "error":
+        if status >= 400:
+            _access.error("%s %s -> %s", method, path, status)
+
+    return response
+
+
 from worker.celery_app import BROKER_URL
 
-logger.info(
-    "Redis broker: %s",
-    BROKER_URL.split("@")[-1] if "@" in BROKER_URL else BROKER_URL,
-)
+_broker_tail = BROKER_URL.split("@")[-1] if "@" in BROKER_URL else BROKER_URL
+if get_log_level() in ("debug", "info"):
+    logger.info("App starting LOG_LEVEL=%s | Redis: %s", get_log_level(), _broker_tail)
+else:
+    logger.warning(
+        "App starting LOG_LEVEL=%s | Redis: %s", get_log_level(), _broker_tail
+    )
 
 app.add_middleware(
     CORSMiddleware,

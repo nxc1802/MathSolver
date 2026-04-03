@@ -1,4 +1,4 @@
-"""Application logging: APP_LOG_MODE=debug|production (default: production)."""
+"""Logging theo một biến LOG_LEVEL: debug | info | warning | error."""
 
 from __future__ import annotations
 
@@ -8,64 +8,102 @@ from typing import Final
 
 _SETUP_DONE = False
 
-# Production: chỉ cần dòng kết quả trên logger này (SUCCESS/FAIL + operation)
 PIPELINE_LOGGER_NAME: Final = "app.pipeline"
 CACHE_LOGGER_NAME: Final = "app.cache"
 STEPS_LOGGER_NAME: Final = "app.steps"
+ACCESS_LOGGER_NAME: Final = "app.access"
+
+
+def _normalize_level() -> str:
+    raw = os.getenv("LOG_LEVEL", "info").strip().lower()
+    if raw in ("debug", "info", "warning", "error"):
+        return raw
+    return "info"
 
 
 def setup_application_logging() -> None:
-    """Idempotent; call once at process entry (uvicorn main, celery worker)."""
+    """Idempotent; gọi khi khởi động process (uvicorn, celery, worker_health)."""
     global _SETUP_DONE
     if _SETUP_DONE:
         return
     _SETUP_DONE = True
 
-    mode = os.getenv("APP_LOG_MODE", "production").strip().lower()
-    if mode not in ("debug", "production"):
-        mode = "production"
+    mode = _normalize_level()
 
-    default_level = os.getenv("LOG_LEVEL", "DEBUG" if mode == "debug" else "INFO").upper()
-    root_level = getattr(logging, default_level, logging.INFO)
+    level_map = {
+        "debug": logging.DEBUG,
+        "info": logging.INFO,
+        "warning": logging.WARNING,
+        "error": logging.ERROR,
+    }
+    root_level = level_map[mode]
 
-    fmt_full = "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
+    fmt_named = "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
     fmt_short = "%(asctime)s | %(levelname)-8s | %(message)s"
 
     logging.basicConfig(
         level=root_level,
-        format=fmt_full if mode == "debug" else fmt_short,
+        format=fmt_named if mode == "debug" else fmt_short,
         datefmt="%H:%M:%S",
         force=True,
     )
 
-    # Third-party: giảm ồn
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("httpcore").setLevel(logging.WARNING)
     logging.getLogger("openai").setLevel(logging.WARNING)
     logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
     logging.getLogger("uvicorn.error").setLevel(logging.INFO)
 
-    if mode == "production":
-        # Chi tiết agents/solver/routers -> WARNING; pipeline chỉ SUCCESS/FAIL
+    if mode == "debug":
+        logging.getLogger("agents").setLevel(logging.DEBUG)
+        logging.getLogger("solver").setLevel(logging.DEBUG)
+        logging.getLogger("app.routers").setLevel(logging.DEBUG)
+        logging.getLogger(CACHE_LOGGER_NAME).setLevel(logging.DEBUG)
+        logging.getLogger(STEPS_LOGGER_NAME).setLevel(logging.DEBUG)
+        logging.getLogger(PIPELINE_LOGGER_NAME).setLevel(logging.INFO)
+        logging.getLogger(ACCESS_LOGGER_NAME).setLevel(logging.INFO)
+        logging.getLogger("app.main").setLevel(logging.INFO)
+        logging.getLogger("worker").setLevel(logging.INFO)
+    elif mode == "info":
+        # Chỉ HTTP access (app.access) + startup; ẩn chi tiết agents/orchestrator/pipeline SUCCESS
         logging.getLogger("agents").setLevel(logging.WARNING)
         logging.getLogger("solver").setLevel(logging.WARNING)
         logging.getLogger("app.routers").setLevel(logging.WARNING)
         logging.getLogger(CACHE_LOGGER_NAME).setLevel(logging.WARNING)
         logging.getLogger(STEPS_LOGGER_NAME).setLevel(logging.WARNING)
-        logging.getLogger(PIPELINE_LOGGER_NAME).setLevel(logging.INFO)
+        logging.getLogger(PIPELINE_LOGGER_NAME).setLevel(logging.WARNING)
+        logging.getLogger(ACCESS_LOGGER_NAME).setLevel(logging.INFO)
         logging.getLogger("app.main").setLevel(logging.INFO)
         logging.getLogger("worker").setLevel(logging.WARNING)
-    else:
-        logging.getLogger("app").setLevel(logging.DEBUG)
-        logging.getLogger("agents").setLevel(logging.DEBUG)
-        logging.getLogger("solver").setLevel(logging.DEBUG)
-        logging.getLogger(CACHE_LOGGER_NAME).setLevel(logging.DEBUG)
-        logging.getLogger(STEPS_LOGGER_NAME).setLevel(logging.DEBUG)
+    elif mode == "warning":
+        logging.getLogger("agents").setLevel(logging.WARNING)
+        logging.getLogger("solver").setLevel(logging.WARNING)
+        logging.getLogger("app.routers").setLevel(logging.WARNING)
+        logging.getLogger(CACHE_LOGGER_NAME).setLevel(logging.WARNING)
+        logging.getLogger(STEPS_LOGGER_NAME).setLevel(logging.WARNING)
+        logging.getLogger(PIPELINE_LOGGER_NAME).setLevel(logging.WARNING)
+        logging.getLogger(ACCESS_LOGGER_NAME).setLevel(logging.WARNING)
+        logging.getLogger("app.main").setLevel(logging.WARNING)
+        logging.getLogger("worker").setLevel(logging.WARNING)
+    else:  # error
+        logging.getLogger("agents").setLevel(logging.ERROR)
+        logging.getLogger("solver").setLevel(logging.ERROR)
+        logging.getLogger("app.routers").setLevel(logging.ERROR)
+        logging.getLogger(CACHE_LOGGER_NAME).setLevel(logging.ERROR)
+        logging.getLogger(STEPS_LOGGER_NAME).setLevel(logging.ERROR)
+        logging.getLogger(PIPELINE_LOGGER_NAME).setLevel(logging.ERROR)
+        logging.getLogger(ACCESS_LOGGER_NAME).setLevel(logging.ERROR)
+        logging.getLogger("app.main").setLevel(logging.ERROR)
+        logging.getLogger("worker").setLevel(logging.ERROR)
 
     logging.getLogger(__name__).debug(
-        "Logging mode=%s root_level=%s", mode, logging.getLevelName(root_level)
+        "LOG_LEVEL=%s root=%s", mode, logging.getLevelName(root_level)
     )
 
 
-def get_app_log_mode() -> str:
-    return os.getenv("APP_LOG_MODE", "production").strip().lower()
+def get_log_level() -> str:
+    return _normalize_level()
+
+
+def is_debug_level() -> bool:
+    return _normalize_level() == "debug"

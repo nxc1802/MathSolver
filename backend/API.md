@@ -23,8 +23,7 @@ Token lấy từ Supabase Auth phía client (sau đăng nhập). Không có toke
 | `SUPABASE_ANON_KEY` | Publishable key — dùng khi gọi `get_authenticated_supabase` / RLS |
 | `MEGALLM_API_KEY` / `MEGALLM_BASE_URL` / `MEGALLM_MODEL` | LLM parse/sinh DSL |
 | `CELERY_BROKER_URL` / `REDIS_URL` | Hàng đợi render video (Celery) |
-| `APP_LOG_MODE` | `production` (mặc định): log chỉ dòng **SUCCESS/FAIL** pipeline; `debug`: chi tiết từng bước orchestrator, DB, cache (TTL ~45s trong process) |
-| `LOG_LEVEL` | Tuỳ chọn; nếu không set: `INFO` khi production, `DEBUG` khi `APP_LOG_MODE=debug` |
+| `LOG_LEVEL` | **Một biến duy nhất** (mặc định `info`): `info` = chỉ log **HTTP** (method + path + status + thời gian); `debug` = thêm chi tiết từng bước (orchestrator, DB, cache); `warning` = giảm ồn, chỉ cảnh báo/lỗi + request 4xx/5xx; `error` = gần như chỉ lỗi |
 
 ---
 
