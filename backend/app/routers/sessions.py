@@ -84,6 +84,27 @@ async def get_session_messages(session_id: str, user_id=Depends(get_current_user
 async def delete_session(session_id: str, user_id=Depends(get_current_user_id)):
     """Xóa một phiên chat (Delete a chat session)"""
     supabase = get_supabase()
+
+    def owns() -> bool:
+        res = (
+            supabase.table("sessions")
+            .select("id")
+            .eq("id", session_id)
+            .eq("user_id", user_id)
+            .execute()
+        )
+        return bool(res.data)
+
+    if not session_owned_by_user(session_id, str(user_id), owns):
+        raise HTTPException(
+            status_code=403, detail="Forbidden: You do not own this session."
+        )
+
+    # jobs.session_id FK must be cleared before sessions row
+    supabase.table("jobs").delete().eq("session_id", session_id).eq("user_id", user_id).execute()
+    log_step("db_delete", table="jobs", op="by_session", session_id=session_id)
+    supabase.table("messages").delete().eq("session_id", session_id).execute()
+    log_step("db_delete", table="messages", op="by_session", session_id=session_id)
     res = (
         supabase.table("sessions")
         .delete()

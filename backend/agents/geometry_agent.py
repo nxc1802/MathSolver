@@ -15,7 +15,7 @@ class GeometryAgent:
     def __init__(self):
         self.client = AsyncOpenAI(
             api_key=openai_compatible_api_key(os.getenv("MEGALLM_API_KEY")),
-            base_url=sanitize_env(os.getenv("MEGALLM_BASE_URL")) or "",
+            base_url=sanitize_env(os.getenv("MEGALLM_BASE_URL")) or "https://ai.megallm.io/v1",
         )
         self.model = sanitize_env(os.getenv("MEGALLM_MODEL")) or "openai-gpt-oss-20b"
 

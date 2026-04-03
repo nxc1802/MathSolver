@@ -6,7 +6,7 @@ import os
 
 
 def apply_runtime_env_defaults() -> None:
-    # Quiets Paddle OMP warnings and avoids OpenMP thread oversubscription
-    os.environ.setdefault("OMP_NUM_THREADS", "1")
-    os.environ.setdefault("MKL_NUM_THREADS", "1")
-    os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+    # Paddle respects OMP_NUM_THREADS at import; setdefault loses if platform already set 2+
+    os.environ["OMP_NUM_THREADS"] = "1"
+    os.environ["MKL_NUM_THREADS"] = "1"
+    os.environ["OPENBLAS_NUM_THREADS"] = "1"
