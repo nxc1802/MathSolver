@@ -27,9 +27,10 @@ setup_application_logging()
 
 # Routers (after logging)
 from app.routers import auth, sessions, solve
+from agents.ocr_agent import OCRAgent
+from app.routers.solve import get_orchestrator
 from app.supabase_client import get_supabase
 from app.websocket_manager import register_websocket_routes
-from agents.ocr_agent import OCRAgent
 
 logger = logging.getLogger("app.main")
 _access = logging.getLogger(ACCESS_LOGGER_NAME)
@@ -86,15 +87,10 @@ app.include_router(solve.router)
 
 register_websocket_routes(app)
 
-_ocr_agent: OCRAgent | None = None
-
 
 def get_ocr_agent() -> OCRAgent:
-    """Lazy init: OCR loads YOLO/Paddle/Pix2Tex and is heavy; defer until first use."""
-    global _ocr_agent
-    if _ocr_agent is None:
-        _ocr_agent = OCRAgent()
-    return _ocr_agent
+    """Same OCR instance as the solve pipeline (no duplicate model load)."""
+    return get_orchestrator().ocr_agent
 
 
 supabase_client = get_supabase()

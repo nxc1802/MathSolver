@@ -2,7 +2,16 @@ import json
 import logging
 from typing import Any, Dict
 
+from agents.geometry_agent import GeometryAgent
+from agents.knowledge_agent import KnowledgeAgent
+from agents.ocr_agent import OCRAgent
+from agents.parser_agent import ParserAgent
+from agents.renderer_agent import RendererAgent
 from app.logutil import log_step
+from solver.dsl_parser import DSLParser
+from solver.engine import GeometryEngine
+from worker.celery_app import BROKER_URL
+from worker.tasks import render_geometry_video
 
 logger = logging.getLogger(__name__)
 
@@ -26,14 +35,6 @@ def _step_io(step: str, input_val: Any = None, output_val: Any = None) -> None:
 
 class Orchestrator:
     def __init__(self):
-        from agents.ocr_agent import OCRAgent
-        from agents.geometry_agent import GeometryAgent
-        from agents.knowledge_agent import KnowledgeAgent
-        from agents.parser_agent import ParserAgent
-        from agents.renderer_agent import RendererAgent
-        from solver.dsl_parser import DSLParser
-        from solver.engine import GeometryEngine
-
         self.parser_agent = ParserAgent()
         self.geometry_agent = GeometryAgent()
         self.ocr_agent = OCRAgent()
@@ -135,9 +136,6 @@ class Orchestrator:
         status = "success"
         if request_video:
             try:
-                from worker.celery_app import BROKER_URL
-                from worker.tasks import render_geometry_video
-
                 result_payload = {
                     "geometry_dsl": dsl_code,
                     "coordinates": coordinates,

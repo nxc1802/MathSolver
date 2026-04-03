@@ -16,15 +16,12 @@ from app.supabase_client import get_supabase
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/sessions", tags=["Solve"])
 
-_orchestrator: Orchestrator | None = None
+# Eager init: all agents and models load at import time (also run in Docker build via scripts/prewarm_models.py).
+ORCHESTRATOR = Orchestrator()
 
 
 def get_orchestrator() -> Orchestrator:
-    """Defer heavy agent/model init until first solve (faster API startup)."""
-    global _orchestrator
-    if _orchestrator is None:
-        _orchestrator = Orchestrator()
-    return _orchestrator
+    return ORCHESTRATOR
 
 
 @router.post("/{session_id}/solve", response_model=SolveResponse)

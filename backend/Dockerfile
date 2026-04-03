@@ -8,6 +8,7 @@ ENV PYTHONUNBUFFERED=1 \
     NO_ALBUMENTATIONS_UPDATE=1
 
 WORKDIR /app
+ENV PYTHONPATH=/app
 
 # Runtime + *-dev: Manim/pycairo need pkg-config + cairo headers; libpango1.0-dev covers PangoCairo on Bookworm (no libpangocairo-*-dev package).
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -33,6 +34,9 @@ RUN pip install --upgrade pip setuptools wheel \
     && pip install -r requirements.txt
 
 COPY . .
+
+# Bake model weights and agent init into the image (YOLO, PaddleOCR, Pix2Tex, etc.)
+RUN python scripts/prewarm_models.py
 
 # Hugging Face Spaces defaults to 7860; docker-compose can set PORT=8000
 ENV PORT=7860

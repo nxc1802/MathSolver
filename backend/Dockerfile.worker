@@ -8,6 +8,7 @@ ENV PYTHONUNBUFFERED=1 \
     NO_ALBUMENTATIONS_UPDATE=1
 
 WORKDIR /app
+ENV PYTHONPATH=/app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
@@ -32,6 +33,8 @@ RUN pip install --upgrade pip setuptools wheel \
     && pip install -r requirements.txt
 
 COPY . .
+
+RUN python scripts/prewarm_models.py
 
 ENV PORT=7860
 EXPOSE 7860
