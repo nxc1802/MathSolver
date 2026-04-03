@@ -30,8 +30,10 @@ class ImprovedOCRAgent:
         logger.info("[ImprovedOCRAgent] MegaLLM initialized with model %s.", self.llm_model)
 
         try:
+            from agents.torch_ultralytics_compat import allow_ultralytics_weights
             from ultralytics import YOLO
 
+            allow_ultralytics_weights()
             logger.info("[ImprovedOCRAgent] Loading YOLO...")
             self.layout_model = YOLO("yolov8n.pt")
             logger.info("[ImprovedOCRAgent] YOLO initialized.")

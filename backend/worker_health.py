@@ -7,6 +7,10 @@ from fastapi import FastAPI
 import uvicorn
 
 load_dotenv()
+from app.runtime_env import apply_runtime_env_defaults
+
+apply_runtime_env_defaults()
+
 from app.logging_setup import setup_application_logging
 
 setup_application_logging()

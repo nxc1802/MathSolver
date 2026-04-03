@@ -12,6 +12,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.requests import Request
 
 load_dotenv()
+
+from app.runtime_env import apply_runtime_env_defaults
+
+apply_runtime_env_defaults()
+
 os.environ["NO_ALBUMENTATIONS_UPDATE"] = "1"
 warnings.filterwarnings("ignore", category=UserWarning, module="pydantic")
 warnings.filterwarnings("ignore", category=UserWarning, module="albumentations")

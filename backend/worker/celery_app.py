@@ -7,6 +7,10 @@ from app.url_utils import sanitize_env
 # Load environment variables early
 load_dotenv()
 
+from app.runtime_env import apply_runtime_env_defaults
+
+apply_runtime_env_defaults()
+
 from app.logging_setup import setup_application_logging
 
 setup_application_logging()
