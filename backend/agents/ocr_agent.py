@@ -20,11 +20,13 @@ class ImprovedOCRAgent:
 
         from openai import AsyncOpenAI
 
+        from app.url_utils import sanitize_env
+
         self.llm_client = AsyncOpenAI(
-            api_key=os.getenv("MEGALLM_API_KEY"),
-            base_url=os.getenv("MEGALLM_BASE_URL", "https://ai.megallm.io/v1"),
+            api_key=sanitize_env(os.getenv("MEGALLM_API_KEY")),
+            base_url=sanitize_env(os.getenv("MEGALLM_BASE_URL")) or "https://ai.megallm.io/v1",
         )
-        self.llm_model = os.getenv("MEGALLM_MODEL", "openai-gpt-oss-20b")
+        self.llm_model = (sanitize_env(os.getenv("MEGALLM_MODEL")) or "openai-gpt-oss-20b")
         logger.info("[ImprovedOCRAgent] MegaLLM initialized with model %s.", self.llm_model)
 
         try:
@@ -163,6 +165,12 @@ Kết quả làm sạch:"""
 
     async def process_url(self, url: str) -> str:
         import httpx
+
+        from app.url_utils import sanitize_url
+
+        url = sanitize_url(url)
+        if not url:
+            return "Error: Empty image URL after cleanup."
 
         async with httpx.AsyncClient() as client:
             resp = await client.get(url)

@@ -8,13 +8,16 @@ from dotenv import load_dotenv
 load_dotenv()
 logger = logging.getLogger(__name__)
 
+from app.url_utils import sanitize_env
+
+
 class GeometryAgent:
     def __init__(self):
         self.client = AsyncOpenAI(
-            api_key=os.getenv("MEGALLM_API_KEY", "").strip(),
-            base_url=os.getenv("MEGALLM_BASE_URL", "").strip()
+            api_key=sanitize_env(os.getenv("MEGALLM_API_KEY")) or "",
+            base_url=sanitize_env(os.getenv("MEGALLM_BASE_URL")) or "",
         )
-        self.model = os.getenv("MEGALLM_MODEL", "openai-gpt-oss-20b").strip()
+        self.model = sanitize_env(os.getenv("MEGALLM_MODEL")) or "openai-gpt-oss-20b"
 
     async def generate_dsl(self, semantic_data: Dict[str, Any]) -> str:
         logger.info("==[GeometryAgent] Generating DSL from semantic data==")

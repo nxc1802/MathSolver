@@ -1,7 +1,9 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, field_validator
 from typing import Optional, List, Any, Dict
 from datetime import datetime
 import uuid
+
+from app.url_utils import sanitize_url
 
 # --- Auth Schemas ---
 class UserProfile(BaseModel):
@@ -53,6 +55,11 @@ class SolveRequest(BaseModel):
     text: str
     image_url: Optional[str] = None
     request_video: bool = False
+
+    @field_validator("image_url", mode="before")
+    @classmethod
+    def _clean_image_url(cls, v):
+        return sanitize_url(v) if v is not None else None
 
 class SolveResponse(BaseModel):
     job_id: str
