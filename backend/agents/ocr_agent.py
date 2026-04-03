@@ -20,13 +20,13 @@ class ImprovedOCRAgent:
 
         from openai import AsyncOpenAI
 
-        from app.url_utils import openai_compatible_api_key, sanitize_env
+        from app.url_utils import megallm_base_url, megallm_model, openai_compatible_api_key
 
         self.llm_client = AsyncOpenAI(
             api_key=openai_compatible_api_key(os.getenv("MEGALLM_API_KEY")),
-            base_url=sanitize_env(os.getenv("MEGALLM_BASE_URL")) or "https://ai.megallm.io/v1",
+            base_url=megallm_base_url(),
         )
-        self.llm_model = (sanitize_env(os.getenv("MEGALLM_MODEL")) or "openai-gpt-oss-20b")
+        self.llm_model = megallm_model()
         logger.info("[ImprovedOCRAgent] MegaLLM initialized with model %s.", self.llm_model)
 
         try:

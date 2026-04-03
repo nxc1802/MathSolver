@@ -8,16 +8,17 @@ from dotenv import load_dotenv
 load_dotenv()
 logger = logging.getLogger(__name__)
 
-from app.url_utils import openai_compatible_api_key, sanitize_env
+from app.url_utils import megallm_base_url, megallm_model, openai_compatible_api_key
 
 
 class ParserAgent:
     def __init__(self):
+        # Matches MegaLLM docs: OpenAI(base_url="https://ai.megallm.io/v1", api_key=...); we use AsyncOpenAI for async routes.
         self.client = AsyncOpenAI(
             api_key=openai_compatible_api_key(os.getenv("MEGALLM_API_KEY")),
-            base_url=sanitize_env(os.getenv("MEGALLM_BASE_URL")) or "https://ai.megallm.io/v1",
+            base_url=megallm_base_url(),
         )
-        self.model = sanitize_env(os.getenv("MEGALLM_MODEL")) or "openai-gpt-oss-20b"
+        self.model = megallm_model()
 
     async def process(self, text: str, feedback: str = None) -> Dict[str, Any]:
         logger.info(f"==[ParserAgent] Processing input (len={len(text)})==")
