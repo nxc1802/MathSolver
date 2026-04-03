@@ -8,17 +8,15 @@ from dotenv import load_dotenv
 load_dotenv()
 logger = logging.getLogger(__name__)
 
-from app.url_utils import megallm_base_url, megallm_model, openai_compatible_api_key
+from app.url_utils import openai_compatible_api_key, sanitize_env
+
+
+from app.llm_client import get_llm_client
 
 
 class ParserAgent:
     def __init__(self):
-        # Matches MegaLLM docs: OpenAI(base_url="https://ai.megallm.io/v1", api_key=...); we use AsyncOpenAI for async routes.
-        self.client = AsyncOpenAI(
-            api_key=openai_compatible_api_key(os.getenv("MEGALLM_API_KEY")),
-            base_url=megallm_base_url(),
-        )
-        self.model = megallm_model()
+        self.llm = get_llm_client()
 
     async def process(self, text: str, feedback: str = None) -> Dict[str, Any]:
         logger.info(f"==[ParserAgent] Processing input (len={len(text)})==")
@@ -40,17 +38,14 @@ class ParserAgent:
         if feedback:
             user_content += f"\nFeedback from previous attempt: {feedback}. Please correct the constraints."
 
-        logger.debug(f"[ParserAgent] Calling LLM ({self.model}) ...")
-        response = await self.client.chat.completions.create(
-            model=self.model,
+        logger.debug("[ParserAgent] Calling LLM (Multi-Layer)...")
+        raw = await self.llm.chat_completions_create(
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_content}
             ],
             response_format={"type": "json_object"}
         )
-
-        raw = response.choices[0].message.content
         result = json.loads(raw)
         logger.info(f"[ParserAgent] LLM response received.")
         logger.debug(f"[ParserAgent] Parsed JSON: {json.dumps(result, ensure_ascii=False, indent=2)}")

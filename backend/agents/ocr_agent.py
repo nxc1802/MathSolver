@@ -18,16 +18,9 @@ class ImprovedOCRAgent:
     def __init__(self):
         logger.info("[ImprovedOCRAgent] Initializing engines and client...")
 
-        from openai import AsyncOpenAI
-
-        from app.url_utils import megallm_base_url, megallm_model, openai_compatible_api_key
-
-        self.llm_client = AsyncOpenAI(
-            api_key=openai_compatible_api_key(os.getenv("MEGALLM_API_KEY")),
-            base_url=megallm_base_url(),
-        )
-        self.llm_model = megallm_model()
-        logger.info("[ImprovedOCRAgent] MegaLLM initialized with model %s.", self.llm_model)
+        from app.llm_client import get_llm_client
+        self.llm = get_llm_client()
+        logger.info("[ImprovedOCRAgent] Multi-Layer LLM Client initialized.")
 
         try:
             from agents.torch_ultralytics_compat import allow_ultralytics_weights
@@ -153,12 +146,10 @@ Nội dung OCR thô:
 Kết quả làm sạch:"""
 
         try:
-            response = await self.llm_client.chat.completions.create(
-                model=self.llm_model,
+            refined = await self.llm.chat_completions_create(
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.1,
             )
-            refined = response.choices[0].message.content
             logger.info("[ImprovedOCRAgent] LLM refinement complete.")
             return refined
         except Exception as e:

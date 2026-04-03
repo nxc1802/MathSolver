@@ -8,16 +8,15 @@ from dotenv import load_dotenv
 load_dotenv()
 logger = logging.getLogger(__name__)
 
-from app.url_utils import megallm_base_url, megallm_model, openai_compatible_api_key
+from app.url_utils import openai_compatible_api_key, sanitize_env
+
+
+from app.llm_client import get_llm_client
 
 
 class GeometryAgent:
     def __init__(self):
-        self.client = AsyncOpenAI(
-            api_key=openai_compatible_api_key(os.getenv("MEGALLM_API_KEY")),
-            base_url=megallm_base_url(),
-        )
-        self.model = megallm_model()
+        self.llm = get_llm_client()
 
     async def generate_dsl(self, semantic_data: Dict[str, Any]) -> str:
         logger.info("==[GeometryAgent] Generating DSL from semantic data==")
@@ -49,16 +48,13 @@ class GeometryAgent:
         ANGLE(A, 60)
         """
 
-        logger.debug(f"[GeometryAgent] Calling LLM ({self.model}) ...")
-        response = await self.client.chat.completions.create(
-            model=self.model,
+        logger.debug("[GeometryAgent] Calling LLM (Multi-Layer)...")
+        content = await self.llm.chat_completions_create(
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": f"Semantic Data: {semantic_data}"}
             ]
         )
-
-        content = response.choices[0].message.content
         dsl = content.strip() if content else ""
         logger.info(f"[GeometryAgent] DSL generated ({len(dsl.splitlines())} lines).")
         logger.debug(f"[GeometryAgent] DSL output:\n{dsl}")
