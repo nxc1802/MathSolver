@@ -21,7 +21,12 @@ async function fetchSessions([, token]: [string, string]): Promise<Session[]> {
   return res.json();
 }
 
-export default function SessionList() {
+type SessionListProps = {
+  /** Icon-only narrow rail (collapsed sidebar) */
+  compact?: boolean;
+};
+
+export default function SessionList({ compact = false }: SessionListProps) {
   const [creating, setCreating] = useState(false);
   const { session: userSession } = useAuth();
   const router = useRouter();
@@ -44,11 +49,8 @@ export default function SessionList() {
       });
       if (res.ok) {
         const newSession = (await res.json()) as Session;
-        await mutate(
-          (prev) => [newSession, ...(prev ?? [])],
-          { revalidate: false }
-        );
-        router.push(`/chat/${newSession.id}`);
+        await mutate((prev) => [newSession, ...(prev ?? [])], { revalidate: false });
+        router.replace(`/chat/${newSession.id}`);
       }
     } catch (err) {
       console.error("Create session error:", err);
@@ -60,18 +62,38 @@ export default function SessionList() {
   const handleDeleteSession = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
     if (!userSession?.access_token || !confirm("Bạn có chắc chắn muốn xóa session này?")) return;
-    await mutate(
-      (p) => (p ?? []).filter((s) => s.id !== id),
-      { revalidate: false }
-    );
+
+    const listBefore = sessions ?? [];
+    const wasCurrent = currentSessionId === id;
+    const remaining = listBefore.filter((s) => s.id !== id);
+
+    await mutate((p) => (p ?? []).filter((s) => s.id !== id), { revalidate: false });
+
     try {
       const res = await fetch(`${getApiBaseUrl()}/api/v1/sessions/${id}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${userSession.access_token}` },
       });
       if (!res.ok) throw new Error("delete failed");
-      if (currentSessionId === id) router.push("/");
-      await mutate();
+
+      if (wasCurrent) {
+        const next = remaining[0];
+        if (next) {
+          router.replace(`/chat/${next.id}`);
+        } else {
+          const createRes = await fetch(`${getApiBaseUrl()}/api/v1/sessions`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${userSession.access_token}` },
+          });
+          if (createRes.ok) {
+            const newSession = (await createRes.json()) as Session;
+            await mutate((prev) => [newSession, ...(prev ?? [])], { revalidate: false });
+            router.replace(`/chat/${newSession.id}`);
+          } else {
+            router.replace("/");
+          }
+        }
+      }
     } catch (err) {
       console.error("Delete session error:", err);
       await mutate();
@@ -79,6 +101,57 @@ export default function SessionList() {
   };
 
   const list = sessions ?? [];
+
+  if (compact) {
+    return (
+      <div className="flex flex-col h-full items-center py-2 gap-2 overflow-hidden">
+        <button
+          type="button"
+          onClick={handleCreateSession}
+          disabled={creating}
+          title="Tạo bài toán mới"
+          className="w-9 h-9 shrink-0 rounded-xl bg-white/5 border border-white/5 hover:bg-white/10 flex items-center justify-center text-indigo-400 transition-colors disabled:opacity-50"
+        >
+          {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+        </button>
+
+        <div className="flex-1 w-full overflow-y-auto overflow-x-hidden flex flex-col items-center gap-1.5 px-1 scrollbar-thin">
+          {isLoading ? (
+            <Loader2 className="w-5 h-5 animate-spin text-zinc-600 my-2" />
+          ) : list.length === 0 ? (
+            <span title="Chưa có bài">
+              <MessageSquare className="w-5 h-5 text-zinc-700 mt-2" aria-hidden />
+            </span>
+          ) : (
+            list.map((s) => (
+              <div key={s.id} className="relative group w-full flex justify-center">
+                <button
+                  type="button"
+                  title={s.title}
+                  onClick={() => router.replace(`/chat/${s.id}`)}
+                  className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all ${
+                    currentSessionId === s.id
+                      ? "bg-indigo-500/25 text-indigo-400 ring-1 ring-indigo-500/40"
+                      : "bg-white/5 text-zinc-500 hover:bg-white/10 hover:text-zinc-300"
+                  }`}
+                >
+                  <MessageSquare className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  title="Xóa"
+                  onClick={(e) => handleDeleteSession(e, s.id)}
+                  className="absolute -right-0.5 -top-0.5 w-4 h-4 rounded-full bg-zinc-800 border border-white/10 text-zinc-500 hover:text-red-400 opacity-0 group-hover:opacity-100 flex items-center justify-center"
+                >
+                  <Trash2 className="w-2.5 h-2.5" />
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-full">
@@ -115,8 +188,8 @@ export default function SessionList() {
               key={s.id}
               role="button"
               tabIndex={0}
-              onClick={() => router.push(`/chat/${s.id}`)}
-              onKeyDown={(e) => e.key === "Enter" && router.push(`/chat/${s.id}`)}
+              onClick={() => router.replace(`/chat/${s.id}`)}
+              onKeyDown={(e) => e.key === "Enter" && router.replace(`/chat/${s.id}`)}
               className={`group relative flex items-center gap-3 px-3 py-3 rounded-xl cursor-pointer transition-all ${
                 currentSessionId === s.id
                   ? "bg-indigo-500/10 border border-indigo-500/20 shadow-lg"

@@ -1,16 +1,68 @@
 "use client";
 
 import React from "react";
-import { Calculator, ChevronLeft, LogOut, User as UserIcon, Settings } from "lucide-react";
+import { Calculator, ChevronLeft, ChevronRight, LogOut, User as UserIcon, Settings } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import SessionList from "./SessionList";
 
 type ChatSidebarProps = {
+  /** Narrow rail: icon-only session strip + mini header/footer */
+  compact?: boolean;
   onCollapse?: () => void;
+  onExpand?: () => void;
 };
 
-export default function ChatSidebar({ onCollapse }: ChatSidebarProps) {
+export default function ChatSidebar({ compact = false, onCollapse, onExpand }: ChatSidebarProps) {
   const { user, signOut } = useAuth();
+
+  if (compact) {
+    return (
+      <div className="flex flex-col h-full bg-[#0c0c14]/80 border-r border-white/5">
+        <div className="flex-shrink-0 flex flex-col items-center gap-2 pt-2 pb-3 px-1 border-b border-white/5">
+          <button
+            type="button"
+            aria-label="Mở rộng sidebar"
+            title="Mở rộng"
+            onClick={onExpand}
+            className="shrink-0 p-1 rounded-md text-zinc-500 hover:text-indigo-300 hover:bg-white/5 transition-colors"
+          >
+            <ChevronRight className="w-3.5 h-3.5" />
+          </button>
+          <div
+            className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-md shadow-indigo-500/15"
+            title="MathSolver"
+          >
+            <Calculator className="w-4 h-4 text-white" />
+          </div>
+        </div>
+
+        <div className="flex-1 min-h-0 overflow-hidden px-0.5">
+          <SessionList compact />
+        </div>
+
+        <div className="flex-shrink-0 flex flex-col items-center gap-2 py-3 px-1 border-t border-white/5 bg-black/20">
+          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-zinc-700 to-zinc-800 flex items-center justify-center border border-white/10 overflow-hidden">
+            {user?.user_metadata?.avatar_url ? (
+              <img src={user.user_metadata.avatar_url} alt="" className="w-full h-full object-cover" />
+            ) : (
+              <UserIcon className="w-4 h-4 text-zinc-400" />
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={signOut}
+            className="p-1.5 rounded-lg text-zinc-600 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+            title="Đăng xuất"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+          </button>
+          <button type="button" className="p-1 text-zinc-600 hover:text-white transition-colors" title="Cài đặt">
+            <Settings className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-full bg-[#0c0c14]/80">
@@ -74,11 +126,7 @@ export default function ChatSidebar({ onCollapse }: ChatSidebarProps) {
         </div>
 
         <div className="mt-4 flex items-center justify-start px-2 py-2">
-          <button
-            type="button"
-            className="text-zinc-600 hover:text-white transition-colors p-1"
-            title="Cài đặt"
-          >
+          <button type="button" className="text-zinc-600 hover:text-white transition-colors p-1" title="Cài đặt">
             <Settings className="w-4 h-4" />
           </button>
         </div>

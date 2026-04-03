@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useParams } from "next/navigation";
-import { Send, Sparkles, Loader2, Film, Bot, Maximize2, ChevronRight } from "lucide-react";
+import { Send, Sparkles, Loader2, Film, Bot, Maximize2 } from "lucide-react";
 
 import ChatSidebar from "@/components/ChatSidebar";
 import AnimationPreview from "@/components/AnimationPreview";
@@ -388,32 +388,24 @@ export default function ChatSessionPage() {
 
   return (
     <div ref={containerRef} className="h-screen w-screen flex bg-[#0a0a0f] overflow-hidden">
-      {!sidebarCollapsed && (
-        <>
-          <div
-            className="h-full min-w-0 border-r border-white/5 flex flex-col"
-            style={{ width: `${splitPercent}%` }}
-          >
-            <ChatSidebar onCollapse={() => setSidebarCollapsed(true)} />
-          </div>
-          <div
-            role="separator"
-            aria-orientation="vertical"
-            onMouseDown={handleMouseDown}
-            className="w-1 cursor-col-resize hover:bg-indigo-500/30 active:bg-indigo-500/50 transition-colors z-10 flex-shrink-0"
-          />
-        </>
-      )}
+      <div
+        className={`h-full min-w-0 flex flex-col shrink-0 ${sidebarCollapsed ? "w-[52px]" : ""}`}
+        style={sidebarCollapsed ? undefined : { width: `${splitPercent}%` }}
+      >
+        <ChatSidebar
+          compact={sidebarCollapsed}
+          onCollapse={() => setSidebarCollapsed(true)}
+          onExpand={() => setSidebarCollapsed(false)}
+        />
+      </div>
 
-      {sidebarCollapsed && (
-        <button
-          type="button"
-          aria-label="Mở sidebar"
-          onClick={() => setSidebarCollapsed(false)}
-          className="flex-shrink-0 w-10 h-full border-r border-white/5 bg-[#0c0c14]/90 hover:bg-[#0c0c14] flex items-center justify-center text-zinc-500 hover:text-indigo-400 transition-colors z-20"
-        >
-          <ChevronRight className="w-6 h-6" />
-        </button>
+      {!sidebarCollapsed && (
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          onMouseDown={handleMouseDown}
+          className="w-1 cursor-col-resize hover:bg-indigo-500/30 active:bg-indigo-500/50 transition-colors z-10 flex-shrink-0"
+        />
       )}
 
       <div className="flex-1 flex flex-col min-w-0 bg-[#08080d]">
