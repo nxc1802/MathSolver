@@ -20,10 +20,10 @@ class ImprovedOCRAgent:
 
         from openai import AsyncOpenAI
 
-        from app.url_utils import sanitize_env
+        from app.url_utils import openai_compatible_api_key, sanitize_env
 
         self.llm_client = AsyncOpenAI(
-            api_key=sanitize_env(os.getenv("MEGALLM_API_KEY")),
+            api_key=openai_compatible_api_key(os.getenv("MEGALLM_API_KEY")),
             base_url=sanitize_env(os.getenv("MEGALLM_BASE_URL")) or "https://ai.megallm.io/v1",
         )
         self.llm_model = (sanitize_env(os.getenv("MEGALLM_MODEL")) or "openai-gpt-oss-20b")

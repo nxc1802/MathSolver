@@ -8,13 +8,13 @@ from dotenv import load_dotenv
 load_dotenv()
 logger = logging.getLogger(__name__)
 
-from app.url_utils import sanitize_env
+from app.url_utils import openai_compatible_api_key, sanitize_env
 
 
 class GeometryAgent:
     def __init__(self):
         self.client = AsyncOpenAI(
-            api_key=sanitize_env(os.getenv("MEGALLM_API_KEY")) or "",
+            api_key=openai_compatible_api_key(os.getenv("MEGALLM_API_KEY")),
             base_url=sanitize_env(os.getenv("MEGALLM_BASE_URL")) or "",
         )
         self.model = sanitize_env(os.getenv("MEGALLM_MODEL")) or "openai-gpt-oss-20b"
