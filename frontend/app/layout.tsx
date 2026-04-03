@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth-context";
+import { SWRProvider } from "@/lib/swr-provider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -31,7 +32,7 @@ export default function RootLayout({
     >
       <body suppressHydrationWarning className="min-h-full flex flex-col bg-black text-zinc-100">
         <AuthProvider>
-          {children}
+          <SWRProvider>{children}</SWRProvider>
         </AuthProvider>
       </body>
     </html>

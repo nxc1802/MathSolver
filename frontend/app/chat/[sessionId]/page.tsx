@@ -5,12 +5,13 @@ import { AnimatePresence, motion } from "framer-motion";
 import { useParams } from "next/navigation";
 import {
   Send,
-  Image as ImageIcon,
   Sparkles,
   Loader2,
   Film,
   Bot,
   Maximize2,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 
 import ChatSidebar from "@/components/ChatSidebar";
@@ -20,6 +21,12 @@ import ChatMessageComponent from "@/components/ChatMessage";
 import { useAuth } from "@/lib/auth-context";
 import { getApiBaseUrl, getWsBaseUrl } from "@/lib/api-config";
 import { messageFromApi } from "@/lib/chat-messages";
+import {
+  readSplitPercent,
+  writeSplitPercent,
+  readSidebarCollapsed,
+  writeSidebarCollapsed,
+} from "@/lib/session-ui-storage";
 import type { ChatMessage } from "@/types/chat";
 
 const SOLVE_POLL_MAX_ATTEMPTS = 150;
@@ -32,24 +39,41 @@ export default function ChatSessionPage() {
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(true);
+  const [solveLoading, setSolveLoading] = useState(false);
   const [ocrLoading, setOcrLoading] = useState(false);
   const [requestVideo, setRequestVideo] = useState(false);
   const [currentStatus, setCurrentStatus] = useState<string | null>(null);
 
-  // Media state
   const [coordinates, setCoordinates] = useState<Record<string, [number, number]> | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [renderingVideo, setRenderingVideo] = useState(false);
 
-  // Side panel resizing
   const [splitPercent, setSplitPercent] = useState(38);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [uiHydrated, setUiHydrated] = useState(false);
+
   const isDragging = useRef(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollAttemptsRef = useRef(0);
+
+  useEffect(() => {
+    setSplitPercent(readSplitPercent(38));
+    setSidebarCollapsed(readSidebarCollapsed());
+    setUiHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!uiHydrated) return;
+    writeSplitPercent(splitPercent);
+  }, [splitPercent, uiHydrated]);
+
+  useEffect(() => {
+    if (!uiHydrated) return;
+    writeSidebarCollapsed(sidebarCollapsed);
+  }, [sidebarCollapsed, uiHydrated]);
 
   const statusLabels: Record<string, string> = {
     processing: "🔄 Đang xử lý...",
@@ -70,59 +94,116 @@ export default function ChatSessionPage() {
 
   useEffect(() => () => clearSolvePoll(), [clearSolvePoll]);
 
-  // Fetch Session History
-  const fetchHistory = useCallback(async () => {
-    if (!userSession?.access_token || !sessionId) return;
-    setLoading(true);
-    try {
-      const apiUrl = getApiBaseUrl();
-      const res = await fetch(`${apiUrl}/api/v1/sessions/${sessionId}/messages`, {
-        headers: { Authorization: `Bearer ${userSession.access_token}` },
-      });
-      if (res.ok) {
-        const data = (await res.json()) as Array<{
-          id: string;
-          role: string;
-          type: string;
-          content: string;
-          created_at: string;
-          metadata?: Record<string, unknown> | null;
-        }>;
-        const formatted = data.map(messageFromApi);
-        setMessages(formatted);
-
-        const lastWithMedia = [...formatted]
-          .reverse()
-          .find((m) => m.metadata?.coordinates || m.metadata?.video_url);
-        if (lastWithMedia?.metadata) {
-          if (lastWithMedia.metadata.coordinates) {
-            setCoordinates(lastWithMedia.metadata.coordinates);
-          }
-          if (lastWithMedia.metadata.video_url) {
-            setVideoUrl(lastWithMedia.metadata.video_url);
-          }
-        }
+  const applyMediaFromMessages = useCallback((formatted: ChatMessage[]) => {
+    const lastWithMedia = [...formatted]
+      .reverse()
+      .find((m) => m.metadata?.coordinates || m.metadata?.video_url);
+    if (lastWithMedia?.metadata) {
+      if (lastWithMedia.metadata.coordinates) {
+        setCoordinates(lastWithMedia.metadata.coordinates);
       }
-    } catch (err) {
-      console.error("Fetch history error:", err);
-    } finally {
-      setLoading(false);
+      if (lastWithMedia.metadata.video_url) {
+        setVideoUrl(lastWithMedia.metadata.video_url);
+      }
     }
-  }, [userSession, sessionId]);
+  }, []);
+
+  const fetchHistory = useCallback(
+    async (opts?: { silent?: boolean }) => {
+      if (!userSession?.access_token || !sessionId) return;
+      const silent = opts?.silent ?? false;
+      if (!silent) setHistoryLoading(true);
+      try {
+        const apiUrl = getApiBaseUrl();
+        const res = await fetch(`${apiUrl}/api/v1/sessions/${sessionId}/messages`, {
+          headers: { Authorization: `Bearer ${userSession.access_token}` },
+        });
+        if (res.ok) {
+          const data = (await res.json()) as Array<{
+            id: string;
+            role: string;
+            type: string;
+            content: string;
+            created_at: string;
+            metadata?: Record<string, unknown> | null;
+          }>;
+          const formatted = data.map(messageFromApi);
+          setMessages(formatted);
+          applyMediaFromMessages(formatted);
+        }
+      } catch (err) {
+        console.error("Fetch history error:", err);
+      } finally {
+        if (!silent) setHistoryLoading(false);
+      }
+    },
+    [userSession, sessionId, applyMediaFromMessages]
+  );
 
   useEffect(() => {
-    fetchHistory();
-  }, [fetchHistory]);
+    setMessages([]);
+    setCoordinates(null);
+    setVideoUrl(null);
+    void fetchHistory();
+  }, [fetchHistory, sessionId]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, currentStatus]);
 
-  // Handlers
+  const runOcrOnFile = async (file: File) => {
+    if (!file.type.startsWith("image/")) return;
+    setOcrLoading(true);
+    const formData = new FormData();
+    formData.append("file", file);
+    const apiUrl = getApiBaseUrl();
+    try {
+      const res = await fetch(`${apiUrl}/api/v1/ocr`, {
+        method: "POST",
+        body: formData,
+      });
+      const data = (await res.json()) as { text?: string };
+      const extracted = data.text;
+      if (extracted) {
+        setInputText((prev) => (prev ? `${prev}\n${extracted}` : extracted));
+      }
+    } catch (err) {
+      console.error("OCR Error:", err);
+    } finally {
+      setOcrLoading(false);
+    }
+  };
+
+  const onPasteImages = (e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items;
+    if (!items?.length) return;
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (item.kind === "file" && item.type.startsWith("image/")) {
+        e.preventDefault();
+        const file = item.getAsFile();
+        if (file) void runOcrOnFile(file);
+        return;
+      }
+    }
+  };
+
+  const onDragOverInput = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const onDropInput = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const file = e.dataTransfer?.files?.[0];
+    if (file?.type.startsWith("image/")) void runOcrOnFile(file);
+  };
+
   const handleSolve = async () => {
     if (!inputText.trim() || !userSession?.access_token) return;
     clearSolvePoll();
-    setLoading(true);
+    setSolveLoading(true);
     setCurrentStatus("processing");
 
     const textPayload = inputText;
@@ -155,7 +236,7 @@ export default function ChatSessionPage() {
 
     const finishSolveFlow = () => {
       clearSolvePoll();
-      fetchHistory();
+      void fetchHistory({ silent: true });
       setCurrentStatus(null);
       try {
         solveWs?.close();
@@ -239,7 +320,6 @@ export default function ChatSessionPage() {
           setCurrentStatus(wsData.status);
           if (wsData.status === "rendering" || wsData.status === "rendering_queued") {
             setRenderingVideo(true);
-            // Worker does not send a second WS message when video is ready (see backend); poll GET /solve/{job_id}
             startSolvePolling(jobId);
           }
         }
@@ -247,7 +327,7 @@ export default function ChatSessionPage() {
         if (wsData.status === "error") {
           setRenderingVideo(false);
           clearSolvePoll();
-          fetchHistory();
+          void fetchHistory({ silent: true });
           setCurrentStatus(null);
           try {
             solveWs?.close();
@@ -274,40 +354,18 @@ export default function ChatSessionPage() {
       };
 
       solveWs.onerror = () => {
-        // API.md: fallback polling when WebSocket fails
         startSolvePolling(jobId);
       };
     } catch (err) {
       console.error(err);
       setCurrentStatus("error");
       clearSolvePoll();
+      setMessages((prev) => prev.filter((m) => m.id !== tempMsg.id));
     } finally {
-      setLoading(false);
+      setSolveLoading(false);
     }
   };
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setOcrLoading(true);
-    const formData = new FormData();
-    formData.append("file", file);
-    const apiUrl = getApiBaseUrl();
-    try {
-      const res = await fetch(`${apiUrl}/api/v1/ocr`, {
-        method: "POST",
-        body: formData,
-      });
-      const data = (await res.json()) as { text?: string };
-      if (data.text) setInputText(data.text);
-    } catch (err) {
-      console.error("OCR Error:", err);
-    } finally {
-      setOcrLoading(false);
-    }
-  };
-
-  // Resize splitter
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     isDragging.current = true;
@@ -317,7 +375,7 @@ export default function ChatSessionPage() {
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
-      if (!isDragging.current || !containerRef.current) return;
+      if (!isDragging.current || !containerRef.current || sidebarCollapsed) return;
       const rect = containerRef.current.getBoundingClientRect();
       const pct = ((e.clientX - rect.left) / rect.width) * 100;
       setSplitPercent(Math.min(Math.max(pct, 20), 50));
@@ -333,29 +391,65 @@ export default function ChatSessionPage() {
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("mouseup", handleMouseUp);
     };
-  }, []);
+  }, [sidebarCollapsed]);
 
   return (
     <div ref={containerRef} className="h-screen w-screen flex bg-[#0a0a0f] overflow-hidden">
-      <div className="h-full border-r border-white/5" style={{ width: `${splitPercent}%` }}>
-        <ChatSidebar />
-      </div>
+      {!sidebarCollapsed && (
+        <>
+          <div
+            className="h-full min-w-0 border-r border-white/5 flex flex-col"
+            style={{ width: `${splitPercent}%` }}
+          >
+            <ChatSidebar />
+          </div>
+          <button
+            type="button"
+            aria-label="Thu gọn sidebar"
+            onClick={() => setSidebarCollapsed(true)}
+            className="flex-shrink-0 w-9 h-full border-r border-white/5 bg-[#0a0a0f] hover:bg-white/[0.04] flex items-center justify-center text-zinc-500 hover:text-zinc-300 transition-colors z-20"
+          >
+            <ChevronLeft className="w-5 h-5" />
+          </button>
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            onMouseDown={handleMouseDown}
+            className="w-1 cursor-col-resize hover:bg-indigo-500/30 active:bg-indigo-500/50 transition-colors z-10 flex-shrink-0"
+          />
+        </>
+      )}
 
-      <div
-        onMouseDown={handleMouseDown}
-        className="w-1 cursor-col-resize hover:bg-indigo-500/30 active:bg-indigo-500/50 transition-colors z-10"
-      />
+      {sidebarCollapsed && (
+        <button
+          type="button"
+          aria-label="Mở sidebar"
+          onClick={() => setSidebarCollapsed(false)}
+          className="flex-shrink-0 w-10 h-full border-r border-white/5 bg-[#0c0c14]/90 hover:bg-[#0c0c14] flex items-center justify-center text-zinc-500 hover:text-indigo-400 transition-colors z-20"
+        >
+          <ChevronRight className="w-6 h-6" />
+        </button>
+      )}
 
       <div className="flex-1 flex flex-col min-w-0 bg-[#08080d]">
         <div className="flex-1 flex overflow-hidden">
           <div className="flex-1 flex flex-col border-r border-white/5 min-w-0 bg-[#0c0c14]/40">
             <div className="flex-1 overflow-y-auto p-4 space-y-6 scrollbar-thin">
-              {messages.length === 0 && !loading && (
+              {historyLoading && messages.length === 0 && (
+                <div className="flex flex-col items-center justify-center py-16 gap-3 text-zinc-500">
+                  <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
+                  <p className="text-xs font-medium uppercase tracking-widest">Đang tải hội thoại...</p>
+                </div>
+              )}
+
+              {!historyLoading && messages.length === 0 && (
                 <div className="h-full flex flex-col items-center justify-center text-center gap-4 opacity-50">
                   <Sparkles className="w-12 h-12 text-indigo-500/30" />
                   <div>
                     <p className="text-sm font-bold text-white">Bắt đầu bài toán của bạn</p>
-                    <p className="text-xs text-zinc-600 mt-1">Dán đề bài hoặc tải ảnh chứa đề bài hình học.</p>
+                    <p className="text-xs text-zinc-600 mt-1 max-w-xs">
+                      Nhập đề, dán ảnh đề bài (OCR tự chạy), hoặc kéo thả ảnh vào ô nhập.
+                    </p>
                   </div>
                 </div>
               )}
@@ -390,25 +484,6 @@ export default function ChatSessionPage() {
             <div className="p-4 border-t border-white/5 bg-black/40">
               <div className="max-w-3xl mx-auto space-y-3">
                 <div className="flex items-center gap-2 px-1">
-                  <input
-                    type="file"
-                    ref={fileInputRef}
-                    onChange={handleFileChange}
-                    className="hidden"
-                    accept="image/*"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/5 text-zinc-500 hover:text-white transition-all text-xs font-bold border border-white/5"
-                  >
-                    {ocrLoading ? (
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    ) : (
-                      <ImageIcon className="w-3.5 h-3.5" />
-                    )}
-                    SCAN ĐỀ
-                  </button>
                   <button
                     type="button"
                     onClick={() => setRequestVideo(!requestVideo)}
@@ -423,26 +498,46 @@ export default function ChatSessionPage() {
                   </button>
                 </div>
 
-                <div className="flex gap-3">
-                  <textarea
-                    value={inputText}
-                    onChange={(e) => setInputText(e.target.value)}
-                    placeholder="Cho tam giác ABC cân tại A..."
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && !e.shiftKey) {
-                        e.preventDefault();
-                        void handleSolve();
-                      }
-                    }}
-                    className="flex-1 bg-zinc-900/80 border border-white/5 rounded-2xl px-5 py-4 text-sm text-white focus:outline-none focus:border-indigo-500/50 transition-all resize-none min-h-[56px] max-h-[160px]"
-                  />
+                <div className="flex gap-3 items-stretch">
+                  <div
+                    className="relative flex-1 min-w-0"
+                    onDragOver={onDragOverInput}
+                    onDrop={onDropInput}
+                  >
+                    {ocrLoading && (
+                      <div
+                        className="absolute inset-0 z-10 flex items-center justify-center rounded-2xl bg-black/60 backdrop-blur-[2px]"
+                        aria-busy
+                      >
+                        <Loader2 className="w-7 h-7 animate-spin text-indigo-400" />
+                      </div>
+                    )}
+                    <textarea
+                      value={inputText}
+                      onChange={(e) => setInputText(e.target.value)}
+                      placeholder="Nhập đề hoặc dán / kéo ảnh đề..."
+                      rows={1}
+                      onPaste={onPasteImages}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey) {
+                          e.preventDefault();
+                          void handleSolve();
+                        }
+                      }}
+                      className="w-full h-14 min-h-[3.5rem] max-h-14 resize-none overflow-y-auto bg-zinc-900/80 border border-white/5 rounded-2xl px-4 py-3 text-sm text-white leading-snug focus:outline-none focus:border-indigo-500/50 transition-all"
+                    />
+                  </div>
                   <button
                     type="button"
                     onClick={handleSolve}
-                    disabled={loading || !inputText.trim()}
-                    className="w-14 h-14 rounded-2xl bg-indigo-600 text-white flex items-center justify-center hover:bg-indigo-500 transition-all disabled:opacity-30 self-end shadow-lg shadow-indigo-500/20"
+                    disabled={solveLoading || !inputText.trim()}
+                    className="h-14 w-14 shrink-0 rounded-2xl bg-indigo-600 text-white flex items-center justify-center hover:bg-indigo-500 transition-all disabled:opacity-30 shadow-lg shadow-indigo-500/20"
                   >
-                    {loading ? <Loader2 className="w-6 h-6 animate-spin" /> : <Send className="w-6 h-6" />}
+                    {solveLoading ? (
+                      <Loader2 className="w-6 h-6 animate-spin" />
+                    ) : (
+                      <Send className="w-6 h-6" />
+                    )}
                   </button>
                 </div>
               </div>
