@@ -60,7 +60,7 @@ def setup_application_logging() -> None:
     if mode == "debug":
         logging.getLogger("agents").setLevel(logging.DEBUG)
         logging.getLogger("solver").setLevel(logging.DEBUG)
-        logging.getLogger("app.routers").setLevel(logging.DEBUG)
+        logging.getLogger("app").setLevel(logging.DEBUG)
         logging.getLogger(CACHE_LOGGER_NAME).setLevel(logging.DEBUG)
         logging.getLogger(STEPS_LOGGER_NAME).setLevel(logging.DEBUG)
         logging.getLogger(PIPELINE_LOGGER_NAME).setLevel(logging.INFO)
@@ -69,9 +69,9 @@ def setup_application_logging() -> None:
         logging.getLogger("worker").setLevel(logging.INFO)
     elif mode == "info":
         # Chỉ HTTP access (app.access) + startup; ẩn chi tiết agents/orchestrator/pipeline SUCCESS
-        logging.getLogger("agents").setLevel(logging.WARNING)
+        logging.getLogger("agents").setLevel(logging.INFO)
         logging.getLogger("solver").setLevel(logging.WARNING)
-        logging.getLogger("app.routers").setLevel(logging.WARNING)
+        logging.getLogger("app").setLevel(logging.INFO)
         logging.getLogger(CACHE_LOGGER_NAME).setLevel(logging.WARNING)
         logging.getLogger(STEPS_LOGGER_NAME).setLevel(logging.WARNING)
         logging.getLogger(PIPELINE_LOGGER_NAME).setLevel(logging.WARNING)

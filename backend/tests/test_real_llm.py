@@ -11,18 +11,18 @@ load_dotenv()
 async def test_real_llm():
     client = get_llm_client()
     
-    print("\n--- Testing LLM Call ---")
+    print("\n--- Testing LLM Call (Complex Prompt) ---")
     try:
         content = await client.chat_completions_create(
             messages=[
-                {"role": "system", "content": "You are a helpful assistant."},
-                {"role": "user", "content": "Say 'LLM is working' if you can read this."}
+                {"role": "system", "content": "You are a Geometry Expert. Formulate a step-by-step reasoning for calculating the distance between two points M and N where M is the midpoint of AB (len=10) and N is the midpoint of AD (len=20) in a rectangle ABCD. Use LaTeX for formulas."},
+                {"role": "user", "content": "Solve it carefully."}
             ]
         )
         print(f"\nResponse: {content}")
         print("\n--- Test Completed Successfully ---")
     except Exception as e:
-        print(f"\n--- Test Failed: {e} ---")
+        print(f"\n--- Test Failed: {type(e).__name__}: {e} ---")
 
 if __name__ == "__main__":
     asyncio.run(test_real_llm())

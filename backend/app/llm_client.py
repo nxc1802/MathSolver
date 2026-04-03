@@ -15,6 +15,7 @@ class MultiLayerLLMClient:
         self.openrouter_client = AsyncOpenAI(
             api_key=openai_compatible_api_key(self.openrouter_api_key),
             base_url="https://openrouter.ai/api/v1",
+            timeout=120.0,
             default_headers={
                 "HTTP-Referer": "https://mathsolver.ai", # Optional
                 "X-Title": "MathSolver Backend",
@@ -27,6 +28,7 @@ class MultiLayerLLMClient:
         self.megallm_client = AsyncOpenAI(
             api_key=openai_compatible_api_key(self.megallm_api_key),
             base_url=sanitize_env(os.getenv("MEGALLM_BASE_URL")) or "https://ai.megallm.io/v1",
+            timeout=120.0,
         )
 
     async def chat_completions_create(
@@ -56,7 +58,8 @@ class MultiLayerLLMClient:
                     return content
                 logger.warning("[LLM] OpenRouter returned empty content, falling back...")
             except Exception as e:
-                logger.warning(f"[LLM] OpenRouter: FAILED ({type(e).__name__}: {e}). Falling back to MegaLLM...")
+                err_msg = f"{type(e).__name__}: {str(e)}"
+                logger.warning(f"[LLM] OpenRouter: FAILED ({err_msg}). Falling back to MegaLLM...")
         else:
             logger.info("[LLM] OPENROUTER_API_KEY not found, skipping to MegaLLM.")
 
@@ -75,7 +78,8 @@ class MultiLayerLLMClient:
                 return content
             raise ValueError("MegaLLM returned empty content.")
         except Exception as e:
-            logger.error(f"[LLM] MegaLLM: CRITICAL FAILURE ({type(e).__name__}: {e})")
+            err_msg = f"{type(e).__name__}: {str(e)}"
+            logger.error(f"[LLM] MegaLLM: CRITICAL FAILURE ({err_msg})")
             raise e
 
 # Global instance for easy reuse (singleton-ish)
