@@ -1,6 +1,10 @@
 const SPLIT_KEY = "mathsolver-split-percent";
 const SIDEBAR_KEY = "mathsolver-sidebar-collapsed";
 
+/** Min ~2/3 of previous 20% floor — sidebar can shrink further while dragging */
+export const SPLIT_MIN_PCT = 13;
+export const SPLIT_MAX_PCT = 50;
+
 export function readSplitPercent(fallback: number): number {
   if (typeof window === "undefined") return fallback;
   try {
@@ -8,7 +12,7 @@ export function readSplitPercent(fallback: number): number {
     if (v == null) return fallback;
     const n = parseFloat(v);
     if (Number.isNaN(n)) return fallback;
-    return Math.min(50, Math.max(20, n));
+    return Math.min(SPLIT_MAX_PCT, Math.max(SPLIT_MIN_PCT, n));
   } catch {
     return fallback;
   }

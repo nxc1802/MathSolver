@@ -3,16 +3,7 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useParams } from "next/navigation";
-import {
-  Send,
-  Sparkles,
-  Loader2,
-  Film,
-  Bot,
-  Maximize2,
-  ChevronLeft,
-  ChevronRight,
-} from "lucide-react";
+import { Send, Sparkles, Loader2, Film, Bot, Maximize2, ChevronRight } from "lucide-react";
 
 import ChatSidebar from "@/components/ChatSidebar";
 import AnimationPreview from "@/components/AnimationPreview";
@@ -26,6 +17,8 @@ import {
   writeSplitPercent,
   readSidebarCollapsed,
   writeSidebarCollapsed,
+  SPLIT_MIN_PCT,
+  SPLIT_MAX_PCT,
 } from "@/lib/session-ui-storage";
 import type { ChatMessage } from "@/types/chat";
 
@@ -378,7 +371,7 @@ export default function ChatSessionPage() {
       if (!isDragging.current || !containerRef.current || sidebarCollapsed) return;
       const rect = containerRef.current.getBoundingClientRect();
       const pct = ((e.clientX - rect.left) / rect.width) * 100;
-      setSplitPercent(Math.min(Math.max(pct, 20), 50));
+      setSplitPercent(Math.min(Math.max(pct, SPLIT_MIN_PCT), SPLIT_MAX_PCT));
     };
     const handleMouseUp = () => {
       isDragging.current = false;
@@ -401,16 +394,8 @@ export default function ChatSessionPage() {
             className="h-full min-w-0 border-r border-white/5 flex flex-col"
             style={{ width: `${splitPercent}%` }}
           >
-            <ChatSidebar />
+            <ChatSidebar onCollapse={() => setSidebarCollapsed(true)} />
           </div>
-          <button
-            type="button"
-            aria-label="Thu gọn sidebar"
-            onClick={() => setSidebarCollapsed(true)}
-            className="flex-shrink-0 w-9 h-full border-r border-white/5 bg-[#0a0a0f] hover:bg-white/[0.04] flex items-center justify-center text-zinc-500 hover:text-zinc-300 transition-colors z-20"
-          >
-            <ChevronLeft className="w-5 h-5" />
-          </button>
           <div
             role="separator"
             aria-orientation="vertical"

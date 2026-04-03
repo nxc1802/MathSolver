@@ -1,24 +1,41 @@
 "use client";
 
 import React from "react";
-import { Calculator, LogOut, User as UserIcon, Settings } from "lucide-react";
+import { Calculator, ChevronLeft, LogOut, User as UserIcon, Settings } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import SessionList from "./SessionList";
 
-export default function ChatSidebar() {
+type ChatSidebarProps = {
+  onCollapse?: () => void;
+};
+
+export default function ChatSidebar({ onCollapse }: ChatSidebarProps) {
   const { user, signOut } = useAuth();
 
   return (
     <div className="flex flex-col h-full bg-[#0c0c14]/80">
-      <div className="flex-shrink-0 px-5 py-6 border-b border-white/5">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
-            <Calculator className="w-6 h-6 text-white" />
+      <div className="flex-shrink-0 px-4 py-4 border-b border-white/5">
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-9 h-9 shrink-0 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
+              <Calculator className="w-5 h-5 text-white" />
+            </div>
+            <div className="min-w-0">
+              <h1 className="text-base font-bold text-white tracking-tight leading-none truncate">MathSolver</h1>
+              <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-[0.2em] mt-1">v4.0 Agentic AI</p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-lg font-bold text-white tracking-tight leading-none">MathSolver</h1>
-            <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-[0.2em] mt-1.5">v4.0 Agentic AI</p>
-          </div>
+          {onCollapse && (
+            <button
+              type="button"
+              aria-label="Thu gọn sidebar"
+              title="Thu gọn"
+              onClick={onCollapse}
+              className="shrink-0 p-1.5 rounded-lg text-zinc-500 hover:text-zinc-200 hover:bg-white/5 transition-colors"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+          )}
         </div>
       </div>
 
