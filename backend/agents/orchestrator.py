@@ -6,6 +6,23 @@ from app.logutil import log_step
 
 logger = logging.getLogger(__name__)
 
+_CLIP = 2000
+
+
+def _clip(val: Any, n: int = _CLIP) -> str | None:
+    if val is None:
+        return None
+    if isinstance(val, str):
+        s = val
+    else:
+        s = json.dumps(val, ensure_ascii=False, default=str)
+    return s if len(s) <= n else s[:n] + "…"
+
+
+def _step_io(step: str, input_val: Any = None, output_val: Any = None) -> None:
+    """Debug: chỉ input/output (đã cắt), tránh dump dài dòng không cần thiết."""
+    log_step(step, input=_clip(input_val), output=_clip(output_val))
+
 
 class Orchestrator:
     def __init__(self):
@@ -34,12 +51,15 @@ class Orchestrator:
         status_callback=None,
         request_video: bool = False,
     ) -> Dict[str, Any]:
-        log_step(
+        _step_io(
             "orchestrate_start",
-            job_id=job_id,
-            text_len=len(text or ""),
-            image_url=image_url,
-            request_video=request_video,
+            input_val={
+                "job_id": job_id,
+                "text_len": len(text or ""),
+                "image_url": image_url,
+                "request_video": request_video,
+            },
+            output_val=None,
         )
 
         if status_callback:
@@ -47,70 +67,66 @@ class Orchestrator:
 
         input_text = text
         if image_url:
-            log_step("step1_ocr", phase="start", url=image_url)
             input_text = await self.ocr_agent.process_url(image_url)
-            log_step(
-                "step1_ocr",
-                phase="done",
-                output_chars=len(input_text or ""),
-                output_preview=str(input_text)[:500],
-            )
+            _step_io("step1_ocr", input_val=image_url, output_val=input_text)
         else:
-            log_step("step1_ocr", phase="skipped", reason="no_image_url")
+            _step_io("step1_ocr", input_val="(no image)", output_val=text)
 
         feedback = None
         MAX_RETRIES = 2
 
         for attempt in range(MAX_RETRIES + 1):
-            log_step("attempt", n=attempt + 1, max=MAX_RETRIES + 1)
+            _step_io(
+                "attempt",
+                input_val=f"{attempt + 1}/{MAX_RETRIES + 1}",
+                output_val=None,
+            )
             if status_callback:
                 await status_callback("solving")
 
-            log_step("step2_parse", phase="start", input_preview=str(input_text)[:800])
+            _step_io("step2_parse", input_val=input_text, output_val=None)
             semantic_json = await self.parser_agent.process(input_text, feedback=feedback)
             semantic_json["input_text"] = input_text
-            log_step(
-                "step2_parse",
-                phase="done",
-                output=json.dumps(semantic_json, ensure_ascii=False, default=str)[:4000],
-            )
+            _step_io("step2_parse", input_val=None, output_val=semantic_json)
 
-            log_step("step3_knowledge", phase="start", input_keys=list(semantic_json.keys()))
+            _step_io("step3_knowledge", input_val=semantic_json, output_val=None)
             semantic_json = self.knowledge_agent.augment_semantic_data(semantic_json)
-            log_step(
-                "step3_knowledge",
-                phase="done",
-                output=json.dumps(semantic_json, ensure_ascii=False, default=str)[:4000],
-            )
+            _step_io("step3_knowledge", input_val=None, output_val=semantic_json)
 
-            log_step("step4_geometry_dsl", phase="start")
+            _step_io("step4_geometry_dsl", input_val=semantic_json, output_val=None)
             dsl_code = await self.geometry_agent.generate_dsl(semantic_json)
-            log_step("step4_geometry_dsl", phase="done", output=str(dsl_code)[:4000])
+            _step_io("step4_geometry_dsl", input_val=None, output_val=dsl_code)
 
-            log_step("step5_dsl_parse", phase="start")
+            _step_io("step5_dsl_parse", input_val=dsl_code, output_val=None)
             points, constraints = self.dsl_parser.parse(dsl_code)
-            log_step(
+            _step_io(
                 "step5_dsl_parse",
-                phase="done",
-                num_points=len(points),
-                num_constraints=len(constraints),
+                input_val=None,
+                output_val={
+                    "points": len(points),
+                    "constraints": len(constraints),
+                },
             )
 
-            log_step("step6_solve", phase="start")
+            _step_io("step6_solve", input_val=f"{len(points)} pts / {len(constraints)} cons", output_val=None)
             coordinates = self.solver_engine.solve(points, constraints)
 
             if coordinates:
-                log_step(
-                    "step6_solve",
-                    phase="done",
-                    coordinates=json.dumps(coordinates, ensure_ascii=False)[:2000],
-                )
+                _step_io("step6_solve", input_val=None, output_val=coordinates)
                 break
 
             feedback = "Geometry solver failed to find a valid solution for the given constraints. Parallelism or lengths might be inconsistent."
-            log_step("step6_solve", phase="failed", attempt=attempt + 1, feedback=feedback)
+            _step_io(
+                "step6_solve",
+                input_val=f"attempt {attempt + 1}",
+                output_val=feedback,
+            )
             if attempt == MAX_RETRIES:
-                log_step("orchestrate_abort", reason="solver_exhausted_retries")
+                _step_io(
+                    "orchestrate_abort",
+                    input_val=None,
+                    output_val="solver_exhausted_retries",
+                )
                 return {
                     "error": "Solver failed after multiple attempts.",
                     "last_dsl": dsl_code,
@@ -118,13 +134,9 @@ class Orchestrator:
 
         status = "success"
         if request_video:
-            log_step("step7_video", phase="start", job_id=job_id)
             try:
                 from worker.celery_app import BROKER_URL
                 from worker.tasks import render_geometry_video
-
-                masked_broker = BROKER_URL.split("@")[-1] if "@" in BROKER_URL else BROKER_URL
-                log_step("step7_video", celery_broker=masked_broker)
 
                 result_payload = {
                     "geometry_dsl": dsl_code,
@@ -135,19 +147,19 @@ class Orchestrator:
                 }
                 task = render_geometry_video.delay(job_id, result_payload)
                 status = "rendering_queued"
-                log_step("step7_video", phase="queued", task_id=str(task.id))
+                _step_io(
+                    "step7_video",
+                    input_val={"job_id": job_id, "broker": BROKER_URL.split("@")[-1] if "@" in BROKER_URL else BROKER_URL},
+                    output_val={"task_id": str(task.id), "status": status},
+                )
             except Exception as e:
                 logger.exception("Celery queue failed for job %s", job_id)
-                log_step("step7_video", phase="error", error=str(e))
+                _step_io("step7_video", input_val=job_id, output_val=str(e))
                 status = "success"
         else:
-            log_step("step7_video", phase="skipped")
+            _step_io("step7_video", input_val=request_video, output_val="skipped")
 
-        log_step(
-            "orchestrate_done",
-            job_id=job_id,
-            status=status,
-        )
+        _step_io("orchestrate_done", input_val=job_id, output_val=status)
 
         return {
             "status": status,

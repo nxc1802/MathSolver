@@ -53,6 +53,9 @@ def setup_application_logging() -> None:
     logging.getLogger("openai").setLevel(logging.WARNING)
     logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
     logging.getLogger("uvicorn.error").setLevel(logging.INFO)
+    # HTTP/2 stack (httpx/httpcore) — khi LOG_LEVEL=debug root=DEBUG sẽ tràn log hpack; không cần cho debug app
+    for _name in ("hpack", "h2", "hyperframe", "urllib3"):
+        logging.getLogger(_name).setLevel(logging.WARNING)
 
     if mode == "debug":
         logging.getLogger("agents").setLevel(logging.DEBUG)
