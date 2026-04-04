@@ -4,6 +4,8 @@ import React from "react";
 import { Calculator, ChevronLeft, ChevronRight, LogOut, User as UserIcon, Settings } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import SessionList from "./SessionList";
+import SettingsModal from "./SettingsModal";
+import { useState } from "react";
 
 type ChatSidebarProps = {
   /** Narrow rail: icon-only session strip + mini header/footer */
@@ -14,6 +16,7 @@ type ChatSidebarProps = {
 
 export default function ChatSidebar({ compact = false, onCollapse, onExpand }: ChatSidebarProps) {
   const { user, signOut } = useAuth();
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   if (compact) {
     return (
@@ -56,10 +59,17 @@ export default function ChatSidebar({ compact = false, onCollapse, onExpand }: C
           >
             <LogOut className="w-3.5 h-3.5" />
           </button>
-          <button type="button" className="p-1 text-zinc-600 hover:text-white transition-colors" title="Cài đặt">
+          <button 
+            type="button" 
+            className="p-1 text-zinc-600 hover:text-white transition-colors" 
+            title="Cài đặt"
+            onClick={() => setIsSettingsOpen(true)}
+          >
             <Settings className="w-3.5 h-3.5" />
           </button>
         </div>
+
+        <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
       </div>
     );
   }
@@ -126,10 +136,17 @@ export default function ChatSidebar({ compact = false, onCollapse, onExpand }: C
         </div>
 
         <div className="mt-4 flex items-center justify-start px-2 py-2">
-          <button type="button" className="text-zinc-600 hover:text-white transition-colors p-1" title="Cài đặt">
+          <button 
+            type="button" 
+            className="text-zinc-600 hover:text-white transition-colors p-1" 
+            title="Cài đặt"
+            onClick={() => setIsSettingsOpen(true)}
+          >
             <Settings className="w-4 h-4" />
           </button>
         </div>
+
+        <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
       </div>
     </div>
   );

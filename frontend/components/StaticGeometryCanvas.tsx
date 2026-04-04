@@ -98,7 +98,7 @@ export default function StaticGeometryCanvas({ coordinates, polygonOrder, circle
         {paths && (
           <path 
             d={paths} 
-            fill="rgba(99, 102, 241, 0.1)" 
+            fill="none" 
             stroke="rgba(99, 102, 241, 0.8)" 
             strokeWidth="2"
             vectorEffect="non-scaling-stroke"

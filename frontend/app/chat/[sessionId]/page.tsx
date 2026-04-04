@@ -16,15 +16,19 @@ import { messageFromApi } from "@/lib/chat-messages";
 import {
   readSplitPercent,
   writeSplitPercent,
+  readMainSplitPercent,
+  writeMainSplitPercent,
   readSidebarCollapsed,
   writeSidebarCollapsed,
   SPLIT_MIN_PCT,
   SPLIT_MAX_PCT,
+  MAIN_SPLIT_MIN_PCT,
+  MAIN_SPLIT_MAX_PCT,
 } from "@/lib/session-ui-storage";
 import type { ChatMessage } from "@/types/chat";
 
-const SOLVE_POLL_MAX_ATTEMPTS = 150;
-const SOLVE_POLL_INTERVAL_MS = 2000;
+const SOLVE_POLL_MAX_ATTEMPTS = 300;
+const SOLVE_POLL_INTERVAL_MS = 1000;
 
 async function fetchChatMessages([url, token]: [string, string]): Promise<ChatMessage[]> {
   const res = await fetch(url, {
@@ -67,18 +71,20 @@ export default function ChatSessionPage() {
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [renderingVideo, setRenderingVideo] = useState(false);
 
-  const [splitPercent, setSplitPercent] = useState(38);
+  const [splitPercent, setSplitPercent] = useState(14.3);
+  const [mainSplitPercent, setMainSplitPercent] = useState(50);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [uiHydrated, setUiHydrated] = useState(false);
 
-  const isDragging = useRef(false);
+  const draggingType = useRef<'sidebar' | 'main' | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollAttemptsRef = useRef(0);
 
   useEffect(() => {
-    setSplitPercent(readSplitPercent(38));
+    setSplitPercent(readSplitPercent(14.3));
+    setMainSplitPercent(readMainSplitPercent(50));
     setSidebarCollapsed(readSidebarCollapsed());
     setUiHydrated(true);
   }, []);
@@ -86,7 +92,8 @@ export default function ChatSessionPage() {
   useEffect(() => {
     if (!uiHydrated) return;
     writeSplitPercent(splitPercent);
-  }, [splitPercent, uiHydrated]);
+    writeMainSplitPercent(mainSplitPercent);
+  }, [splitPercent, mainSplitPercent, uiHydrated]);
 
   useEffect(() => {
     if (!uiHydrated) return;
@@ -304,6 +311,9 @@ export default function ChatSessionPage() {
         throw new Error("Thiếu job_id từ máy chủ");
       }
 
+      // Proactive Polling: Start immediately alongside WebSocket for better robustness
+      startSolvePolling(jobId);
+
       solveWs = new WebSocket(`${wsBase}/ws/${jobId}`);
 
       solveWs.onmessage = (event) => {
@@ -322,7 +332,6 @@ export default function ChatSessionPage() {
           setCurrentStatus(wsData.status);
           if (wsData.status === "rendering" || wsData.status === "rendering_queued") {
             setRenderingVideo(true);
-            startSolvePolling(jobId);
           }
         }
 
@@ -368,22 +377,34 @@ export default function ChatSessionPage() {
     }
   };
 
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+  const handleMouseDown = useCallback((type: 'sidebar' | 'main') => (e: React.MouseEvent) => {
     e.preventDefault();
-    isDragging.current = true;
+    draggingType.current = type;
     document.body.style.cursor = "col-resize";
     document.body.style.userSelect = "none";
   }, []);
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
-      if (!isDragging.current || !containerRef.current || sidebarCollapsed) return;
+      if (!draggingType.current || !containerRef.current) return;
+      
       const rect = containerRef.current.getBoundingClientRect();
-      const pct = ((e.clientX - rect.left) / rect.width) * 100;
-      setSplitPercent(Math.min(Math.max(pct, SPLIT_MIN_PCT), SPLIT_MAX_PCT));
+      const x = e.clientX - rect.left;
+      
+      if (draggingType.current === 'sidebar' && !sidebarCollapsed) {
+        const pct = (x / rect.width) * 100;
+        setSplitPercent(Math.min(Math.max(pct, SPLIT_MIN_PCT), SPLIT_MAX_PCT));
+      } else if (draggingType.current === 'main') {
+        // Calculate relative to the area AFTER the sidebar
+        const sidebarWidth = sidebarCollapsed ? 52 : (rect.width * splitPercent) / 100;
+        const remainingWidth = rect.width - sidebarWidth;
+        const relativeX = x - sidebarWidth;
+        const pct = (relativeX / remainingWidth) * 100;
+        setMainSplitPercent(Math.min(Math.max(pct, MAIN_SPLIT_MIN_PCT), MAIN_SPLIT_MAX_PCT));
+      }
     };
     const handleMouseUp = () => {
-      isDragging.current = false;
+      draggingType.current = null;
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
     };
@@ -393,7 +414,7 @@ export default function ChatSessionPage() {
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("mouseup", handleMouseUp);
     };
-  }, [sidebarCollapsed]);
+  }, [sidebarCollapsed, splitPercent]);
 
   return (
     <div ref={containerRef} className="h-screen w-screen flex bg-[#0a0a0f] overflow-hidden">
@@ -411,15 +432,17 @@ export default function ChatSessionPage() {
       {!sidebarCollapsed && (
         <div
           role="separator"
-          aria-orientation="vertical"
-          onMouseDown={handleMouseDown}
+          onMouseDown={handleMouseDown('sidebar')}
           className="w-1 cursor-col-resize hover:bg-indigo-500/30 active:bg-indigo-500/50 transition-colors z-10 flex-shrink-0"
         />
       )}
 
       <div className="flex-1 flex flex-col min-w-0 bg-[#08080d]">
         <div className="flex-1 flex overflow-hidden">
-          <div className="flex-1 flex flex-col border-r border-white/5 min-w-0 bg-[#0c0c14]/40">
+          <div 
+            className="flex flex-col border-r border-white/5 min-w-0 bg-[#0c0c14]/40"
+            style={{ width: `${mainSplitPercent}%` }}
+          >
             <div className="flex-1 overflow-y-auto p-4 space-y-6 scrollbar-thin">
               {historyLoading && messages.length === 0 && (
                 <div className="flex flex-col items-center justify-center py-16 gap-3 text-zinc-500">
@@ -530,17 +553,13 @@ export default function ChatSessionPage() {
             </div>
           </div>
 
-          <div className="flex-[1.2] flex flex-col bg-black/40 overflow-hidden">
-            <div className="px-6 py-4 border-b border-white/5 flex items-center justify-between">
-              <h2 className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Bảng trực quan hóa</h2>
-              <button
-                type="button"
-                className="p-2 hover:bg-white/5 rounded-lg text-zinc-600 hover:text-zinc-300 transition-all"
-              >
-                <Maximize2 className="w-4 h-4" />
-              </button>
-            </div>
+          <div
+            role="separator"
+            onMouseDown={handleMouseDown('main')}
+            className="w-1 cursor-col-resize hover:bg-indigo-500/30 active:bg-indigo-500/50 transition-colors z-10 flex-shrink-0"
+          />
 
+          <div className="flex-1 flex flex-col bg-black/40 overflow-hidden">
             <div className="flex-1 overflow-y-auto px-6 py-6 space-y-10 scrollbar-thin">
               <AnimatePresence mode="popLayout">
                 {coordinates && (
