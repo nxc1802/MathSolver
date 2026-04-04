@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { Plus, MessageSquare, Trash2, Loader2, ChevronRight } from "lucide-react";
+import { Plus, MessageSquare, Trash2, Loader2, ChevronRight, Check, X } from "lucide-react";
 import { useRouter, useParams } from "next/navigation";
 import useSWR from "swr";
 import { useAuth } from "@/lib/auth-context";
@@ -28,6 +28,7 @@ type SessionListProps = {
 
 export default function SessionList({ compact = false }: SessionListProps) {
   const [creating, setCreating] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const { session: userSession } = useAuth();
   const router = useRouter();
   const params = useParams();
@@ -61,7 +62,13 @@ export default function SessionList({ compact = false }: SessionListProps) {
 
   const handleDeleteSession = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
-    if (!userSession?.access_token || !confirm("Bạn có chắc chắn muốn xóa session này?")) return;
+    if (!userSession?.access_token) return;
+    
+    // If we're not already in the intermediate "confirm" state, just set it
+    if (deletingId !== id) {
+      setDeletingId(id);
+      return;
+    }
 
     const listBefore = sessions ?? [];
     const wasCurrent = currentSessionId === id;
@@ -97,6 +104,8 @@ export default function SessionList({ compact = false }: SessionListProps) {
     } catch (err) {
       console.error("Delete session error:", err);
       await mutate();
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -139,12 +148,29 @@ export default function SessionList({ compact = false }: SessionListProps) {
                 </button>
                 <button
                   type="button"
-                  title="Xóa"
+                  title={deletingId === s.id ? "Xác nhận xoá" : "Xoá"}
                   onClick={(e) => handleDeleteSession(e, s.id)}
-                  className="absolute -right-0.5 -top-0.5 w-4 h-4 rounded-full bg-zinc-800 border border-white/10 text-zinc-500 hover:text-red-400 opacity-0 group-hover:opacity-100 flex items-center justify-center"
+                  className={`absolute -right-0.5 -top-0.5 w-5 h-5 rounded-full border shadow-sm transition-all flex items-center justify-center z-10 ${
+                    deletingId === s.id 
+                      ? "bg-red-500 border-red-400 text-white scale-110 opacity-100" 
+                      : "bg-[var(--card-bg)] border-[var(--border)] text-[var(--text-muted)] hover:text-red-400 opacity-0 group-hover:opacity-100"
+                  }`}
                 >
-                  <Trash2 className="w-2.5 h-2.5" />
+                  {deletingId === s.id ? <Check className="w-3 h-3" /> : <Trash2 className="w-2.5 h-2.5" />}
                 </button>
+                {deletingId === s.id && (
+                  <button
+                    type="button"
+                    title="Hủy"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setDeletingId(null);
+                    }}
+                    className="absolute -left-0.5 -top-0.5 w-5 h-5 rounded-full bg-[var(--card-bg)] border border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text-primary)] shadow-sm z-10 flex items-center justify-center animate-in zoom-in-50 duration-200"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
               </div>
             ))
           )}
@@ -217,13 +243,39 @@ export default function SessionList({ compact = false }: SessionListProps) {
                 </p>
               </div>
 
-              <button
-                type="button"
-                onClick={(e) => handleDeleteSession(e, s.id)}
-                className="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-red-500/10 hover:text-red-400 rounded-md text-zinc-700 transition-all"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
+              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                {deletingId === s.id ? (
+                  <>
+                    <button
+                      type="button"
+                      title="Xác nhận xoá"
+                      onClick={(e) => handleDeleteSession(e, s.id)}
+                      className="p-1.5 bg-red-500/10 text-red-500 hover:bg-red-500/20 rounded-md transition-all animate-in slide-in-from-right-2 duration-200"
+                    >
+                      <Check className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      title="Hủy"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDeletingId(null);
+                      }}
+                      className="p-1.5 hover:bg-[var(--border)] text-[var(--text-muted)] rounded-md transition-all animate-in slide-in-from-right-1 duration-200"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={(e) => handleDeleteSession(e, s.id)}
+                    className="p-1.5 hover:bg-red-500/10 hover:text-red-400 rounded-md text-[var(--text-muted)] transition-all"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
 
               {currentSessionId === s.id && <ChevronRight className="w-3.5 h-3.5 text-indigo-500/50" />}
             </div>
