@@ -49,10 +49,10 @@ export default function ChatMessageComponent({ message }: ChatMessageProps) {
       <div
         className={`max-w-[85%] rounded-2xl px-4 py-3 ${
           isUser
-            ? "bg-blue-500/15 border border-blue-500/20 text-blue-100"
+            ? "bg-blue-500/15 border border-blue-500/20 text-blue-500"
             : isSystem
-            ? "bg-zinc-800/50 border border-white/5 text-zinc-400 text-xs italic"
-            : "bg-zinc-900/60 border border-white/8 text-zinc-200"
+            ? "bg-[var(--card-bg)] border border-[var(--border)] text-[var(--text-muted)] text-xs italic"
+            : "bg-[var(--msg-bot)] border border-[var(--border)] text-[var(--text-primary)]"
         }`}
       >
         {message.type === "status" && (
@@ -60,7 +60,7 @@ export default function ChatMessageComponent({ message }: ChatMessageProps) {
             {message.content !== "success" && message.content !== "error" && (
               <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-400 flex-shrink-0" />
             )}
-            <span className="text-zinc-300">
+            <span className="text-[var(--text-secondary)]">
               {statusLabels[message.content] || message.content}
             </span>
           </div>
@@ -81,7 +81,7 @@ export default function ChatMessageComponent({ message }: ChatMessageProps) {
               Phân tích ngữ nghĩa
               </span>
             </div>
-            <div className="prose prose-invert prose-sm max-w-none text-zinc-300">
+            <div className="prose prose-invert prose-sm max-w-none text-[var(--text-secondary)]">
               <ReactMarkdown remarkPlugins={[remarkGfm]}>
                 {message.content}
               </ReactMarkdown>
@@ -118,24 +118,24 @@ export default function ChatMessageComponent({ message }: ChatMessageProps) {
               <div className="space-y-2">
                 <div className="flex items-center gap-2 mb-1.5 opacity-60">
                   <BrainCircuit className="w-3.5 h-3.5 text-indigo-400" />
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-300">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-400">
                     Phân tích từ AI
                   </span>
                 </div>
-                <div className="prose prose-invert prose-sm max-w-none italic text-indigo-50/90">
+                <div className="prose prose-invert prose-sm max-w-none italic text-[var(--text-secondary)]">
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>
                     {message.metadata.semantic_analysis}
                   </ReactMarkdown>
                 </div>
-                <div className="h-px w-full bg-white/5 my-2" />
-                <div className="prose prose-invert prose-sm max-w-none text-zinc-200">
+                <div className="h-px w-full bg-[var(--border)] my-2" />
+                <div className="prose prose-invert prose-sm max-w-none text-[var(--text-primary)]">
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>
                     {message.content}
                   </ReactMarkdown>
                 </div>
               </div>
             ) : (
-              <div className="prose prose-invert prose-sm max-w-none text-zinc-200">
+              <div className="prose prose-invert prose-sm max-w-none text-[var(--text-primary)]">
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>
                   {message.content}
                 </ReactMarkdown>

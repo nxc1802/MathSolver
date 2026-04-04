@@ -20,8 +20,8 @@ export default function ChatSidebar({ compact = false, onCollapse, onExpand }: C
 
   if (compact) {
     return (
-      <div className="flex flex-col h-full bg-[#0c0c14]/80 border-r border-white/5">
-        <div className="flex-shrink-0 flex flex-col items-center gap-2 pt-2 pb-3 px-1 border-b border-white/5">
+      <div className="flex flex-col h-full bg-[var(--card-bg)] border-r border-[var(--border)]">
+        <div className="flex-shrink-0 flex flex-col items-center gap-2 pt-2 pb-3 px-1 border-b border-[var(--border)]">
           <button
             type="button"
             aria-label="Mở rộng sidebar"
@@ -75,8 +75,8 @@ export default function ChatSidebar({ compact = false, onCollapse, onExpand }: C
   }
 
   return (
-    <div className="flex flex-col h-full bg-[#0c0c14]/80">
-      <div className="flex-shrink-0 px-4 py-4 border-b border-white/5">
+    <div className="flex flex-col h-full bg-[var(--card-bg)]">
+      <div className="flex-shrink-0 px-4 py-4 border-b border-[var(--border)]">
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-center gap-2.5 min-w-0">
             <div className="w-9 h-9 shrink-0 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
@@ -108,9 +108,9 @@ export default function ChatSidebar({ compact = false, onCollapse, onExpand }: C
         <SessionList />
       </div>
 
-      <div className="flex-shrink-0 p-4 border-t border-white/5 bg-black/20">
+      <div className="flex-shrink-0 p-4 border-t border-[var(--border)] bg-black/5">
         <div className="group relative flex items-center gap-3 p-2 rounded-xl hover:bg-white/5 transition-all">
-          <div className="w-9 h-9 rounded-full bg-gradient-to-br from-zinc-700 to-zinc-800 flex items-center justify-center border border-white/10">
+          <div className="w-9 h-9 rounded-full bg-gradient-to-br from-zinc-700 to-zinc-800 flex items-center justify-center border border-[var(--border)]">
             {user?.user_metadata?.avatar_url ? (
               <img src={user.user_metadata.avatar_url} alt="" className="w-full h-full rounded-full" />
             ) : (
@@ -122,7 +122,7 @@ export default function ChatSidebar({ compact = false, onCollapse, onExpand }: C
             <p className="text-sm font-bold text-white truncate">
               {user?.user_metadata?.full_name || user?.email?.split("@")[0] || "Người dùng"}
             </p>
-            <p className="text-[10px] text-zinc-500 truncate">{user?.email}</p>
+            <p className="text-[10px] text-[var(--text-muted)] truncate">{user?.email}</p>
           </div>
 
           <button

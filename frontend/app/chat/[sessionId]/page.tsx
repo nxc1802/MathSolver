@@ -371,8 +371,9 @@ export default function ChatSessionPage() {
       console.error(err);
       setCurrentStatus("error");
       clearSolvePoll();
-      void mutateMessages(); // Sync back with server to remove optimistic message if needed
+      void mutateMessages();
     } finally {
+      // NON-BLOCKING: We unlock the UI immediately after the job is registered/started
       setSolveLoading(false);
     }
   };
@@ -417,9 +418,9 @@ export default function ChatSessionPage() {
   }, [sidebarCollapsed, splitPercent]);
 
   return (
-    <div ref={containerRef} className="h-screen w-screen flex bg-[#0a0a0f] overflow-hidden">
+    <div ref={containerRef} className="h-screen w-screen flex bg-[var(--background)] text-[var(--foreground)] overflow-hidden">
       <div
-        className={`h-full min-w-0 flex flex-col shrink-0 ${sidebarCollapsed ? "w-[52px]" : ""}`}
+        className={`h-full min-w-0 flex flex-col shrink-0 border-r border-[var(--border)] ${sidebarCollapsed ? "w-[52px]" : ""}`}
         style={sidebarCollapsed ? undefined : { width: `${splitPercent}%` }}
       >
         <ChatSidebar
@@ -437,10 +438,10 @@ export default function ChatSessionPage() {
         />
       )}
 
-      <div className="flex-1 flex flex-col min-w-0 bg-[#08080d]">
+      <div className="flex-1 flex flex-col min-w-0 bg-[var(--bg-secondary)]">
         <div className="flex-1 flex overflow-hidden">
           <div 
-            className="flex flex-col border-r border-white/5 min-w-0 bg-[#0c0c14]/40"
+            className="flex flex-col border-r border-[var(--border)] min-w-0 bg-[var(--panel-bg)]"
             style={{ width: `${mainSplitPercent}%` }}
           >
             <div className="flex-1 overflow-y-auto p-4 space-y-6 scrollbar-thin">
@@ -490,7 +491,7 @@ export default function ChatSessionPage() {
               <div ref={messagesEndRef} />
             </div>
 
-            <div className="p-4 border-t border-white/5 bg-black/40">
+            <div className="p-4 border-t border-[var(--border)] bg-[var(--panel-bg)]">
               <div className="max-w-3xl mx-auto space-y-3">
                 <div className="flex items-center gap-2 px-1">
                   <button
@@ -505,6 +506,12 @@ export default function ChatSessionPage() {
                     <Film className="w-3.5 h-3.5" />
                     MANIM VIDEO
                   </button>
+                  {ocrLoading && (
+                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-[10px] font-bold text-indigo-400 animate-pulse">
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                      ĐANG QUÉT ẢNH...
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex gap-3 items-stretch">
@@ -513,14 +520,8 @@ export default function ChatSessionPage() {
                     onDragOver={onDragOverInput}
                     onDrop={onDropInput}
                   >
-                    {ocrLoading && (
-                      <div
-                        className="absolute inset-0 z-10 flex items-center justify-center rounded-2xl bg-black/60 backdrop-blur-[2px]"
-                        aria-busy
-                      >
-                        <Loader2 className="w-7 h-7 animate-spin text-indigo-400" />
-                      </div>
-                    )}
+                    {/* OCR Loading is now non-blocking and shown as a subtle indicator elsewhere if needed, 
+                        but we remove the blocking overlay to allow typing. */}
                     <textarea
                       value={inputText}
                       onChange={(e) => setInputText(e.target.value)}
@@ -533,7 +534,7 @@ export default function ChatSessionPage() {
                           void handleSolve();
                         }
                       }}
-                      className="w-full h-14 min-h-[3.5rem] max-h-14 resize-none overflow-y-auto bg-zinc-900/80 border border-white/5 rounded-2xl px-4 py-3 text-sm text-white leading-snug focus:outline-none focus:border-indigo-500/50 transition-all"
+                      className="w-full h-14 min-h-[3.5rem] max-h-14 resize-none overflow-y-auto bg-[var(--input-bg)] border border-[var(--border)] rounded-2xl px-4 py-3 text-sm text-[var(--foreground)] leading-snug focus:outline-none focus:border-indigo-500/50 transition-all"
                     />
                   </div>
                   <button
@@ -559,7 +560,7 @@ export default function ChatSessionPage() {
             className="w-1 cursor-col-resize hover:bg-indigo-500/30 active:bg-indigo-500/50 transition-colors z-10 flex-shrink-0"
           />
 
-          <div className="flex-1 flex flex-col bg-black/40 overflow-hidden">
+          <div className="flex-1 flex flex-col bg-[var(--panel-bg)] overflow-hidden">
             <div className="flex-1 overflow-y-auto px-6 py-6 space-y-10 scrollbar-thin">
               <AnimatePresence mode="popLayout">
                 {coordinates && (
@@ -573,7 +574,7 @@ export default function ChatSessionPage() {
                       <div className="w-1 h-3 bg-indigo-500 rounded-full" />
                       <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-[0.2em]">Hình vẽ mô phỏng</span>
                     </div>
-                    <div className="bg-[#0c0c14] rounded-2xl border border-white/5 p-4 shadow-2xl overflow-hidden">
+                    <div className="bg-[var(--card-bg)] rounded-3xl border border-[var(--border)] p-4 shadow-2xl overflow-hidden">
                       <StaticGeometryCanvas 
                         coordinates={coordinates} 
                         polygonOrder={polygonOrder || undefined}
@@ -596,7 +597,7 @@ export default function ChatSessionPage() {
                         {videoUrl ? "🎬 Phim minh họa" : "🎨 Đang dựng hình..."}
                       </span>
                     </div>
-                    <div className="bg-[#0c0c14] rounded-2xl border border-white/5 p-4 shadow-2xl relative overflow-hidden">
+                    <div className="bg-[var(--card-bg)] rounded-3xl border border-[var(--border)] p-4 shadow-2xl relative overflow-hidden">
                       <AnimationPreview videoUrl={videoUrl || undefined} loading={renderingVideo} />
                     </div>
                   </motion.div>

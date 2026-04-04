@@ -45,14 +45,14 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           initial={{ opacity: 0, scale: 0.95, y: 20 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 20 }}
-          className="relative w-full max-w-2xl bg-[#0c0c14] border border-white/10 rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col md:flex-row h-[500px]"
+          className="relative w-full max-w-2xl bg-[var(--card-bg)] border border-[var(--border)] rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col md:flex-row h-[500px]"
           onClick={(e) => e.stopPropagation()}
         >
           {/* Sidebar */}
-          <div className="w-full md:w-56 bg-white/5 border-r border-white/5 p-6 flex flex-col gap-2">
-            <h2 className="text-xl font-black text-white mb-6 tracking-tight">Cài đặt</h2>
+          <div className="w-full md:w-56 bg-black/5 border-r border-[var(--border)] p-6 flex flex-col gap-2">
+            <h2 className="text-xl font-black text-[var(--text-primary)] mb-6 tracking-tight">Cài đặt</h2>
             
-            <button className="flex items-center gap-3 px-4 py-3 rounded-2xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 text-sm font-bold transition-all">
+            <button className="flex items-center gap-3 px-4 py-3 rounded-2xl bg-indigo-500/10 text-indigo-500 border border-indigo-500/20 text-sm font-bold transition-all">
               <Monitor className="w-4 h-4" />
               Giao diện
             </button>
@@ -70,8 +70,8 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           <div className="flex-1 p-8 overflow-y-auto">
             <div className="flex items-center justify-between mb-8">
               <div>
-                <h3 className="text-lg font-bold text-white">Chủ đề hiển thị</h3>
-                <p className="text-xs text-zinc-500 mt-1">Chọn phong cách phù hợp với đôi mắt của bạn</p>
+                <h3 className="text-lg font-bold text-[var(--text-primary)]">Chủ đề hiển thị</h3>
+                <p className="text-xs text-[var(--text-secondary)] mt-1">Chọn phong cách phù hợp với đôi mắt của bạn</p>
               </div>
               <button 
                 onClick={onClose}
@@ -91,13 +91,13 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                 }`}
               >
                 <div className="flex items-center justify-between mb-4">
-                  <div className={`p-3 rounded-2xl ${theme === "dark" ? "bg-indigo-500 text-white" : "bg-zinc-800 text-zinc-400"}`}>
+                  <div className={`p-3 rounded-2xl ${theme === "dark" ? "bg-indigo-600 text-white" : "bg-zinc-800 text-zinc-400"}`}>
                     <Moon className="w-5 h-5" />
                   </div>
                   {theme === "dark" && <div className="w-2 h-2 rounded-full bg-indigo-500" />}
                 </div>
-                <p className="font-bold text-white text-sm">Chế độ tối</p>
-                <p className="text-xs text-zinc-500 mt-1">Tiết kiệm pin, bảo vệ mắt</p>
+                <p className="font-bold text-[var(--text-primary)] text-sm">Chế độ tối</p>
+                <p className="text-xs text-[var(--text-secondary)] mt-1">Tiết kiệm pin, bảo vệ mắt</p>
                 
                 {/* Visual Preview */}
                 <div className="mt-4 h-20 rounded-xl bg-black/40 border border-white/5 p-2 space-y-2 opacity-60">
@@ -115,13 +115,13 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                 }`}
               >
                 <div className="flex items-center justify-between mb-4">
-                  <div className={`p-3 rounded-2xl ${theme === "light" ? "bg-indigo-500 text-white" : "bg-zinc-200 text-zinc-500"}`}>
+                  <div className={`p-3 rounded-2xl ${theme === "light" ? "bg-indigo-600 text-white" : "bg-zinc-200 text-zinc-500"}`}>
                     <Sun className="w-5 h-5" />
                   </div>
                   {theme === "light" && <div className="w-2 h-2 rounded-full bg-indigo-500" />}
                 </div>
-                <p className="font-bold text-white text-sm">Chế độ sáng</p>
-                <p className="text-xs text-zinc-500 mt-1">Sắc nét, thanh tao</p>
+                <p className="font-bold text-[var(--text-primary)] text-sm">Chế độ sáng</p>
+                <p className="text-xs text-[var(--text-secondary)] mt-1">Sắc nét, thanh tao</p>
 
                 {/* Visual Preview */}
                 <div className="mt-4 h-20 rounded-xl bg-zinc-100 border border-zinc-200 p-2 space-y-2 opacity-60">
@@ -134,12 +134,12 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             <div className="mt-10 pt-6 border-t border-white/5">
                <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                     <div className="w-10 h-10 rounded-2xl bg-white/5 flex items-center justify-center">
-                        <Eye className="w-5 h-5 text-indigo-400" />
+                     <div className="w-10 h-10 rounded-2xl bg-black/5 flex items-center justify-center">
+                        <Eye className="w-5 h-5 text-indigo-500" />
                      </div>
                      <div>
-                        <p className="text-sm font-bold text-white">Animations</p>
-                        <p className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold">Bật hiệu ứng chuyển động</p>
+                        <p className="text-sm font-bold text-[var(--text-primary)]">Animations</p>
+                        <p className="text-[10px] text-[var(--text-muted)] uppercase tracking-widest font-bold">Bật hiệu ứng chuyển động</p>
                      </div>
                   </div>
                   <div className="w-12 h-6 rounded-full bg-indigo-600 relative px-1 flex items-center">

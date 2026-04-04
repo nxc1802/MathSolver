@@ -110,7 +110,7 @@ export default function SessionList({ compact = false }: SessionListProps) {
           onClick={handleCreateSession}
           disabled={creating}
           title="Tạo bài toán mới"
-          className="w-9 h-9 shrink-0 rounded-xl bg-white/5 border border-white/5 hover:bg-white/10 flex items-center justify-center text-indigo-400 transition-colors disabled:opacity-50"
+          className="w-9 h-9 shrink-0 rounded-xl bg-[var(--input-bg)] border border-[var(--border)] hover:bg-[var(--card-bg)] flex items-center justify-center text-indigo-500 transition-colors disabled:opacity-50"
         >
           {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
         </button>
@@ -131,8 +131,8 @@ export default function SessionList({ compact = false }: SessionListProps) {
                   onClick={() => router.replace(`/chat/${s.id}`)}
                   className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all ${
                     currentSessionId === s.id
-                      ? "bg-indigo-500/25 text-indigo-400 ring-1 ring-indigo-500/40"
-                      : "bg-white/5 text-zinc-500 hover:bg-white/10 hover:text-zinc-300"
+                      ? "bg-indigo-500/20 text-indigo-500 ring-1 ring-indigo-500/30"
+                      : "bg-[var(--input-bg)] text-[var(--text-muted)] hover:bg-[var(--card-bg)] hover:text-[var(--text-primary)]"
                   }`}
                 >
                   <MessageSquare className="w-4 h-4" />
@@ -160,12 +160,12 @@ export default function SessionList({ compact = false }: SessionListProps) {
           type="button"
           onClick={handleCreateSession}
           disabled={creating}
-          className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-white/5 border border-white/5 hover:bg-white/10 text-sm font-bold text-white transition-all group"
+          className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-[var(--input-bg)] border border-[var(--border)] hover:bg-[var(--card-bg)] text-sm font-bold text-[var(--text-primary)] transition-all group"
         >
           {creating ? (
-            <Loader2 className="w-4 h-4 animate-spin text-indigo-400" />
+            <Loader2 className="w-4 h-4 animate-spin text-indigo-500" />
           ) : (
-            <Plus className="w-4 h-4 text-indigo-400 group-hover:scale-110 transition-transform" />
+            <Plus className="w-4 h-4 text-indigo-500 group-hover:scale-110 transition-transform" />
           )}
           Tạo bài toán mới
         </button>
@@ -192,13 +192,13 @@ export default function SessionList({ compact = false }: SessionListProps) {
               onKeyDown={(e) => e.key === "Enter" && router.replace(`/chat/${s.id}`)}
               className={`group relative flex items-center gap-3 px-3 py-3 rounded-xl cursor-pointer transition-all ${
                 currentSessionId === s.id
-                  ? "bg-indigo-500/10 border border-indigo-500/20 shadow-lg"
-                  : "hover:bg-white/5 border border-transparent"
+                  ? "bg-indigo-500/5 border border-indigo-500/20 shadow-lg"
+                  : "hover:bg-[var(--card-bg)] border border-transparent"
               }`}
             >
               <div
                 className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                  currentSessionId === s.id ? "bg-indigo-500/20 text-indigo-400" : "bg-white/5 text-zinc-600"
+                  currentSessionId === s.id ? "bg-indigo-500/20 text-indigo-400" : "bg-[var(--input-bg)] text-[var(--text-muted)]"
                 }`}
               >
                 <MessageSquare className="w-4 h-4" />
@@ -207,7 +207,7 @@ export default function SessionList({ compact = false }: SessionListProps) {
               <div className="flex-1 min-w-0">
                 <p
                   className={`text-sm font-medium truncate ${
-                    currentSessionId === s.id ? "text-white" : "text-zinc-500 group-hover:text-zinc-300"
+                    currentSessionId === s.id ? "text-indigo-400 font-bold" : "text-[var(--text-secondary)] group-hover:text-[var(--text-primary)]"
                   }`}
                 >
                   {s.title}
