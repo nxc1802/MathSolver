@@ -110,9 +110,10 @@ class Orchestrator:
             )
 
             _step_io("step6_solve", input_val=f"{len(points)} pts / {len(constraints)} cons", output_val=None)
-            coordinates = self.solver_engine.solve(points, constraints)
+            engine_result = self.solver_engine.solve(points, constraints)
 
-            if coordinates:
+            if engine_result:
+                coordinates = engine_result.get("coordinates")
                 _step_io("step6_solve", input_val=None, output_val=coordinates)
                 break
 
@@ -140,7 +141,7 @@ class Orchestrator:
                     "geometry_dsl": dsl_code,
                     "coordinates": coordinates,
                     "semantic": semantic_json,
-                    "semantic_analysis": semantic_json.get("input_text", ""),
+                    "semantic_analysis": semantic_json.get("analysis") or semantic_json.get("input_text", ""),
                     "session_id": session_id,
                 }
                 task = render_geometry_video.delay(job_id, result_payload)
@@ -163,6 +164,9 @@ class Orchestrator:
             "status": status,
             "geometry_dsl": dsl_code,
             "coordinates": coordinates,
+            "polygon_order": engine_result.get("polygon_order", []),
+            "circles": engine_result.get("circles", []),
+            "drawing_phases": engine_result.get("drawing_phases", []),
             "semantic": semantic_json,
-            "semantic_analysis": semantic_json.get("input_text", ""),
+            "semantic_analysis": semantic_json.get("analysis") or semantic_json.get("input_text", ""),
         }

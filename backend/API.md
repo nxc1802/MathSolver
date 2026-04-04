@@ -106,12 +106,82 @@ Gửi bài toán trong một session.
 
 1. Lưu tin nhắn user vào `messages`.
 2. Tạo bản ghi `jobs` (`status`: `processing`).
-3. Xử lý nền: parse → DSL → solver → (tuỳ chọn) Celery render video.
+3. Xử lý nền: OCR (nếu có ảnh) → parse → knowledge augment → DSL → solver → (tuỳ chọn) Celery render video.
 4. Cập nhật `jobs` và gửi sự kiện qua WebSocket (xem dưới).
 
-**Trạng thái job đặc biệt:** `rendering_queued` khi đã giải xong nhưng video đang chờ worker — tin nhắn assistant có thể được ghi sau khi video xong (xem worker).
+**Trạng thái job đặc biệt:** `rendering_queued` khi đã giải xong nhưng video đang chờ worker.
 
 **Lỗi:** `403` nếu không sở hữu session.
+
+---
+
+## Kết quả giải toán (Job Result)
+
+Khi `status = "success"`, trường `result` của job (qua WebSocket hoặc `GET /api/v1/solve/{job_id}`) trả về cấu trúc sau:
+
+```json
+{
+  "status": "success",
+  "semantic_analysis": "Hình chữ nhật ABCD với AB=5, AD=10.",
+  "geometry_dsl": "POLYGON_ORDER(A,B,C,D)\nPOINT(A)\n...",
+  "coordinates": {
+    "A": [0.0, 0.0],
+    "B": [-5.0, 0.0],
+    "C": [-5.0, -10.0],
+    "D": [0.0, -10.0]
+  },
+  "polygon_order": ["A", "B", "C", "D"],
+  "circles": [],
+  "drawing_phases": [
+    {
+      "phase": 1,
+      "label": "Hình cơ bản",
+      "points": ["A", "B", "C", "D"],
+      "segments": [["A","B"],["B","C"],["C","D"],["D","A"]]
+    },
+    {
+      "phase": 2,
+      "label": "Điểm và đoạn phụ",
+      "points": ["M", "N"],
+      "segments": [["M","N"]]
+    }
+  ]
+}
+```
+
+### Mô tả các trường mới (v4.1)
+
+| Trường | Kiểu | Mô tả |
+|--------|------|--------|
+| `semantic_analysis` | string | **Mô tả tiếng Việt** tóm tắt bài toán do AI sinh ra — **không phải** bản sao câu hỏi ban đầu. Dùng để hiển thị trong chat bubble của assistant. |
+| `polygon_order` | `string[]` | Thứ tự đỉnh để tạo đa giác đúng chu vi (e.g. `["A","B","C","D"]`). FE **phải** dùng thứ tự này khi vẽ polygon, không dùng thứ tự từ `Object.keys(coordinates)`. |
+| `circles` | `array` | Danh sách đường tròn: `[{"center": "O", "radius": 5.0}, ...]`. Rỗng nếu không có đường tròn. |
+| `drawing_phases` | `array` | Danh sách các **bước vẽ tuần tự**. Xem chi tiết bên dưới. |
+
+### drawing_phases — Hướng dẫn tích hợp FE
+
+> [!IMPORTANT]
+> FE nên vẽ hình theo từng phase để đảm bảo độ chính xác và trải nghiệm visual tốt hơn.
+
+Mỗi phần tử trong `drawing_phases`:
+
+```typescript
+interface DrawingPhase {
+  phase: number;        // Số thứ tự (1, 2, ...)
+  label: string;        // Tên phase (tiếng Việt)
+  points: string[];     // Danh sách điểm cần render trong phase này
+  segments: string[][]; // Danh sách cặp điểm tạo thành đoạn thẳng, e.g. [["M","N"]]
+}
+```
+
+**Gợi ý rendering (Canvas/WebGL):**
+
+```
+Phase 1 → Vẽ polygon chính (dùng polygon_order), hiện tên điểm gốc (A,B,C,D)
+Phase 2 → Thêm điểm phụ (M, N), vẽ các đoạn thẳng phụ (MN)
+```
+
+Tọa độ cho mỗi điểm lấy từ `coordinates[pointId]` dưới dạng `[x, y]` (đơn vị logic, FE cần scale phù hợp với canvas).
 
 ---
 
@@ -188,100 +258,3 @@ Backend bật CORS `allow_origins=["*"]` — FE dev có thể gọi trực tiế
 ## Phiên bản
 
 API title: **Visual Math Solver API v4.0** (OpenAPI tại `/docs` khi bật Uvicorn).
-
----
-
-## ⚠️ Thay đổi sắp tới (FE Notice)
-
-> **Áp dụng cho:** `result` object trả về qua **WebSocket** và **`GET /api/v1/solve/{job_id}`** sau khi pipeline nâng cấp hoàn tất.
-
-### 1. Trường `semantic_analysis` — Nội dung thay đổi
-
-**Hiện tại:** `semantic_analysis` đang trả về **nguyên văn câu hỏi** của người dùng.  
-**Sắp tới:** Sẽ trả về **phân tích hình học ngắn gọn bằng tiếng Việt** do LLM sinh ra.
-
-```diff
-- "semantic_analysis": "Cho hình chữ nhật ABCD có AB bằng 5 và AD bằng 10"
-+ "semantic_analysis": "Hình chữ nhật ABCD có cạnh AB = 5 và AD = 10."
-```
-
-**Yêu cầu FE:** Không có thay đổi breaking — cùng key, nội dung sẽ có nghĩa hơn.
-
----
-
-### 2. Trường `polygon_order` — **Mới**
-
-`result.polygon_order` sẽ được thêm vào khi bài toán có hình đa giác. Đây là **thứ tự chính xác** để nối các điểm theo chu vi hình.
-
-```json
-{
-  "status": "success",
-  "geometry_dsl": "...",
-  "coordinates": { "A": [0,0], "B": [5,0], "C": [5,10], "D": [0,10] },
-  "polygon_order": ["A", "B", "C", "D"],
-  ...
-}
-```
-
-> [!IMPORTANT]
-> **FE PHẢI dùng `polygon_order` để vẽ polygon**, không được vẽ theo thứ tự key của `coordinates`. Dùng thứ tự key sẽ gây ra lỗi hình bị vẽ sai (điểm chéo nhau, tạo hình chữ X hoặc chồng điểm).
-
----
-
-### 3. Trường `drawing_phases` — **Mới**
-
-`result.drawing_phases` là danh sách các bước vẽ tuần tự. FE nên vẽ từng phase lần lượt (ví dụ: animate phase 1 xong rồi mới vẽ phase 2).
-
-```json
-{
-  "drawing_phases": [
-    {
-      "phase": 1,
-      "label": "Hình cơ bản",
-      "points": ["A", "B", "C", "D"],
-      "segments": [["A","B"], ["B","C"], ["C","D"], ["D","A"]]
-    },
-    {
-      "phase": 2,
-      "label": "Điểm phụ",
-      "points": ["M", "N"],
-      "segments": [["M", "N"]]
-    }
-  ]
-}
-```
-
-**Luồng FE gợi ý:**
-1. Nhận `drawing_phases`.
-2. Loop qua từng phase theo thứ tự `phase` tăng dần.
-3. Mỗi phase: vẽ `points`, vẽ `segments`, dừng ngắn (~500ms) trước khi sang phase tiếp theo.
-
-> [!NOTE]
-> Nếu `drawing_phases` không có trong `result` (bài toán cũ hoặc fallback), FE có thể fallback về logic vẽ hiện tại dùng `coordinates` + `polygon_order`.
-
----
-
-### 4. Trường `circles` — **Mới** (khi có hình tròn)
-
-Khi bài toán có đường tròn, `result.circles` sẽ chứa danh sách các đường tròn cần vẽ.
-
-```json
-{
-  "circles": [
-    { "center": "O", "radius": 5.0 }
-  ]
-}
-```
-
-FE cần dùng tọa độ tâm từ `coordinates["O"]` kết hợp với `radius` để vẽ đường tròn.
-
----
-
-### Timeline
-
-| Trường | Trạng thái | Ghi chú |
-|---|---|---|
-| `semantic_analysis` | Thay đổi nội dung | Không breaking |
-| `polygon_order` | Sắp thêm | FE cần dùng để vẽ đúng |
-| `drawing_phases` | Sắp thêm | FE nên implement để vẽ từng bước |
-| `circles` | Sắp thêm | Chỉ có khi bài toán có hình tròn |

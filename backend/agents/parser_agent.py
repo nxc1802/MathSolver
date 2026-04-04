@@ -24,14 +24,20 @@ class ParserAgent:
             logger.warning(f"[ParserAgent] Feedback from previous attempt: {feedback}")
 
         system_prompt = """
-        You are a Geometry Parser Agent. Your task is to extract geometric entities and constraints from natural language text.
-        Output ONLY a JSON object with the following structure:
+        You are a Geometry Parser Agent. Extract geometric entities and constraints from Vietnamese/LaTeX math problem text.
+        Output ONLY a JSON object with this EXACT structure (no extra keys, no markdown):
         {
             "entities": ["Point A", "Point B", ...],
-            "type": "triangle",
-            "values": {"AB": 5, "AC": 7, "angle_A": 60}
+            "type": "rectangle|triangle|circle|parallelogram|trapezoid|square|rhombus|general",
+            "values": {"AB": 5, "AC": 7, "angle_A": 60, "radius": 3},
+            "analysis": "Mô tả ngắn bằng tiếng Việt về bài toán (ví dụ: Hình chữ nhật ABCD có AB=5, AD=10. Cần tính MN với M là trung điểm AB, N là trung điểm AD.)"
         }
-        If feedback is provided, correct the previous logic.
+        Rules:
+        - "analysis" must be a clear Vietnamese description of the problem — NOT a copy of the input text.
+        - "type" must be one of the listed keywords in lowercase.
+        - "values" keys use point labels (e.g., "AB", "BC") or named properties (e.g., "angle_A", "radius").
+        - Include midpoints, auxiliary points in "entities" if mentioned.
+        - If feedback is provided, correct your previous output accordingly.
         """
 
         user_content = f"Text: {text}"

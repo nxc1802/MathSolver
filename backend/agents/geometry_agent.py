@@ -9,8 +9,6 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 from app.url_utils import openai_compatible_api_key, sanitize_env
-
-
 from app.llm_client import get_llm_client
 
 
@@ -23,36 +21,91 @@ class GeometryAgent:
         logger.debug(f"[GeometryAgent] Input semantic data: {json.dumps(semantic_data, ensure_ascii=False, indent=2)}")
 
         system_prompt = """
-        You are a Geometry DSL Generator. Your task is to convert semantic geometric data into a structured Geometry DSL.
-        
-        Supported DSL Commands:
-        - POINT(id)
-        - LINE(p1, p2)
-        - TRIANGLE(p1, p2, p3)
-        - CIRCLE(center, radius_value)
-        - LENGTH(p1p2, value)
-        - ANGLE(vertex, degree_value)
-        - PARALLEL(p1p2, p3p4)
-        - PERPENDICULAR(p1p2, p3p4)
+You are a Geometry DSL Generator. Convert semantic geometry data into a precise Geometry DSL program.
 
-        Avoid Redundancy: Do not output redundant constraints. For example, if all side lengths of an equilateral triangle are specified, do not also output all internal angles as constraints unless explicitly needed.
-        Output ONLY the DSL lines, no explanation, no markdown code blocks.
-        Example Input: {"entities": ["A", "B", "C"], "type": "triangle", "values": {"AB": 5, "AC": 7, "angle_A": 60}}
-        Example Output:
-        POINT(A)
-        POINT(B)
-        POINT(C)
-        TRIANGLE(ABC)
-        LENGTH(AB, 5)
-        LENGTH(AC, 7)
-        ANGLE(A, 60)
-        """
+=== DSL COMMANDS ===
+POINT(A)                    — declare a point
+LENGTH(AB, 5)               — distance between A and B is 5
+ANGLE(A, 90)                — interior angle at vertex A is 90°
+PARALLEL(AB, CD)            — segment AB is parallel to CD
+PERPENDICULAR(AB, CD)       — segment AB is perpendicular to CD
+MIDPOINT(M, AB)             — M is the midpoint of segment AB
+CIRCLE(O, 5)                — circle with center O and radius 5
+SEGMENT(M, N)               — auxiliary segment MN to be drawn
+POLYGON_ORDER(A, B, C, D)   — the order in which vertices form the polygon boundary
+
+=== RULES ===
+1. Always declare POINTs first, in POLYGON_ORDER sequence.
+2. Always emit POLYGON_ORDER for any polygon (triangle, quadrilateral, etc.).
+3. For RECTANGLES/SQUARES: emit PERPENDICULAR(AB, AD) + PARALLEL(AB, CD) + PARALLEL(AD, BC).
+4. For PARALLELOGRAMS: emit PARALLEL(AB, CD) + PARALLEL(AD, BC) only (no PERPENDICULAR).
+5. For TRAPEZOIDS: emit PARALLEL for the parallel pair only.
+6. For MIDPOINTS: use MIDPOINT(M, AB). Then use SEGMENT(M, N) if the problem asks to draw or compute MN.
+7. For CIRCLES: use CIRCLE(O, r). No polygon needed.
+8. Emit enough constraints to uniquely determine the shape. Do not add redundant ones.
+9. Output ONLY DSL lines — NO explanation, NO markdown, NO code blocks.
+
+=== SHAPE EXAMPLES ===
+
+[Rectangle ABCD, AB=5, AD=10]
+POLYGON_ORDER(A, B, C, D)
+POINT(A)
+POINT(B)
+POINT(C)
+POINT(D)
+LENGTH(AB, 5)
+LENGTH(AD, 10)
+PERPENDICULAR(AB, AD)
+PARALLEL(AB, CD)
+PARALLEL(AD, BC)
+
+[Triangle ABC, AB=6, BC=8, right angle at C]
+POLYGON_ORDER(A, B, C)
+POINT(A)
+POINT(B)
+POINT(C)
+LENGTH(AB, 6)
+LENGTH(BC, 8)
+PERPENDICULAR(CA, CB)
+
+[Parallelogram ABCD, AB=8, AD=5]
+POLYGON_ORDER(A, B, C, D)
+POINT(A)
+POINT(B)
+POINT(C)
+POINT(D)
+LENGTH(AB, 8)
+LENGTH(AD, 5)
+PARALLEL(AB, CD)
+PARALLEL(AD, BC)
+
+[Rectangle ABCD AB=10, AD=20, M midpoint AB, N midpoint AD, find MN]
+POLYGON_ORDER(A, B, C, D)
+POINT(A)
+POINT(B)
+POINT(C)
+POINT(D)
+POINT(M)
+POINT(N)
+LENGTH(AB, 10)
+LENGTH(AD, 20)
+PERPENDICULAR(AB, AD)
+PARALLEL(AB, CD)
+PARALLEL(AD, BC)
+MIDPOINT(M, AB)
+MIDPOINT(N, AD)
+SEGMENT(M, N)
+
+[Circle with center O radius 7]
+POINT(O)
+CIRCLE(O, 7)
+"""
 
         logger.debug("[GeometryAgent] Calling LLM (Multi-Layer)...")
         content = await self.llm.chat_completions_create(
             messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"Semantic Data: {semantic_data}"}
+                {"role": "user", "content": f"Semantic Data: {json.dumps(semantic_data, ensure_ascii=False)}"}
             ]
         )
         dsl = content.strip() if content else ""
