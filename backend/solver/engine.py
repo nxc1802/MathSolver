@@ -25,6 +25,8 @@ class GeometryEngine:
         for c in constraints:
             if c.type == 'polygon_order':
                 polygon_order = list(c.targets)
+            elif c.type == 'explicit_points' and not polygon_order:
+                polygon_order = list(c.targets)
             elif c.type == 'circle':
                 circles_meta.append({"center": c.targets[0], "radius": float(c.value)})
                 real_constraints.append(c)
@@ -270,8 +272,9 @@ class GeometryEngine:
 
         # 1. Infer/clean polygon_order
         if not polygon_order:
-            base_pts = [pid for pid in all_ids if pid in string.ascii_uppercase]
-            polygon_order = sorted(base_pts, key=lambda p: string.ascii_uppercase.index(p))
+            # Fallback for very simple cases if no explicit points/order provided
+            base_pts = [pid for pid in all_ids if pid in ("A", "B", "C", "D")]
+            polygon_order = sorted(base_pts, key=lambda p: string.ascii_uppercase.index(p) if p in string.ascii_uppercase else 0)
 
         base_ids = [pid for pid in polygon_order if pid in all_ids]
         derived_ids = [pid for pid in all_ids if pid not in polygon_order]

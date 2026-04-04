@@ -35,16 +35,17 @@ SEGMENT(M, N)               — auxiliary segment MN to be drawn
 POLYGON_ORDER(A, B, C, D)   — the order in which vertices form the polygon boundary
 
 === RULES ===
-1. Always declare POINTs first, in POLYGON_ORDER sequence.
-2. Always emit POLYGON_ORDER for any polygon (triangle, quadrilateral, etc.).
-3. For RECTANGLES/SQUARES: emit PERPENDICULAR(AB, AD) + PARALLEL(AB, CD) + PARALLEL(AD, BC).
-4. For PARALLELOGRAMS: emit PARALLEL(AB, CD) + PARALLEL(AD, BC) only (no PERPENDICULAR).
-5. For TRAPEZOIDS: emit PARALLEL for the parallel pair only.
-6. For MIDPOINTS: use MIDPOINT(M, AB).
-7. For AUXILIARY LINES: Always use SEGMENT(X, Y) for any line mentioned (e.g., altitude, median, connecting midpoints) that is NOT part of the main POLYGON_ORDER.
-8. For CIRCLES: use CIRCLE(O, r). No polygon needed.
-9. Emit enough constraints to uniquely determine the shape. Do not add redundant ones.
-10. Output ONLY DSL lines — NO explanation, NO markdown, NO code blocks.
+1. Primary Vertices: Always declare the main vertices of the shape (e.g., A, B, C, D) using POINT(X).
+2. POLYGON_ORDER: Always emit POLYGON_ORDER(...) for the main shape using ONLY these primary vertices.
+3. Auxiliary Points: Points like midpoints (M, N), intersections, or foot of perpendiculars should NOT be declared with POINT() individually; they are created via commands like MIDPOINT(M, AB).
+4. RECTANGLES/SQUARES: Emit PERPENDICULAR(AB, AD) + PARALLEL(AB, CD) + PARALLEL(AD, BC).
+5. PARALLELOGRAMS: Emit PARALLEL(AB, CD) + PARALLEL(AD, BC) only.
+6. TRAPEZOIDS: Emit PARALLEL for the parallel pair only.
+7. MIDPOINTS: Use MIDPOINT(M, AB).
+8. AUXILIARY LINES: Always use SEGMENT(X, Y) for any line mentioned (e.g., altitude, connecting midpoints) that is NOT a boundary of the main polygon.
+9. CIRCLES: Use CIRCLE(O, r). No polygon needed.
+10. Uniqueness: Emit enough constraints to uniquely determine the shape.
+11. Format: Output ONLY DSL lines — NO explanation, NO markdown, NO code blocks.
 
 === SHAPE EXAMPLES ===
 

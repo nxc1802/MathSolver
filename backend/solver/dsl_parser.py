@@ -10,6 +10,7 @@ class DSLParser:
     def parse(self, text: str) -> Tuple[List[Point], List[Constraint]]:
         """Parse DSL text into points and constraints. Stateless per call."""
         points: Dict[str, Point] = {}
+        explicit_point_ids: List[str] = []
         constraints: List[Constraint] = []
         polygon_order: List[str] = []
         circles: List[Dict[str, Any]] = []
@@ -24,12 +25,14 @@ class DSLParser:
             if not line or line.startswith('//') or line.startswith('#'):
                 continue
 
-            # POINT(A)
+            # POINT(A) -> Explicit vertex
             m = re.match(r'POINT\((\w+)\)', line)
             if m:
                 name = m.group(1)
                 points[name] = Point(id=name)
-                logger.debug(f"[DSLParser]   + POINT: {name}")
+                if name not in explicit_point_ids:
+                    explicit_point_ids.append(name)
+                logger.debug(f"[DSLParser]   + POINT: {name} (explicit)")
                 continue
 
             # LENGTH(AB, 5)
@@ -119,9 +122,8 @@ class DSLParser:
         # Attach metadata to a synthetic constraint for downstream use
         if polygon_order:
             constraints.append(Constraint(type='polygon_order', targets=polygon_order, value=0))
-        if circles:
-            for c in circles:
-                # already added individually above
-                pass
+        elif explicit_point_ids:
+            # Re-use polygon_order as a carrier for explicit points IF no real order was specified
+            constraints.append(Constraint(type='explicit_points', targets=explicit_point_ids, value=0))
 
         return list(points.values()), constraints

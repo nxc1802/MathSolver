@@ -3,6 +3,8 @@
 import { motion } from "framer-motion";
 import { Bot, User, Loader2, AlertCircle, Code2, BrainCircuit, Shapes } from "lucide-react";
 import type { ChatMessage as ChatMessageType } from "@/types/chat";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 interface ChatMessageProps {
   message: ChatMessageType;
@@ -76,12 +78,14 @@ export default function ChatMessageComponent({ message }: ChatMessageProps) {
             <div className="flex items-center gap-2 mb-2">
               <BrainCircuit className="w-4 h-4 text-purple-400" />
               <span className="text-xs font-semibold text-purple-300 uppercase tracking-wider">
-                Phân tích ngữ nghĩa
+              Phân tích ngữ nghĩa
               </span>
             </div>
-            <p className="text-sm text-zinc-300 leading-relaxed whitespace-pre-wrap">
-              {message.content}
-            </p>
+            <div className="prose prose-invert prose-sm max-w-none text-zinc-300">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                {message.content}
+              </ReactMarkdown>
+            </div>
           </div>
         )}
 
@@ -118,18 +122,24 @@ export default function ChatMessageComponent({ message }: ChatMessageProps) {
                     Phân tích từ AI
                   </span>
                 </div>
-                <p className="text-sm leading-relaxed whitespace-pre-wrap text-indigo-50/90 italic">
-                  {message.metadata.semantic_analysis}
-                </p>
+                <div className="prose prose-invert prose-sm max-w-none italic text-indigo-50/90">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    {message.metadata.semantic_analysis}
+                  </ReactMarkdown>
+                </div>
                 <div className="h-px w-full bg-white/5 my-2" />
-                <p className="text-sm leading-relaxed whitespace-pre-wrap">
-                  {message.content}
-                </p>
+                <div className="prose prose-invert prose-sm max-w-none text-zinc-200">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    {message.content}
+                  </ReactMarkdown>
+                </div>
               </div>
             ) : (
-              <p className="text-sm leading-relaxed whitespace-pre-wrap">
-                {message.content}
-              </p>
+              <div className="prose prose-invert prose-sm max-w-none text-zinc-200">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                  {message.content}
+                </ReactMarkdown>
+              </div>
             )}
             
             {/* Render Image from Metadata (User upload or AI result) */}
