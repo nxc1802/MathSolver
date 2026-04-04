@@ -188,3 +188,100 @@ Backend bật CORS `allow_origins=["*"]` — FE dev có thể gọi trực tiế
 ## Phiên bản
 
 API title: **Visual Math Solver API v4.0** (OpenAPI tại `/docs` khi bật Uvicorn).
+
+---
+
+## ⚠️ Thay đổi sắp tới (FE Notice)
+
+> **Áp dụng cho:** `result` object trả về qua **WebSocket** và **`GET /api/v1/solve/{job_id}`** sau khi pipeline nâng cấp hoàn tất.
+
+### 1. Trường `semantic_analysis` — Nội dung thay đổi
+
+**Hiện tại:** `semantic_analysis` đang trả về **nguyên văn câu hỏi** của người dùng.  
+**Sắp tới:** Sẽ trả về **phân tích hình học ngắn gọn bằng tiếng Việt** do LLM sinh ra.
+
+```diff
+- "semantic_analysis": "Cho hình chữ nhật ABCD có AB bằng 5 và AD bằng 10"
++ "semantic_analysis": "Hình chữ nhật ABCD có cạnh AB = 5 và AD = 10."
+```
+
+**Yêu cầu FE:** Không có thay đổi breaking — cùng key, nội dung sẽ có nghĩa hơn.
+
+---
+
+### 2. Trường `polygon_order` — **Mới**
+
+`result.polygon_order` sẽ được thêm vào khi bài toán có hình đa giác. Đây là **thứ tự chính xác** để nối các điểm theo chu vi hình.
+
+```json
+{
+  "status": "success",
+  "geometry_dsl": "...",
+  "coordinates": { "A": [0,0], "B": [5,0], "C": [5,10], "D": [0,10] },
+  "polygon_order": ["A", "B", "C", "D"],
+  ...
+}
+```
+
+> [!IMPORTANT]
+> **FE PHẢI dùng `polygon_order` để vẽ polygon**, không được vẽ theo thứ tự key của `coordinates`. Dùng thứ tự key sẽ gây ra lỗi hình bị vẽ sai (điểm chéo nhau, tạo hình chữ X hoặc chồng điểm).
+
+---
+
+### 3. Trường `drawing_phases` — **Mới**
+
+`result.drawing_phases` là danh sách các bước vẽ tuần tự. FE nên vẽ từng phase lần lượt (ví dụ: animate phase 1 xong rồi mới vẽ phase 2).
+
+```json
+{
+  "drawing_phases": [
+    {
+      "phase": 1,
+      "label": "Hình cơ bản",
+      "points": ["A", "B", "C", "D"],
+      "segments": [["A","B"], ["B","C"], ["C","D"], ["D","A"]]
+    },
+    {
+      "phase": 2,
+      "label": "Điểm phụ",
+      "points": ["M", "N"],
+      "segments": [["M", "N"]]
+    }
+  ]
+}
+```
+
+**Luồng FE gợi ý:**
+1. Nhận `drawing_phases`.
+2. Loop qua từng phase theo thứ tự `phase` tăng dần.
+3. Mỗi phase: vẽ `points`, vẽ `segments`, dừng ngắn (~500ms) trước khi sang phase tiếp theo.
+
+> [!NOTE]
+> Nếu `drawing_phases` không có trong `result` (bài toán cũ hoặc fallback), FE có thể fallback về logic vẽ hiện tại dùng `coordinates` + `polygon_order`.
+
+---
+
+### 4. Trường `circles` — **Mới** (khi có hình tròn)
+
+Khi bài toán có đường tròn, `result.circles` sẽ chứa danh sách các đường tròn cần vẽ.
+
+```json
+{
+  "circles": [
+    { "center": "O", "radius": 5.0 }
+  ]
+}
+```
+
+FE cần dùng tọa độ tâm từ `coordinates["O"]` kết hợp với `radius` để vẽ đường tròn.
+
+---
+
+### Timeline
+
+| Trường | Trạng thái | Ghi chú |
+|---|---|---|
+| `semantic_analysis` | Thay đổi nội dung | Không breaking |
+| `polygon_order` | Sắp thêm | FE cần dùng để vẽ đúng |
+| `drawing_phases` | Sắp thêm | FE nên implement để vẽ từng bước |
+| `circles` | Sắp thêm | Chỉ có khi bài toán có hình tròn |
