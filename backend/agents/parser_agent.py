@@ -30,10 +30,11 @@ class ParserAgent:
             "entities": ["Point A", "Point B", ...],
             "type": "rectangle|triangle|circle|parallelogram|trapezoid|square|rhombus|general",
             "values": {"AB": 5, "AC": 7, "angle_A": 60, "radius": 3},
-            "analysis": "Mô tả ngắn bằng tiếng Việt về bài toán (ví dụ: Hình chữ nhật ABCD có AB=5, AD=10. Cần tính MN với M là trung điểm AB, N là trung điểm AD.)"
+            "analysis": "Tóm tắt ngắn gọn bài toán bằng tiếng Việt (ví dụ: Cho tam giác ABC vuông tại A có AB=3, AC=4. Vẽ đường cao AH.)"
         }
         Rules:
-        - "analysis" must be a clear Vietnamese description of the problem — NOT a copy of the input text.
+        - "analysis" MUST be a meaningful summary of the problem in Vietnamese. 
+        - DO NOT just copy the input text. Describe the setup and what needs to be found/proven.
         - "type" must be one of the listed keywords in lowercase.
         - "values" keys use point labels (e.g., "AB", "BC") or named properties (e.g., "angle_A", "radius").
         - Include midpoints, auxiliary points in "entities" if mentioned.

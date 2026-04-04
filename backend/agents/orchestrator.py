@@ -43,6 +43,33 @@ class Orchestrator:
         self.solver_engine = GeometryEngine()
         self.dsl_parser = DSLParser()
 
+    def _generate_step_description(self, semantic_json: Dict[str, Any], engine_result: Dict[str, Any]) -> str:
+        """Tạo mô tả từng bước vẽ dựa trên kết quả của engine."""
+        analysis = semantic_json.get("analysis", "")
+        if not analysis:
+            analysis = f"Giải bài toán về {semantic_json.get('type', 'hình học')}."
+
+        steps = ["\n\n**Các bước dựng hình:**"]
+        drawing_phases = engine_result.get("drawing_phases", [])
+        
+        for phase in drawing_phases:
+            label = phase.get("label", f"Giai đoạn {phase['phase']}")
+            points = ", ".join(phase.get("points", []))
+            segments = ", ".join([f"{s[0]}{s[1]}" for s in phase.get("segments", [])])
+            
+            step_text = f"- **{label}**:"
+            if points:
+                step_text += f" Xác định các điểm {points}."
+            if segments:
+                step_text += f" Vẽ các đoạn thẳng {segments}."
+            steps.append(step_text)
+
+        circles = engine_result.get("circles", [])
+        for c in circles:
+            steps.append(f"- **Đường tròn**: Vẽ đường tròn tâm {c['center']} bán kính {c['radius']}.")
+
+        return analysis + "\n".join(steps)
+
     async def run(
         self,
         text: str,
@@ -160,6 +187,8 @@ class Orchestrator:
 
         _step_io("orchestrate_done", input_val=job_id, output_val=status)
 
+        final_analysis = self._generate_step_description(semantic_json, engine_result)
+
         return {
             "status": status,
             "geometry_dsl": dsl_code,
@@ -168,5 +197,5 @@ class Orchestrator:
             "circles": engine_result.get("circles", []),
             "drawing_phases": engine_result.get("drawing_phases", []),
             "semantic": semantic_json,
-            "semantic_analysis": semantic_json.get("analysis") or semantic_json.get("input_text", ""),
+            "semantic_analysis": final_analysis,
         }

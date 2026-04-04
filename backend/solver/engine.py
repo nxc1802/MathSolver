@@ -268,23 +268,40 @@ class GeometryEngine:
         """
         all_ids = [p.id for p in points]
 
-        # Infer polygon_order if not explicitly provided
+        # 1. Infer/clean polygon_order
         if not polygon_order:
             base_pts = [pid for pid in all_ids if pid in string.ascii_uppercase]
             polygon_order = sorted(base_pts, key=lambda p: string.ascii_uppercase.index(p))
 
-        # Classify: known "base" (single uppercase letter A-Z) vs derived (multiple chars or lowercase)
         base_ids = [pid for pid in polygon_order if pid in all_ids]
         derived_ids = [pid for pid in all_ids if pid not in polygon_order]
 
-        # Phase 1: The main polygon + its border segments
+        # 2. Collect unique segments to avoid redundancy (AB == BA)
+        drawn_segments = set()
+
+        def add_segment(p1, p2, target_list):
+            if p1 == p2:
+                return
+            s = frozenset([p1, p2])
+            if s not in drawn_segments:
+                drawn_segments.add(s)
+                target_list.append([p1, p2])
+
+        # Phase 1: Main polygon boundary
         phase1_segments = []
         if len(base_ids) >= 2:
-            for i in range(len(base_ids)):
-                phase1_segments.append([base_ids[i], base_ids[(i+1) % len(base_ids)]])
+            # Connect in sequence: A-B, B-C, etc.
+            for i in range(len(base_ids) - 1):
+                add_segment(base_ids[i], base_ids[i+1], phase1_segments)
+            
+            # ONLY close the loop if we have 3 or more points (a real polygon)
+            if len(base_ids) > 2:
+                add_segment(base_ids[-1], base_ids[0], phase1_segments)
 
-        # Phase 2: Auxiliary points + user-requested drawing segments
-        phase2_segments = list(segments_meta)
+        # Phase 2: Auxiliary segments from DSL
+        phase2_segments = []
+        for p1, p2 in segments_meta:
+            add_segment(p1, p2, phase2_segments)
 
         drawing_phases = [
             {

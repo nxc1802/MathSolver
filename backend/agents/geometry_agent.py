@@ -40,10 +40,11 @@ POLYGON_ORDER(A, B, C, D)   — the order in which vertices form the polygon bou
 3. For RECTANGLES/SQUARES: emit PERPENDICULAR(AB, AD) + PARALLEL(AB, CD) + PARALLEL(AD, BC).
 4. For PARALLELOGRAMS: emit PARALLEL(AB, CD) + PARALLEL(AD, BC) only (no PERPENDICULAR).
 5. For TRAPEZOIDS: emit PARALLEL for the parallel pair only.
-6. For MIDPOINTS: use MIDPOINT(M, AB). Then use SEGMENT(M, N) if the problem asks to draw or compute MN.
-7. For CIRCLES: use CIRCLE(O, r). No polygon needed.
-8. Emit enough constraints to uniquely determine the shape. Do not add redundant ones.
-9. Output ONLY DSL lines — NO explanation, NO markdown, NO code blocks.
+6. For MIDPOINTS: use MIDPOINT(M, AB).
+7. For AUXILIARY LINES: Always use SEGMENT(X, Y) for any line mentioned (e.g., altitude, median, connecting midpoints) that is NOT part of the main POLYGON_ORDER.
+8. For CIRCLES: use CIRCLE(O, r). No polygon needed.
+9. Emit enough constraints to uniquely determine the shape. Do not add redundant ones.
+10. Output ONLY DSL lines — NO explanation, NO markdown, NO code blocks.
 
 === SHAPE EXAMPLES ===
 
