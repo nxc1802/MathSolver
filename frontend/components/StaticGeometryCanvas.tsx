@@ -5,12 +5,14 @@ import { useMemo } from "react";
 
 interface StaticGeometryCanvasProps {
   coordinates?: Record<string, [number, number]>;
+  polygonOrder?: string[];
+  circles?: Array<{ center: string; radius: number }>;
 }
 
-export default function StaticGeometryCanvas({ coordinates }: StaticGeometryCanvasProps) {
-  const { viewBox, points, paths, spanX } = useMemo(() => {
+export default function StaticGeometryCanvas({ coordinates, polygonOrder, circles }: StaticGeometryCanvasProps) {
+  const { viewBox, points, paths, circlePaths, spanX } = useMemo(() => {
     if (!coordinates || Object.keys(coordinates).length === 0) {
-      return { viewBox: "0 0 100 100", points: [], paths: "", spanX: 100 };
+      return { viewBox: "0 0 100 100", points: [], paths: "", circlePaths: [], spanX: 100 };
     }
 
     const entries = Object.entries(coordinates);
@@ -26,19 +28,44 @@ export default function StaticGeometryCanvas({ coordinates }: StaticGeometryCanv
       return { label, x: px, y: py };
     });
 
+    // Circles bounds
+    const circleParsed = (circles || []).map(c => {
+      const centerCoords = coordinates[c.center];
+      if (!centerCoords) return null;
+      const r = Number(c.radius);
+      const cx = Number(centerCoords[0]);
+      const cy = Number(centerCoords[1]) * -1;
+      minX = Math.min(minX, cx - r);
+      maxX = Math.max(maxX, cx + r);
+      minY = Math.min(minY, cy - r);
+      maxY = Math.max(maxY, cy + r);
+      return { cx, cy, r };
+    }).filter(Boolean) as Array<{ cx: number, cy: number, r: number }>;
+
     const padding = Math.max((maxX - minX) * 0.2, (maxY - minY) * 0.2, 3);
     const vb = `${minX - padding} ${minY - padding} ${maxX - minX + padding * 2} ${maxY - minY + padding * 2}`;
     const sX = maxX - minX + padding * 2;
 
     let pathsStr = "";
-    if (parsedPoints.length >= 3) {
+    if (polygonOrder && polygonOrder.length > 0) {
+      // Use explicit order
+      const ordered = polygonOrder
+        .map(label => parsedPoints.find(p => p.label === label))
+        .filter(Boolean) as typeof parsedPoints;
+      
+      if (ordered.length >= 2) {
+        pathsStr = ordered.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(" ");
+        if (ordered.length >= 3) pathsStr += " Z";
+      }
+    } else if (parsedPoints.length >= 3) {
+      // Default order (fallback)
       pathsStr = parsedPoints.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(" ") + " Z";
     } else if (parsedPoints.length === 2) {
       pathsStr = `M ${parsedPoints[0].x} ${parsedPoints[0].y} L ${parsedPoints[1].x} ${parsedPoints[1].y}`;
     }
 
-    return { viewBox: vb, points: parsedPoints, paths: pathsStr, spanX: sX };
-  }, [coordinates]);
+    return { viewBox: vb, points: parsedPoints, paths: pathsStr, circlePaths: circleParsed, spanX: sX };
+  }, [coordinates, polygonOrder, circles]);
 
   if (!coordinates || Object.keys(coordinates).length === 0) {
     return (
@@ -71,13 +98,27 @@ export default function StaticGeometryCanvas({ coordinates }: StaticGeometryCanv
         {paths && (
           <path 
             d={paths} 
-            fill="rgba(99, 102, 241, 0.15)" 
+            fill="rgba(99, 102, 241, 0.1)" 
             stroke="rgba(99, 102, 241, 0.8)" 
             strokeWidth="2"
             vectorEffect="non-scaling-stroke"
             strokeLinejoin="round"
           />
         )}
+        
+        {circlePaths.map((c, i) => (
+          <circle 
+            key={`circle-${i}`}
+            cx={c.cx}
+            cy={c.cy}
+            r={c.r}
+            fill="none"
+            stroke="rgba(167, 139, 250, 0.7)"
+            strokeWidth="1.5"
+            vectorEffect="non-scaling-stroke"
+            strokeDasharray="4 2"
+          />
+        ))}
         
         {points.map((p) => (
           <g key={p.label}>

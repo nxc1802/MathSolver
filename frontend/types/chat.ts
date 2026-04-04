@@ -19,6 +19,16 @@ export interface ChatMessage {
   timestamp: number;
   metadata?: {
     coordinates?: Record<string, [number, number]>;
+    /** New in API v4.0 */
+    semantic_analysis?: string;
+    polygon_order?: string[];
+    circles?: Array<{ center: string; radius: number }>;
+    drawing_phases?: Array<{
+      phase: number;
+      label: string;
+      points: string[];
+      segments: string[][];
+    }>;
     /** Primary key from API / DB (snake_case) */
     video_url?: string;
     /** @deprecated Prefer video_url */

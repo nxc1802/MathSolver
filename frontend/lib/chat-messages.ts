@@ -38,6 +38,14 @@ export function normalizeMessageMetadata(
     typeof raw.geometry_dsl === "string" ? raw.geometry_dsl : undefined;
   const image_url =
     typeof raw.image_url === "string" ? raw.image_url : undefined;
+  const semantic_analysis =
+    typeof raw.semantic_analysis === "string" ? raw.semantic_analysis : undefined;
+  const polygon_order =
+    Array.isArray(raw.polygon_order) ? (raw.polygon_order as string[]) : undefined;
+  const circles = 
+    Array.isArray(raw.circles) ? (raw.circles as Array<{ center: string; radius: number }>) : undefined;
+  const drawing_phases = 
+    Array.isArray(raw.drawing_phases) ? (raw.drawing_phases as any[]) : undefined;
 
   let coordinates: Record<string, [number, number]> | undefined;
   if (raw.coordinates && typeof raw.coordinates === "object") {
@@ -50,6 +58,10 @@ export function normalizeMessageMetadata(
   if (job_id) out.job_id = job_id;
   if (geometry_dsl) out.geometry_dsl = geometry_dsl;
   if (image_url) out.image_url = image_url;
+  if (semantic_analysis) out.semantic_analysis = semantic_analysis;
+  if (polygon_order) out.polygon_order = polygon_order;
+  if (circles) out.circles = circles;
+  if (drawing_phases) out.drawing_phases = drawing_phases;
 
   return Object.keys(out).length ? out : undefined;
 }

@@ -110,9 +110,27 @@ export default function ChatMessageComponent({ message }: ChatMessageProps) {
 
         {message.type === "text" && (
           <div className="space-y-3">
-            <p className="text-sm leading-relaxed whitespace-pre-wrap">
-              {message.content}
-            </p>
+            {message.role === "assistant" && message.metadata?.semantic_analysis ? (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 mb-1.5 opacity-60">
+                  <BrainCircuit className="w-3.5 h-3.5 text-indigo-400" />
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-300">
+                    Phân tích từ AI
+                  </span>
+                </div>
+                <p className="text-sm leading-relaxed whitespace-pre-wrap text-indigo-50/90 italic">
+                  {message.metadata.semantic_analysis}
+                </p>
+                <div className="h-px w-full bg-white/5 my-2" />
+                <p className="text-sm leading-relaxed whitespace-pre-wrap">
+                  {message.content}
+                </p>
+              </div>
+            ) : (
+              <p className="text-sm leading-relaxed whitespace-pre-wrap">
+                {message.content}
+              </p>
+            )}
             
             {/* Render Image from Metadata (User upload or AI result) */}
             {message.metadata?.image_url && (

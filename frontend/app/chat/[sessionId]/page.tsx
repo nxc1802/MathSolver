@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { useParams } from "next/navigation";
 import { Send, Sparkles, Loader2, Film, Bot, Maximize2 } from "lucide-react";
 
+import useSWR, { useSWRConfig } from "swr";
 import ChatSidebar from "@/components/ChatSidebar";
 import AnimationPreview from "@/components/AnimationPreview";
 import StaticGeometryCanvas from "@/components/StaticGeometryCanvas";
@@ -25,20 +26,44 @@ import type { ChatMessage } from "@/types/chat";
 const SOLVE_POLL_MAX_ATTEMPTS = 150;
 const SOLVE_POLL_INTERVAL_MS = 2000;
 
+async function fetchChatMessages([url, token]: [string, string]): Promise<ChatMessage[]> {
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error("Failed to fetch messages");
+  const data = await res.json();
+  return data.map(messageFromApi);
+}
+
 export default function ChatSessionPage() {
   const params = useParams();
   const sessionId = params?.sessionId as string;
   const { session: userSession } = useAuth();
+  const { mutate: globalMutate } = useSWRConfig();
 
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const messagesKey = userSession?.access_token && sessionId 
+    ? [`${getApiBaseUrl()}/api/v1/sessions/${sessionId}/messages`, userSession.access_token] as const 
+    : null;
+
+  const { data: messages = [], isLoading: historyLoading, mutate: mutateMessages } = useSWR(
+    messagesKey,
+    fetchChatMessages,
+    { 
+      revalidateOnFocus: false, 
+      revalidateIfStale: true,
+      dedupingInterval: 2000 
+    }
+  );
+
   const [inputText, setInputText] = useState("");
-  const [historyLoading, setHistoryLoading] = useState(true);
   const [solveLoading, setSolveLoading] = useState(false);
   const [ocrLoading, setOcrLoading] = useState(false);
   const [requestVideo, setRequestVideo] = useState(false);
   const [currentStatus, setCurrentStatus] = useState<string | null>(null);
 
   const [coordinates, setCoordinates] = useState<Record<string, [number, number]> | null>(null);
+  const [polygonOrder, setPolygonOrder] = useState<string[] | null>(null);
+  const [circles, setCircles] = useState<any[] | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [renderingVideo, setRenderingVideo] = useState(false);
 
@@ -87,13 +112,19 @@ export default function ChatSessionPage() {
 
   useEffect(() => () => clearSolvePoll(), [clearSolvePoll]);
 
-  const applyMediaFromMessages = useCallback((formatted: ChatMessage[]) => {
-    const lastWithMedia = [...formatted]
+  const applyMediaFromMessages = useCallback((msgList: ChatMessage[]) => {
+    const lastWithMedia = [...msgList]
       .reverse()
       .find((m) => m.metadata?.coordinates || m.metadata?.video_url);
     if (lastWithMedia?.metadata) {
       if (lastWithMedia.metadata.coordinates) {
         setCoordinates(lastWithMedia.metadata.coordinates);
+      }
+      if (lastWithMedia.metadata.polygon_order) {
+        setPolygonOrder(lastWithMedia.metadata.polygon_order);
+      }
+      if (lastWithMedia.metadata.circles) {
+        setCircles(lastWithMedia.metadata.circles);
       }
       if (lastWithMedia.metadata.video_url) {
         setVideoUrl(lastWithMedia.metadata.video_url);
@@ -101,44 +132,20 @@ export default function ChatSessionPage() {
     }
   }, []);
 
-  const fetchHistory = useCallback(
-    async (opts?: { silent?: boolean }) => {
-      if (!userSession?.access_token || !sessionId) return;
-      const silent = opts?.silent ?? false;
-      if (!silent) setHistoryLoading(true);
-      try {
-        const apiUrl = getApiBaseUrl();
-        const res = await fetch(`${apiUrl}/api/v1/sessions/${sessionId}/messages`, {
-          headers: { Authorization: `Bearer ${userSession.access_token}` },
-        });
-        if (res.ok) {
-          const data = (await res.json()) as Array<{
-            id: string;
-            role: string;
-            type: string;
-            content: string;
-            created_at: string;
-            metadata?: Record<string, unknown> | null;
-          }>;
-          const formatted = data.map(messageFromApi);
-          setMessages(formatted);
-          applyMediaFromMessages(formatted);
-        }
-      } catch (err) {
-        console.error("Fetch history error:", err);
-      } finally {
-        if (!silent) setHistoryLoading(false);
-      }
-    },
-    [userSession, sessionId, applyMediaFromMessages]
-  );
+  useEffect(() => {
+    if (messages.length > 0) {
+      applyMediaFromMessages(messages);
+    }
+  }, [messages, applyMediaFromMessages]);
 
   useEffect(() => {
-    setMessages([]);
+    // Clear transient UI state when switching sessions
     setCoordinates(null);
+    setPolygonOrder(null);
+    setCircles(null);
     setVideoUrl(null);
-    void fetchHistory();
-  }, [fetchHistory, sessionId]);
+    setCurrentStatus(null);
+  }, [sessionId]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -208,7 +215,9 @@ export default function ChatSessionPage() {
       content: textPayload,
       timestamp: Date.now(),
     };
-    setMessages((prev) => [...prev, tempMsg]);
+    
+    // Optimistic Update
+    await mutateMessages((prev) => [...(prev || []), tempMsg], { revalidate: false });
     setInputText("");
 
     const apiUrl = getApiBaseUrl();
@@ -229,7 +238,7 @@ export default function ChatSessionPage() {
 
     const finishSolveFlow = () => {
       clearSolvePoll();
-      void fetchHistory({ silent: true });
+      void mutateMessages(); // Trigger revalidation to get the actual message from DB
       setCurrentStatus(null);
       try {
         solveWs?.close();
@@ -320,7 +329,7 @@ export default function ChatSessionPage() {
         if (wsData.status === "error") {
           setRenderingVideo(false);
           clearSolvePoll();
-          void fetchHistory({ silent: true });
+          void mutateMessages();
           setCurrentStatus(null);
           try {
             solveWs?.close();
@@ -353,7 +362,7 @@ export default function ChatSessionPage() {
       console.error(err);
       setCurrentStatus("error");
       clearSolvePoll();
-      setMessages((prev) => prev.filter((m) => m.id !== tempMsg.id));
+      void mutateMessages(); // Sync back with server to remove optimistic message if needed
     } finally {
       setSolveLoading(false);
     }
@@ -546,7 +555,11 @@ export default function ChatSessionPage() {
                       <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-[0.2em]">Hình vẽ mô phỏng</span>
                     </div>
                     <div className="bg-[#0c0c14] rounded-2xl border border-white/5 p-4 shadow-2xl overflow-hidden">
-                      <StaticGeometryCanvas coordinates={coordinates} />
+                      <StaticGeometryCanvas 
+                        coordinates={coordinates} 
+                        polygonOrder={polygonOrder || undefined}
+                        circles={circles || undefined}
+                      />
                     </div>
                   </motion.div>
                 )}
