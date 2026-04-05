@@ -67,9 +67,10 @@ Toàn bộ tin nhắn của session (theo `created_at` tăng dần).
 
 ### `DELETE /api/v1/sessions/{session_id}`
 
-Xóa session (và dữ liệu liên quan tùy FK phía DB).
+Xóa session và **toàn bộ dữ liệu liên quan** (messages, jobs). Bản ghi trong bảng `jobs` và `messages` sẽ được xóa trước để tránh lỗi ràng buộc khóa ngoại (FK).
 
 **Response:** `{ "status": "ok", "deleted_id": "<uuid>" }`
+
 
 ### `PATCH /api/v1/sessions/{session_id}/title`
 
@@ -106,8 +107,10 @@ Gửi bài toán trong một session.
 
 1. Lưu tin nhắn user vào `messages`.
 2. Tạo bản ghi `jobs` (`status`: `processing`).
-3. Xử lý nền: OCR (nếu có ảnh) → parse → knowledge augment → DSL → solver → (tuỳ chọn) Celery render video.
-4. Cập nhật `jobs` và gửi sự kiện qua WebSocket (xem dưới).
+3. **Tự động đổi tên Session**: Nếu tiêu đề hiện tại là `"Bài toán mới"`, backend sẽ tự động cập nhật tiêu đề dựa trên 50 ký tự đầu của `text`.
+4. Xử lý nền: OCR (nếu có ảnh) → parse → knowledge augment → DSL → solver → (tuỳ chọn) Celery render video.
+5. Cập nhật `jobs` và gửi sự kiện qua WebSocket.
+6. Khi xử lý thành công, kết quả sẽ được chèn vào bảng `messages` dưới dạng tin nhắn của `assistant`.
 
 **Trạng thái job đặc biệt:** `rendering_queued` khi đã giải xong nhưng video đang chờ worker.
 
@@ -122,16 +125,20 @@ Khi `status = "success"`, trường `result` của job (qua WebSocket hoặc `GE
 ```json
 {
   "status": "success",
-  "semantic_analysis": "Hình chữ nhật ABCD với AB=5, AD=10.",
-  "geometry_dsl": "POLYGON_ORDER(A,B,C,D)\nPOINT(A)\n...",
+  "semantic_analysis": "Cho hình chữ nhật ABCD có AB=10, AD=20. M và N lần lượt là trung điểm AB, AD.\n\n**Các bước dựng hình:**\n- **Hình cơ bản**: Xác định các điểm A, B, C, D. Vẽ các đoạn thẳng AB, BC, CD, DA.\n- **Điểm và đoạn phụ**: Xác định các điểm M, N. Vẽ đoạn thẳng MN.",
+  "geometry_dsl": "POLYGON_ORDER(A,B,C,D)\nPOINT(A)\nPOINT(B)\nPOINT(C)\nPOINT(D)\nLENGTH(AB, 10)\nLENGTH(AD, 20)\nMIDPOINT(M, AB)\nMIDPOINT(N, AD)\nSEGMENT(M, N)",
   "coordinates": {
     "A": [0.0, 0.0],
-    "B": [-5.0, 0.0],
-    "C": [-5.0, -10.0],
-    "D": [0.0, -10.0]
+    "B": [-10.0, 0.0],
+    "C": [-10.0, -20.0],
+    "D": [0.0, -20.0],
+    "M": [-5.0, 0.0],
+    "N": [0.0, -10.0]
   },
   "polygon_order": ["A", "B", "C", "D"],
-  "circles": [],
+  "circles": [
+    {"center": "O", "radius": 5.0}
+  ],
   "drawing_phases": [
     {
       "phase": 1,
@@ -145,23 +152,25 @@ Khi `status = "success"`, trường `result` của job (qua WebSocket hoặc `GE
       "points": ["M", "N"],
       "segments": [["M","N"]]
     }
-  ]
+  ],
+  "video_url": "https://storage.../manim_video.mp4"
 }
 ```
 
-### Mô tả các trường mới (v4.1)
+### Mô tả các trường
 
 | Trường | Kiểu | Mô tả |
 |--------|------|--------|
-| `semantic_analysis` | string | **Mô tả tiếng Việt** tóm tắt bài toán do AI sinh ra — **không phải** bản sao câu hỏi ban đầu. Dùng để hiển thị trong chat bubble của assistant. |
-| `polygon_order` | `string[]` | Thứ tự đỉnh để tạo đa giác đúng chu vi (e.g. `["A","B","C","D"]`). FE **phải** dùng thứ tự này khi vẽ polygon, không dùng thứ tự từ `Object.keys(coordinates)`. |
-| `circles` | `array` | Danh sách đường tròn: `[{"center": "O", "radius": 5.0}, ...]`. Rỗng nếu không có đường tròn. |
-| `drawing_phases` | `array` | Danh sách các **bước vẽ tuần tự**. Xem chi tiết bên dưới. |
+| `semantic_analysis` | string | **Mô tả tiếng Việt** tóm tắt bài toán + **Các bước dựng hình** do trợ lý sinh ra. Dùng để hiển thị trong chat bubble của assistant. |
+| `polygon_order` | `string[]` | Danh sách đỉnh tạo thành khung hình chính (Base shape). |
+| `circles` | `array` | Danh sách đường tròn: `[{"center": "O", "radius": 5.0}, ...]`. |
+| `drawing_phases` | `array` | Danh sách giai đoạn vẽ. **FE nên dùng cái này để vẽ hình** vì nó tách biệt hình chính và điểm phụ. |
+| `video_url` | `string` | Link video Manim (có sau khi worker xử lý xong Celery). |
 
 ### drawing_phases — Hướng dẫn tích hợp FE
 
 > [!IMPORTANT]
-> FE nên vẽ hình theo từng phase để đảm bảo độ chính xác và trải nghiệm visual tốt hơn.
+> FE **phải** ưu tiên vẽ theo `drawing_phases` thay vì tự ý nối các điểm. Cấu trúc này đảm bảo các điểm trung điểm (M, N) hay điểm phụ không bị nối nhầm vào chu vi của hình chính.
 
 Mỗi phần tử trong `drawing_phases`:
 
