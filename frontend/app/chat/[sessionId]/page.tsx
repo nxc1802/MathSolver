@@ -102,12 +102,12 @@ export default function ChatSessionPage() {
   }, [sidebarCollapsed, uiHydrated]);
 
   const statusLabels: Record<string, string> = {
-    processing: "🔄 Đang xử lý...",
-    solving: "🧮 Đang giải...",
-    rendering_queued: "🎬 Đã gửi lệnh render...",
-    rendering: "🎬 Đang dựng video...",
+    processing: "🔄 Đang xử lý bài toán...",
+    solving: "🧮 Đang giải hệ phương trình...",
+    rendering_queued: "🎬 Đã gửi yêu cầu render video...",
+    rendering: "🎬 Đang dựng animation Manim...",
     success: "✅ Hoàn thành!",
-    error: "❌ Lỗi hệ thống.",
+    error: "❌ Có lỗi xảy ra.",
   };
 
   const clearSolvePoll = useCallback(() => {

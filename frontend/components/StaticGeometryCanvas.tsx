@@ -16,9 +16,9 @@ interface StaticGeometryCanvasProps {
 }
 
 export default function StaticGeometryCanvas({ coordinates, polygonOrder, circles, drawingPhases }: StaticGeometryCanvasProps) {
-  const { viewBox, points, paths, circlePaths, spanX } = useMemo(() => {
+  const { viewBox, points, phasePaths, circlePaths, spanX } = useMemo(() => {
     if (!coordinates || Object.keys(coordinates).length === 0) {
-      return { viewBox: "0 0 100 100", points: [], paths: "", circlePaths: [], spanX: 100 };
+      return { viewBox: "0 0 100 100", points: [], phasePaths: [], circlePaths: [], spanX: 100 };
     }
 
     const entries = Object.entries(coordinates);
@@ -48,41 +48,47 @@ export default function StaticGeometryCanvas({ coordinates, polygonOrder, circle
       return { cx, cy, r };
     }).filter(Boolean) as Array<{ cx: number, cy: number, r: number }>;
 
-    const padding = Math.max((maxX - minX) * 0.2, (maxY - minY) * 0.2, 3);
+    const padding = Math.max((maxX - minX) * 0.2, (maxY - minY) * 0.2, 5);
     const vb = `${minX - padding} ${minY - padding} ${maxX - minX + padding * 2} ${maxY - minY + padding * 2}`;
     const sX = maxX - minX + padding * 2;
 
-    let pathsStr = "";
+    const resPhasePaths: Array<{ d: string, phase: number }> = [];
+
     if (drawingPhases && drawingPhases.length > 0) {
       // Priority 1: Multi-phase structured drawing
-      const phasePaths: string[] = [];
       drawingPhases.forEach(phase => {
+        const segmentsD: string[] = [];
         phase.segments.forEach(([p1Label, p2Label]) => {
           const pt1 = parsedPoints.find(p => p.label === p1Label);
           const pt2 = parsedPoints.find(p => p.label === p2Label);
           if (pt1 && pt2) {
-            phasePaths.push(`M ${pt1.x} ${pt1.y} L ${pt2.x} ${pt2.y}`);
+            segmentsD.push(`M ${pt1.x} ${pt1.y} L ${pt2.x} ${pt2.y}`);
           }
         });
+        if (segmentsD.length > 0) {
+          resPhasePaths.push({ d: segmentsD.join(" "), phase: phase.phase });
+        }
       });
-      pathsStr = phasePaths.join(" ");
     } else if (polygonOrder && polygonOrder.length > 0) {
-      // Priority 2: Single polygon boundary
+      // Priority 2: Single polygon boundary (treated as Phase 1)
       const ordered = polygonOrder
         .map(label => parsedPoints.find(p => p.label === label))
         .filter(Boolean) as typeof parsedPoints;
       
       if (ordered.length >= 2) {
-        pathsStr = ordered.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(" ");
-        if (ordered.length >= 3) pathsStr += " Z";
+        let d = ordered.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(" ");
+        if (ordered.length >= 3) d += " Z";
+        resPhasePaths.push({ d, phase: 1 });
       }
     } else if (parsedPoints.length >= 3) {
-      pathsStr = parsedPoints.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(" ") + " Z";
+      const d = parsedPoints.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(" ") + " Z";
+      resPhasePaths.push({ d, phase: 1 });
     } else if (parsedPoints.length === 2) {
-      pathsStr = `M ${parsedPoints[0].x} ${parsedPoints[0].y} L ${parsedPoints[1].x} ${parsedPoints[1].y}`;
+      const d = `M ${parsedPoints[0].x} ${parsedPoints[0].y} L ${parsedPoints[1].x} ${parsedPoints[1].y}`;
+      resPhasePaths.push({ d, phase: 1 });
     }
 
-    return { viewBox: vb, points: parsedPoints, paths: pathsStr, circlePaths: circleParsed, spanX: sX };
+    return { viewBox: vb, points: parsedPoints, phasePaths: resPhasePaths, circlePaths: circleParsed, spanX: sX };
   }, [coordinates, polygonOrder, circles, drawingPhases]);
 
   if (!coordinates || Object.keys(coordinates).length === 0) {
@@ -97,8 +103,8 @@ export default function StaticGeometryCanvas({ coordinates, polygonOrder, circle
     );
   }
 
-  const r = spanX * 0.015;
-  const fontSize = spanX * 0.04;
+  const r = spanX * 0.012;
+  const fontSize = spanX * 0.035;
 
   return (
     <motion.div
@@ -110,19 +116,25 @@ export default function StaticGeometryCanvas({ coordinates, polygonOrder, circle
       
       <svg 
         viewBox={viewBox} 
-        className="w-full h-full drop-shadow-[0_0_8px_rgba(99,102,241,0.5)]"
+        className="w-full h-full drop-shadow-[0_0_8px_rgba(99,102,241,0.3)]"
         preserveAspectRatio="xMidYMid meet"
       >
-        {paths && (
-          <path 
-            d={paths} 
-            fill="none" 
-            stroke="rgba(99, 102, 241, 0.8)" 
-            strokeWidth="2"
-            vectorEffect="non-scaling-stroke"
-            strokeLinejoin="round"
-          />
-        )}
+        {phasePaths.map((p, idx) => {
+          const isBase = p.phase === 1;
+          return (
+            <path 
+              key={`phase-${idx}`}
+              d={p.d} 
+              fill="none" 
+              stroke={isBase ? "rgba(99, 102, 241, 0.9)" : "rgba(167, 139, 250, 0.75)"} 
+              strokeWidth={isBase ? "2.5" : "1.8"}
+              strokeDasharray={isBase ? "none" : "4 3"}
+              vectorEffect="non-scaling-stroke"
+              strokeLinejoin="round"
+              strokeLinecap="round"
+            />
+          );
+        })}
         
         {circlePaths.map((c, i) => (
           <circle 
@@ -131,10 +143,10 @@ export default function StaticGeometryCanvas({ coordinates, polygonOrder, circle
             cy={c.cy}
             r={c.r}
             fill="none"
-            stroke="rgba(167, 139, 250, 0.7)"
+            stroke="rgba(167, 139, 250, 0.6)"
             strokeWidth="1.5"
             vectorEffect="non-scaling-stroke"
-            strokeDasharray="4 2"
+            strokeDasharray="5 3"
           />
         ))}
         
@@ -145,13 +157,16 @@ export default function StaticGeometryCanvas({ coordinates, polygonOrder, circle
               cy={p.y} 
               r={r} 
               fill="white"
+              stroke="rgba(99, 102, 241, 0.4)"
+              strokeWidth="1"
             />
             <text 
-              x={p.x + r * 1.5} 
-              y={p.y - r * 1.5} 
+              x={p.x + r * 1.8} 
+              y={p.y - r * 1.8} 
               fill="white" 
               fontSize={fontSize} 
-              fontWeight="600"
+              fontWeight="700"
+              className="select-none pointer-events-none drop-shadow-md"
             >
               {p.label}
             </text>
