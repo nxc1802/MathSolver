@@ -132,3 +132,34 @@ async def update_session_title(title: str, session_id: str, user_id=Depends(get_
     log_step("db_update", table="sessions", op="title", session_id=session_id)
     invalidate_for_user(str(user_id))
     return res.data[0]
+
+
+@router.get("/{session_id}/assets", response_model=List[dict])
+async def get_session_assets(session_id: str, user_id=Depends(get_current_user_id)):
+    """Lấy danh sách video đã render trong session (Get versioned assets for a session)"""
+    supabase = get_supabase()
+
+    def owns() -> bool:
+        res = (
+            supabase.table("sessions")
+            .select("id")
+            .eq("id", session_id)
+            .eq("user_id", user_id)
+            .execute()
+        )
+        return bool(res.data)
+
+    if not session_owned_by_user(session_id, str(user_id), owns):
+        raise HTTPException(
+            status_code=403, detail="Forbidden: You do not own this session."
+        )
+
+    res = (
+        supabase.table("session_assets")
+        .select("*")
+        .eq("session_id", session_id)
+        .order("version", desc=True)
+        .execute()
+    )
+    log_step("db_select", table="session_assets", op="list", session_id=session_id)
+    return res.data

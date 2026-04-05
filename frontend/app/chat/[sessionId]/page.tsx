@@ -39,6 +39,14 @@ async function fetchChatMessages([url, token]: [string, string]): Promise<ChatMe
   return data.map(messageFromApi);
 }
 
+async function fetchSessionAssets([url, token]: [string, string]): Promise<any[]> {
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) return [];
+  return res.json();
+}
+
 export default function ChatSessionPage() {
   const params = useParams();
   const sessionId = params?.sessionId as string;
@@ -49,6 +57,10 @@ export default function ChatSessionPage() {
     ? [`${getApiBaseUrl()}/api/v1/sessions/${sessionId}/messages`, userSession.access_token] as const 
     : null;
 
+  const assetsKey = userSession?.access_token && sessionId 
+    ? [`${getApiBaseUrl()}/api/v1/sessions/${sessionId}/assets`, userSession.access_token] as const 
+    : null;
+
   const { data: messages = [], isLoading: historyLoading, mutate: mutateMessages } = useSWR(
     messagesKey,
     fetchChatMessages,
@@ -57,6 +69,12 @@ export default function ChatSessionPage() {
       revalidateIfStale: true,
       dedupingInterval: 2000 
     }
+  );
+
+  const { data: sessionAssets = [], mutate: mutateAssets } = useSWR(
+    assetsKey,
+    fetchSessionAssets,
+    { revalidateOnFocus: false }
   );
 
   const [inputText, setInputText] = useState("");
@@ -71,6 +89,9 @@ export default function ChatSessionPage() {
   const [drawingPhases, setDrawingPhases] = useState<any[] | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [renderingVideo, setRenderingVideo] = useState(false);
+  
+  const [videoVersion, setVideoVersion] = useState(1);
+  const [activeJobId, setActiveJobId] = useState<string | null>(null);
 
   const [splitPercent, setSplitPercent] = useState(14.3);
   const [mainSplitPercent, setMainSplitPercent] = useState(50);
@@ -121,24 +142,26 @@ export default function ChatSessionPage() {
   useEffect(() => () => clearSolvePoll(), [clearSolvePoll]);
 
   const applyMediaFromMessages = useCallback((msgList: ChatMessage[]) => {
-    const lastWithMedia = [...msgList]
+    // Find the absolute latest assistant message that was successful
+    const latestBotMsg = [...msgList]
       .reverse()
-      .find((m) => m.metadata?.coordinates || m.metadata?.video_url);
-    if (lastWithMedia?.metadata) {
-      if (lastWithMedia.metadata.coordinates) {
-        setCoordinates(lastWithMedia.metadata.coordinates);
+      .find((m) => m.role === "assistant" && m.type !== "error" && m.metadata?.coordinates);
+
+    if (latestBotMsg?.metadata) {
+      const meta = latestBotMsg.metadata;
+      setCoordinates(meta.coordinates || null);
+      setPolygonOrder(meta.polygon_order || null);
+      setCircles(meta.circles || null);
+      setDrawingPhases(meta.drawing_phases || null);
+      
+      if (meta.job_id) {
+        setActiveJobId(meta.job_id);
       }
-      if (lastWithMedia.metadata.polygon_order) {
-        setPolygonOrder(lastWithMedia.metadata.polygon_order);
-      }
-      if (lastWithMedia.metadata.circles) {
-        setCircles(lastWithMedia.metadata.circles);
-      }
-      if (lastWithMedia.metadata.drawing_phases) {
-        setDrawingPhases(lastWithMedia.metadata.drawing_phases);
-      }
-      if (lastWithMedia.metadata.video_url) {
-        setVideoUrl(lastWithMedia.metadata.video_url);
+      
+      // Initially pick the latest video if available in the result
+      if (meta.video_url) {
+        setVideoUrl(meta.video_url);
+        setVideoVersion(1); // Latest version is always 1 in the sorted response
       }
     }
   }, []);
@@ -150,6 +173,17 @@ export default function ChatSessionPage() {
   }, [messages, applyMediaFromMessages]);
 
   useEffect(() => {
+    // When assets change, updating the current video if appropriate
+    if (sessionAssets.length > 0) {
+      // By default, if we are not in the middle of a solve, use the latest asset
+      if (!currentStatus) {
+        setVideoUrl(sessionAssets[0].public_url);
+        setVideoVersion(1);
+      }
+    }
+  }, [sessionAssets, currentStatus]);
+
+  useEffect(() => {
     // Clear transient UI state when switching sessions
     setCoordinates(null);
     setPolygonOrder(null);
@@ -157,7 +191,25 @@ export default function ChatSessionPage() {
     setDrawingPhases(null);
     setVideoUrl(null);
     setCurrentStatus(null);
+    setActiveJobId(null);
+    setVideoVersion(1);
   }, [sessionId]);
+
+  const handleNextVersion = () => {
+    if (videoVersion > 1) {
+      const nextIdx = videoVersion - 2;
+      setVideoUrl(sessionAssets[nextIdx].public_url);
+      setVideoVersion(videoVersion - 1);
+    }
+  };
+
+  const handlePrevVersion = () => {
+    if (videoVersion < sessionAssets.length) {
+      const prevIdx = videoVersion;
+      setVideoUrl(sessionAssets[prevIdx].public_url);
+      setVideoVersion(videoVersion + 1);
+    }
+  };
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -259,7 +311,8 @@ export default function ChatSessionPage() {
 
     const finishSolveFlow = () => {
       clearSolvePoll();
-      void mutateMessages(); // Trigger revalidation to get the actual message from DB
+      void mutateMessages();
+      void mutateAssets();
       setCurrentStatus(null);
       try {
         solveWs?.close();
@@ -325,25 +378,15 @@ export default function ChatSessionPage() {
         throw new Error("Thiếu job_id từ máy chủ");
       }
 
-      // Proactive Polling: Start immediately alongside WebSocket for better robustness
       startSolvePolling(jobId);
+      setActiveJobId(jobId);
 
       solveWs = new WebSocket(`${wsBase}/ws/${jobId}`);
 
       solveWs.onmessage = (event) => {
-        let wsData: {
-          status?: string;
-          message?: string;
-          result?: { 
-            coordinates?: any; 
-            polygon_order?: any; 
-            circles?: any; 
-            drawing_phases?: any; 
-            video_url?: string 
-          };
-        };
+        let wsData: any;
         try {
-          wsData = JSON.parse(event.data) as typeof wsData;
+          wsData = JSON.parse(event.data);
         } catch {
           return;
         }
@@ -369,23 +412,7 @@ export default function ChatSessionPage() {
         }
 
         if (wsData.result) {
-          const r = wsData.result;
-          if (r.coordinates && typeof r.coordinates === "object") {
-            setCoordinates(r.coordinates as Record<string, [number, number]>);
-          }
-          if (r.polygon_order) {
-            setPolygonOrder(r.polygon_order);
-          }
-          if (r.circles) {
-            setCircles(r.circles);
-          }
-          if (r.drawing_phases) {
-            setDrawingPhases(r.drawing_phases);
-          }
-          if (r.video_url) {
-            setVideoUrl(r.video_url);
-            setRenderingVideo(false);
-          }
+          applyJobRow({ status: wsData.status, result: wsData.result });
         }
 
         if (wsData.status === "success") {
@@ -402,7 +429,6 @@ export default function ChatSessionPage() {
       clearSolvePoll();
       void mutateMessages();
     } finally {
-      // NON-BLOCKING: We unlock the UI immediately after the job is registered/started
       setSolveLoading(false);
     }
   };
@@ -425,7 +451,6 @@ export default function ChatSessionPage() {
         const pct = (x / rect.width) * 100;
         setSplitPercent(Math.min(Math.max(pct, SPLIT_MIN_PCT), SPLIT_MAX_PCT));
       } else if (draggingType.current === 'main') {
-        // Calculate relative to the area AFTER the sidebar
         const sidebarWidth = sidebarCollapsed ? 52 : (rect.width * splitPercent) / 100;
         const remainingWidth = rect.width - sidebarWidth;
         const relativeX = x - sidebarWidth;
@@ -544,13 +569,7 @@ export default function ChatSessionPage() {
                 </div>
 
                 <div className="flex gap-3 items-stretch">
-                  <div
-                    className="relative flex-1 min-w-0"
-                    onDragOver={onDragOverInput}
-                    onDrop={onDropInput}
-                  >
-                    {/* OCR Loading is now non-blocking and shown as a subtle indicator elsewhere if needed, 
-                        but we remove the blocking overlay to allow typing. */}
+                  <div className="relative flex-1 min-w-0" onDragOver={onDragOverInput} onDrop={onDropInput}>
                     <textarea
                       value={inputText}
                       onChange={(e) => setInputText(e.target.value)}
@@ -593,17 +612,12 @@ export default function ChatSessionPage() {
             <div className="flex-1 overflow-y-auto px-6 py-6 space-y-10 scrollbar-thin">
               <AnimatePresence mode="popLayout">
                 {coordinates && (
-                  <motion.div
-                    key="static"
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    className="space-y-4"
-                  >
+                  <motion.div key="static" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="space-y-4">
                     <div className="flex items-center gap-2">
                       <div className="w-1 h-3 bg-indigo-500 rounded-full" />
                       <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-[0.2em]">Hình vẽ mô phỏng</span>
                     </div>
-                    <div className="bg-[var(--card-bg)] rounded-3xl border border-[var(--border)] p-4 shadow-2xl overflow-hidden">
+                    <div className="bg-[var(--card-bg)] rounded-3xl border border-[var(--border)] p-1 shadow-2xl overflow-hidden self-center">
                       <StaticGeometryCanvas 
                         coordinates={coordinates} 
                         polygonOrder={polygonOrder || undefined}
@@ -615,20 +629,22 @@ export default function ChatSessionPage() {
                 )}
 
                 {(videoUrl || renderingVideo) && (
-                  <motion.div
-                    key="video"
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    className="space-y-4"
-                  >
+                  <motion.div key="video" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="space-y-4">
                     <div className="flex items-center gap-2">
                       <div className="w-1 h-3 bg-purple-500 rounded-full" />
                       <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-[0.2em]">
                         {videoUrl ? "🎬 Phim minh họa" : "🎨 Đang dựng hình..."}
                       </span>
                     </div>
-                    <div className="bg-[var(--card-bg)] rounded-3xl border border-[var(--border)] p-4 shadow-2xl relative overflow-hidden">
-                      <AnimationPreview videoUrl={videoUrl || undefined} loading={renderingVideo} />
+                    <div className="bg-[var(--card-bg)] rounded-3xl border border-[var(--border)] p-1 shadow-2xl relative overflow-hidden">
+                      <AnimationPreview 
+                        videoUrl={videoUrl || undefined} 
+                        loading={renderingVideo} 
+                        currentVersion={videoVersion}
+                        totalVersions={sessionAssets.length}
+                        onNext={handleNextVersion}
+                        onPrev={handlePrevVersion}
+                      />
                     </div>
                   </motion.div>
                 )}

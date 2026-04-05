@@ -2,29 +2,52 @@
 
 import { motion } from "framer-motion";
 import { PlayCircle, Loader2 } from "lucide-react";
+import VersionSwitcher from "./VersionSwitcher";
 
 interface AnimationPreviewProps {
   videoUrl?: string;
   loading?: boolean;
+  currentVersion?: number;
+  totalVersions?: number;
+  onNext?: () => void;
+  onPrev?: () => void;
 }
 
-export default function AnimationPreview({ videoUrl, loading }: AnimationPreviewProps) {
+export default function AnimationPreview({ 
+  videoUrl, 
+  loading, 
+  currentVersion = 1, 
+  totalVersions = 1, 
+  onNext = () => {}, 
+  onPrev = () => {} 
+}: AnimationPreviewProps) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="bg-zinc-950 border border-white/10 rounded-3xl overflow-hidden aspect-video relative group flex items-center justify-center"
+      className="bg-zinc-950 border border-white/10 rounded-3xl overflow-hidden aspect-video relative group flex items-center justify-center p-2"
     >
       {videoUrl ? (
-        <video 
-          key={videoUrl}
-          src={videoUrl}
-          controls
-          className="w-full h-full object-contain"
-          autoPlay
-          muted
-          loop
-        />
+        <div className="relative w-full h-full">
+          <video 
+            key={`${videoUrl}-${currentVersion}`}
+            src={videoUrl}
+            controls
+            className="w-full h-full object-contain rounded-2xl"
+            autoPlay
+            muted
+            loop
+          />
+          
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-30 pointer-events-auto">
+            <VersionSwitcher 
+              currentVersion={currentVersion} 
+              totalVersions={totalVersions} 
+              onNext={onNext} 
+              onPrev={onPrev} 
+            />
+          </div>
+        </div>
       ) : (
         <div className="flex flex-col items-center gap-4 p-12 text-center">
           <div className="w-16 h-16 rounded-3xl bg-white/5 border border-white/10 flex items-center justify-center shadow-2xl">

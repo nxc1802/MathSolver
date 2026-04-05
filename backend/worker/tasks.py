@@ -1,3 +1,4 @@
+import os
 from .celery_app import celery_app
 from agents.renderer_agent import RendererAgent
 from app.supabase_client import get_supabase
