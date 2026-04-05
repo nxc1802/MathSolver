@@ -83,56 +83,49 @@ Xóa session (và dữ liệu liên quan tùy FK phía DB).
 
 ### `POST /api/v1/sessions/{session_id}/solve`
 
-Gửi bài toán trong một session.
+Gửi bài toán trong một session. **Tính năng mới**: Backend tự động lấy toàn bộ lịch sử chat trong session để làm ngữ cảnh (Context-aware). Điều này cho phép người dùng ra lệnh bổ sung (ví dụ: "vẽ thêm đường cao AH") cho hình đang có.
 
 **Request body (JSON):**
 
 | Trường | Kiểu | Bắt buộc | Mô tả |
 |--------|------|----------|--------|
-| `text` | string | Có | Mô tả bài toán (tiếng Việt hoặc LaTeX) |
-| `image_url` | string \| null | Không | URL ảnh đề bài; backend sẽ OCR |
-| `request_video` | boolean | Không (mặc định `false`) | Có xếp hàng render video Manim qua Celery |
+| `text` | string | Có | Mô tả bài toán hoặc lệnh bổ sung |
+| `image_url` | string \| null | Không | URL ảnh đề bài (chỉ dùng cho lượt đầu hoặc khi có hình mới) |
+| `request_video` | boolean | Không | Có render video Manim hay không |
 
-**Response:**
-
-```json
-{
-  "job_id": "<uuid>",
-  "status": "processing"
-}
-```
-
-**Luồng:**
-
-1. Lưu tin nhắn user vào `messages`.
-2. Tạo bản ghi `jobs` (`status`: `processing`).
-3. Xử lý nền: OCR (nếu có ảnh) → parse → knowledge augment → DSL → solver → (tuỳ chọn) Celery render video.
-4. Cập nhật `jobs` và gửi sự kiện qua WebSocket (xem dưới).
-
-**Trạng thái job đặc biệt:** `rendering_queued` khi đã giải xong nhưng video đang chờ worker.
-
-**Lỗi:** `403` nếu không sở hữu session.
+**Ghi chú về Rendering:**
+- **Hình vẽ (Drawing)**: Backend cung cấp đầy đủ `coordinates`, `geometry_dsl` và `drawing_phases`. **Frontend (FE) chịu trách nhiệm render** dựa trên dữ liệu này cho mọi bài toán.
+- **Video**: Nếu `request_video=true`, BE sẽ render video và lưu trữ có versioning.
 
 ---
 
-## Kết quả giải toán (Job Result)
+## 📈 Quản lý Asset & Versioning
 
-Khi `status = "success"`, trường `result` của job (qua WebSocket hoặc `GET /api/v1/solve/{job_id}`) trả về cấu trúc sau:
+Mọi video được sinh ra trong một session sẽ được lưu trữ dưới dạng version để tránh bị ghi đè.
+
+### Bảng `session_assets` (Tham chiếu DB)
+- Mỗi bản ghi liên kết một `job_id` với một file trong Storage.
+- Path mẫu: `sessions/{session_id}/video_v{version}_{job_id}.mp4`
+
+---
+
+## Kết quả giải toán (Job Result) — Multi-turn Example
+
+Khi người dùng gửi lệnh bổ sung, `geometry_dsl` trả về sẽ bao gồm cả các thực thể cũ và mới.
+
+**Response `result` example (sau lệnh "vẽ thêm đường chéo AC"):**
 
 ```json
 {
   "status": "success",
-  "semantic_analysis": "Cho hình chữ nhật ABCD có AB=10, AD=20. M là trung điểm AB. Vẽ đoạn thẳng MC.\n\n**Các bước dựng hình:**\n- **Hình cơ bản**: Xác định các điểm A, B, C, D. Vẽ các đoạn thẳng AB, BC, CD, DA.\n- **Điểm và đoạn phụ**: Xác định điểm M. Vẽ đoạn thẳng MC.",
-  "geometry_dsl": "POLYGON_ORDER(A,B,C,D)\nPOINT(A)\nPOINT(B)\nPOINT(C)\nPOINT(D)\nLENGTH(AB, 10)\nLENGTH(AD, 20)\nMIDPOINT(M, AB)\nSEGMENT(M, C)",
+  "semantic_analysis": "Cho hình chữ nhật ABCD có AB=10, AD=5. Vẽ thêm đường chéo AC.",
+  "geometry_dsl": "POLYGON_ORDER(A,B,C,D)\nPOINT(A)\nPOINT(B)\nPOINT(C)\nPOINT(D)\nLENGTH(AB, 10)\nLENGTH(AD, 5)\nPERPENDICULAR(AB, AD)\nSEGMENT(A, C)",
   "coordinates": {
     "A": [0.0, 0.0],
-    "B": [-10.0, 0.0],
-    "C": [-10.0, -20.0],
-    "D": [0.0, -20.0],
-    "M": [-5.0, 0.0]
+    "B": [10.0, 0.0],
+    "C": [10.0, 5.0],
+    "D": [0.0, 5.0]
   },
-  "polygon_order": ["A", "B", "C", "D"],
-  "circles": [],
   "drawing_phases": [
     {
       "phase": 1,
@@ -143,28 +136,15 @@ Khi `status = "success"`, trường `result` của job (qua WebSocket hoặc `GE
     {
       "phase": 2,
       "label": "Điểm và đoạn phụ",
-      "points": ["M"],
-      "segments": [["M","C"]]
+      "points": [],
+      "segments": [["A","C"]]
     }
   ]
 }
 ```
 
-### Mô tả các trường
-
-| Trường | Kiểu | Mô tả |
-|--------|------|--------|
-| `semantic_analysis` | string | **Mô tả tiếng Việt** tóm tắt bài toán + **Các bước dựng hình** gợi ý. FE dùng để hiển thị text trong Chat bubble. |
-| `polygon_order` | `string[]` | Danh sách đỉnh tạo thành **Chu vi chính (Boundary)** của hình cơ sở. Hệ thống đã lọc bỏ toàn bộ điểm phụ (M, N, ...) để đảm bảo FE không vẽ nhầm các đường chéo xuyên tâm. |
-| `circles` | `array` | Danh sách đường tròn: `[{"center": "O", "radius": 5.0}, ...]`. |
-| `drawing_phases` | `array` | **Mấu chốt logic**: Danh sách các lớp vẽ theo thứ tự (Phases). Chứa các cặp điểm (`segments`) cần nối để tránh việc FE tự ý nối điểm theo tọa độ gây sai lệch hình học. |
-
-### drawing_phases — Hướng dẫn tích hợp FE
-
 > [!IMPORTANT]
-> FE **phải** ưu tiên vẽ theo `drawing_phases` thay vì tự ý nối các điểm. Cấu trúc này đảm bảo các điểm trung điểm (M, N) hay điểm phụ không bị nối nhầm vào chu vi của hình chính.
-
-Mỗi phần tử trong `drawing_phases`:
+> FE luôn ưu tiên vẽ toàn bộ `coordinates` và các `segments` trong `drawing_phases` để đảm bảo tính nhất quán qua các lượt chat.
 
 ```typescript
 interface DrawingPhase {

@@ -102,6 +102,16 @@ async def process_session_job(
 
     supabase = get_supabase()
     try:
+        # Fetch full history for the session
+        history_res = (
+            supabase.table("messages")
+            .select("*")
+            .eq("session_id", session_id)
+            .order("created_at", desc=False)
+            .execute()
+        )
+        history = history_res.data if history_res.data else []
+
         result = await get_orchestrator().run(
             request.text,
             request.image_url,
@@ -109,6 +119,7 @@ async def process_session_job(
             session_id=session_id,
             status_callback=status_update,
             request_video=request.request_video,
+            history=history,
         )
 
         status = result.get("status", "error") if "error" not in result else "error"

@@ -16,12 +16,19 @@ class GeometryAgent:
     def __init__(self):
         self.llm = get_llm_client()
 
-    async def generate_dsl(self, semantic_data: Dict[str, Any]) -> str:
+    async def generate_dsl(self, semantic_data: Dict[str, Any], previous_dsl: str = None) -> str:
         logger.info("==[GeometryAgent] Generating DSL from semantic data==")
-        logger.debug(f"[GeometryAgent] Input semantic data: {json.dumps(semantic_data, ensure_ascii=False, indent=2)}")
+        if previous_dsl:
+            logger.info(f"[GeometryAgent] Using previous DSL context (len={len(previous_dsl)})")
 
         system_prompt = """
 You are a Geometry DSL Generator. Convert semantic geometry data into a precise Geometry DSL program.
+
+=== MULTI-TURN CONTEXT ===
+If a PREVIOUS DSL is provided, your job is to UPDATE or EXTEND it.
+1. DO NOT remove existing points unless the user explicitly asks to "redefine" or "move" them.
+2. Ensure new segments/points connect correctly to existing ones.
+3. Your output should be the ENTIRE updated DSL, not just the changes.
 
 === DSL COMMANDS ===
 POINT(A)                    — declare a point
@@ -103,11 +110,15 @@ POINT(O)
 CIRCLE(O, 7)
 """
 
+        user_content = f"Semantic Data: {json.dumps(semantic_data, ensure_ascii=False)}"
+        if previous_dsl:
+            user_content = f"PREVIOUS DSL:\n{previous_dsl}\n\nUPDATE WITH NEW DATA: {json.dumps(semantic_data, ensure_ascii=False)}"
+
         logger.debug("[GeometryAgent] Calling LLM (Multi-Layer)...")
         content = await self.llm.chat_completions_create(
             messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"Semantic Data: {json.dumps(semantic_data, ensure_ascii=False)}"}
+                {"role": "user", "content": user_content}
             ]
         )
         dsl = content.strip() if content else ""

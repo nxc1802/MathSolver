@@ -78,7 +78,11 @@ class Orchestrator:
         session_id: str = None,
         status_callback=None,
         request_video: bool = False,
+        history: list = None,
     ) -> Dict[str, Any]:
+        """
+        Run the full pipeline. Optional history allows context-aware solving.
+        """
         _step_io(
             "orchestrate_start",
             input_val={
@@ -86,6 +90,7 @@ class Orchestrator:
                 "text_len": len(text or ""),
                 "image_url": image_url,
                 "request_video": request_video,
+                "history_len": len(history or []),
             },
             output_val=None,
         )
@@ -93,6 +98,23 @@ class Orchestrator:
         if status_callback:
             await status_callback("processing")
 
+        # 1. Extract context from history (if any)
+        previous_context = None
+        if history:
+            # Look for the last assistant message with geometry data
+            for msg in reversed(history):
+                if msg.get("role") == "assistant" and msg.get("metadata", {}).get("geometry_dsl"):
+                    previous_context = {
+                        "geometry_dsl": msg["metadata"]["geometry_dsl"],
+                        "coordinates": msg["metadata"].get("coordinates", {}),
+                        "analysis": msg.get("content", ""),
+                    }
+                    break
+        
+        if previous_context:
+            _step_io("context_found", input_val=None, output_val={"dsl_len": len(previous_context["geometry_dsl"])})
+
+        # 2. Gather input text (OCR or direct)
         input_text = text
         if image_url:
             input_text = await self.ocr_agent.process_url(image_url)
@@ -112,17 +134,23 @@ class Orchestrator:
             if status_callback:
                 await status_callback("solving")
 
-            _step_io("step2_parse", input_val=input_text, output_val=None)
-            semantic_json = await self.parser_agent.process(input_text, feedback=feedback)
+            # Parser with context
+            _step_io("step2_parse", input_val=f"{input_text[:50]}...", output_val=None)
+            semantic_json = await self.parser_agent.process(input_text, feedback=feedback, context=previous_context)
             semantic_json["input_text"] = input_text
             _step_io("step2_parse", input_val=None, output_val=semantic_json)
 
+            # Knowledge augmentation
             _step_io("step3_knowledge", input_val=semantic_json, output_val=None)
             semantic_json = self.knowledge_agent.augment_semantic_data(semantic_json)
             _step_io("step3_knowledge", input_val=None, output_val=semantic_json)
 
+            # Geometry DSL with context (passing previous DSL to guide generation)
             _step_io("step4_geometry_dsl", input_val=semantic_json, output_val=None)
-            dsl_code = await self.geometry_agent.generate_dsl(semantic_json)
+            dsl_code = await self.geometry_agent.generate_dsl(
+                semantic_json, 
+                previous_dsl=previous_context["geometry_dsl"] if previous_context else None
+            )
             _step_io("step4_geometry_dsl", input_val=None, output_val=dsl_code)
 
             _step_io("step5_dsl_parse", input_val=dsl_code, output_val=None)

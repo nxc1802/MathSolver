@@ -68,6 +68,21 @@ CREATE TABLE IF NOT EXISTS public.jobs (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- 5. Session Assets Table (For Video Versioning)
+CREATE TABLE IF NOT EXISTS public.session_assets (
+    id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    session_id   UUID NOT NULL REFERENCES public.sessions(id) ON DELETE CASCADE,
+    job_id       UUID NOT NULL REFERENCES public.jobs(id) ON DELETE CASCADE,
+    asset_type   TEXT NOT NULL CHECK (asset_type IN ('video')),
+    storage_path TEXT NOT NULL,
+    public_url   TEXT NOT NULL,
+    version      INTEGER NOT NULL DEFAULT 1,
+    created_at   TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_session_assets_session_id ON public.session_assets(session_id);
+CREATE INDEX IF NOT EXISTS idx_session_assets_job_id ON public.session_assets(job_id);
+
 -- ============================================================
 -- ROW LEVEL SECURITY (RLS)
 -- ============================================================
@@ -76,6 +91,7 @@ ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.jobs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.session_assets ENABLE ROW LEVEL SECURITY;
 
 -- Profiles: Users view own profile
 CREATE POLICY "Users view own profile" ON public.profiles FOR SELECT USING (auth.uid() = id);
@@ -91,3 +107,8 @@ CREATE POLICY "Users view own messages" ON public.messages FOR ALL USING (
 
 -- Jobs: Users view own jobs
 CREATE POLICY "Users view own jobs" ON public.jobs FOR ALL USING (auth.uid() = user_id OR user_id IS NULL);
+
+-- Session Assets: Users view own assets
+CREATE POLICY "Users view own assets" ON public.session_assets FOR SELECT USING (
+    session_id IN (SELECT id FROM public.sessions WHERE user_id = auth.uid())
+);
