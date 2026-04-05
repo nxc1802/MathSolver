@@ -68,6 +68,7 @@ export default function ChatSessionPage() {
   const [coordinates, setCoordinates] = useState<Record<string, [number, number]> | null>(null);
   const [polygonOrder, setPolygonOrder] = useState<string[] | null>(null);
   const [circles, setCircles] = useState<any[] | null>(null);
+  const [drawingPhases, setDrawingPhases] = useState<any[] | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [renderingVideo, setRenderingVideo] = useState(false);
 
@@ -133,6 +134,9 @@ export default function ChatSessionPage() {
       if (lastWithMedia.metadata.circles) {
         setCircles(lastWithMedia.metadata.circles);
       }
+      if (lastWithMedia.metadata.drawing_phases) {
+        setDrawingPhases(lastWithMedia.metadata.drawing_phases);
+      }
       if (lastWithMedia.metadata.video_url) {
         setVideoUrl(lastWithMedia.metadata.video_url);
       }
@@ -150,6 +154,7 @@ export default function ChatSessionPage() {
     setCoordinates(null);
     setPolygonOrder(null);
     setCircles(null);
+    setDrawingPhases(null);
     setVideoUrl(null);
     setCurrentStatus(null);
   }, [sessionId]);
@@ -232,10 +237,19 @@ export default function ChatSessionPage() {
 
     let solveWs: WebSocket | null = null;
 
-    const applyJobRow = (job: { status?: string; result?: Record<string, unknown> }) => {
+    const applyJobRow = (job: { status?: string; result?: Record<string, any> }) => {
       const r = job.result || {};
       if (r.coordinates && typeof r.coordinates === "object") {
         setCoordinates(r.coordinates as Record<string, [number, number]>);
+      }
+      if (r.polygon_order) {
+        setPolygonOrder(r.polygon_order);
+      }
+      if (r.circles) {
+        setCircles(r.circles);
+      }
+      if (r.drawing_phases) {
+        setDrawingPhases(r.drawing_phases);
       }
       if (typeof r.video_url === "string" && r.video_url) {
         setVideoUrl(r.video_url);
@@ -320,7 +334,13 @@ export default function ChatSessionPage() {
         let wsData: {
           status?: string;
           message?: string;
-          result?: { coordinates?: unknown; video_url?: string };
+          result?: { 
+            coordinates?: any; 
+            polygon_order?: any; 
+            circles?: any; 
+            drawing_phases?: any; 
+            video_url?: string 
+          };
         };
         try {
           wsData = JSON.parse(event.data) as typeof wsData;
@@ -352,6 +372,15 @@ export default function ChatSessionPage() {
           const r = wsData.result;
           if (r.coordinates && typeof r.coordinates === "object") {
             setCoordinates(r.coordinates as Record<string, [number, number]>);
+          }
+          if (r.polygon_order) {
+            setPolygonOrder(r.polygon_order);
+          }
+          if (r.circles) {
+            setCircles(r.circles);
+          }
+          if (r.drawing_phases) {
+            setDrawingPhases(r.drawing_phases);
           }
           if (r.video_url) {
             setVideoUrl(r.video_url);
@@ -579,6 +608,7 @@ export default function ChatSessionPage() {
                         coordinates={coordinates} 
                         polygonOrder={polygonOrder || undefined}
                         circles={circles || undefined}
+                        drawingPhases={drawingPhases || undefined}
                       />
                     </div>
                   </motion.div>

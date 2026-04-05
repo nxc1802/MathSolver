@@ -67,10 +67,9 @@ Toàn bộ tin nhắn của session (theo `created_at` tăng dần).
 
 ### `DELETE /api/v1/sessions/{session_id}`
 
-Xóa session và **toàn bộ dữ liệu liên quan** (messages, jobs). Bản ghi trong bảng `jobs` và `messages` sẽ được xóa trước để tránh lỗi ràng buộc khóa ngoại (FK).
+Xóa session (và dữ liệu liên quan tùy FK phía DB).
 
 **Response:** `{ "status": "ok", "deleted_id": "<uuid>" }`
-
 
 ### `PATCH /api/v1/sessions/{session_id}/title`
 
@@ -107,10 +106,8 @@ Gửi bài toán trong một session.
 
 1. Lưu tin nhắn user vào `messages`.
 2. Tạo bản ghi `jobs` (`status`: `processing`).
-3. **Tự động đổi tên Session**: Nếu tiêu đề hiện tại là `"Bài toán mới"`, backend sẽ tự động cập nhật tiêu đề dựa trên 50 ký tự đầu của `text`.
-4. Xử lý nền: OCR (nếu có ảnh) → parse → knowledge augment → DSL → solver → (tuỳ chọn) Celery render video.
-5. Cập nhật `jobs` và gửi sự kiện qua WebSocket.
-6. Khi xử lý thành công, kết quả sẽ được chèn vào bảng `messages` dưới dạng tin nhắn của `assistant`.
+3. Xử lý nền: OCR (nếu có ảnh) → parse → knowledge augment → DSL → solver → (tuỳ chọn) Celery render video.
+4. Cập nhật `jobs` và gửi sự kiện qua WebSocket (xem dưới).
 
 **Trạng thái job đặc biệt:** `rendering_queued` khi đã giải xong nhưng video đang chờ worker.
 
@@ -125,20 +122,17 @@ Khi `status = "success"`, trường `result` của job (qua WebSocket hoặc `GE
 ```json
 {
   "status": "success",
-  "semantic_analysis": "Cho hình chữ nhật ABCD có AB=10, AD=20. M và N lần lượt là trung điểm AB, AD.\n\n**Các bước dựng hình:**\n- **Hình cơ bản**: Xác định các điểm A, B, C, D. Vẽ các đoạn thẳng AB, BC, CD, DA.\n- **Điểm và đoạn phụ**: Xác định các điểm M, N. Vẽ đoạn thẳng MN.",
-  "geometry_dsl": "POLYGON_ORDER(A,B,C,D)\nPOINT(A)\nPOINT(B)\nPOINT(C)\nPOINT(D)\nLENGTH(AB, 10)\nLENGTH(AD, 20)\nMIDPOINT(M, AB)\nMIDPOINT(N, AD)\nSEGMENT(M, N)",
+  "semantic_analysis": "Cho hình chữ nhật ABCD có AB=10, AD=20. M là trung điểm AB. Vẽ đoạn thẳng MC.\n\n**Các bước dựng hình:**\n- **Hình cơ bản**: Xác định các điểm A, B, C, D. Vẽ các đoạn thẳng AB, BC, CD, DA.\n- **Điểm và đoạn phụ**: Xác định điểm M. Vẽ đoạn thẳng MC.",
+  "geometry_dsl": "POLYGON_ORDER(A,B,C,D)\nPOINT(A)\nPOINT(B)\nPOINT(C)\nPOINT(D)\nLENGTH(AB, 10)\nLENGTH(AD, 20)\nMIDPOINT(M, AB)\nSEGMENT(M, C)",
   "coordinates": {
     "A": [0.0, 0.0],
     "B": [-10.0, 0.0],
     "C": [-10.0, -20.0],
     "D": [0.0, -20.0],
-    "M": [-5.0, 0.0],
-    "N": [0.0, -10.0]
+    "M": [-5.0, 0.0]
   },
   "polygon_order": ["A", "B", "C", "D"],
-  "circles": [
-    {"center": "O", "radius": 5.0}
-  ],
+  "circles": [],
   "drawing_phases": [
     {
       "phase": 1,
@@ -149,11 +143,10 @@ Khi `status = "success"`, trường `result` của job (qua WebSocket hoặc `GE
     {
       "phase": 2,
       "label": "Điểm và đoạn phụ",
-      "points": ["M", "N"],
-      "segments": [["M","N"]]
+      "points": ["M"],
+      "segments": [["M","C"]]
     }
-  ],
-  "video_url": "https://storage.../manim_video.mp4"
+  ]
 }
 ```
 
@@ -161,11 +154,10 @@ Khi `status = "success"`, trường `result` của job (qua WebSocket hoặc `GE
 
 | Trường | Kiểu | Mô tả |
 |--------|------|--------|
-| `semantic_analysis` | string | **Mô tả tiếng Việt** tóm tắt bài toán + **Các bước dựng hình** do trợ lý sinh ra. Dùng để hiển thị trong chat bubble của assistant. |
-| `polygon_order` | `string[]` | Danh sách đỉnh tạo thành khung hình chính (Base shape). |
+| `semantic_analysis` | string | **Mô tả tiếng Việt** tóm tắt bài toán + **Các bước dựng hình** gợi ý. FE dùng để hiển thị text trong Chat bubble. |
+| `polygon_order` | `string[]` | Danh sách đỉnh tạo thành **Chu vi chính (Boundary)** của hình cơ sở. Hệ thống đã lọc bỏ toàn bộ điểm phụ (M, N, ...) để đảm bảo FE không vẽ nhầm các đường chéo xuyên tâm. |
 | `circles` | `array` | Danh sách đường tròn: `[{"center": "O", "radius": 5.0}, ...]`. |
-| `drawing_phases` | `array` | Danh sách giai đoạn vẽ. **FE nên dùng cái này để vẽ hình** vì nó tách biệt hình chính và điểm phụ. |
-| `video_url` | `string` | Link video Manim (có sau khi worker xử lý xong Celery). |
+| `drawing_phases` | `array` | **Mấu chốt logic**: Danh sách các lớp vẽ theo thứ tự (Phases). Chứa các cặp điểm (`segments`) cần nối để tránh việc FE tự ý nối điểm theo tọa độ gây sai lệch hình học. |
 
 ### drawing_phases — Hướng dẫn tích hợp FE
 
@@ -186,8 +178,9 @@ interface DrawingPhase {
 **Gợi ý rendering (Canvas/WebGL):**
 
 ```
-Phase 1 → Vẽ polygon chính (dùng polygon_order), hiện tên điểm gốc (A,B,C,D)
-Phase 2 → Thêm điểm phụ (M, N), vẽ các đoạn thẳng phụ (MN)
+Phase 1 → Vẽ polygon chính dựa trên polygon_order (Boundary) hoặc drawing_phases[0].segments.
+Phase 2+ → Vẽ các đoạn thẳng phụ (Auxiliary lines) dựa trên drawing_phases[1+].segments.
+Lưu ý: Luôn vẽ điểm (nodes) và nhãn (labels) cho tất cả các điểm có trong coordinates.
 ```
 
 Tọa độ cho mỗi điểm lấy từ `coordinates[pointId]` dưới dạng `[x, y]` (đơn vị logic, FE cần scale phù hợp với canvas).

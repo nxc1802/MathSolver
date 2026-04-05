@@ -7,9 +7,15 @@ interface StaticGeometryCanvasProps {
   coordinates?: Record<string, [number, number]>;
   polygonOrder?: string[];
   circles?: Array<{ center: string; radius: number }>;
+  drawingPhases?: Array<{
+    phase: number;
+    label: string;
+    points: string[];
+    segments: string[][];
+  }>;
 }
 
-export default function StaticGeometryCanvas({ coordinates, polygonOrder, circles }: StaticGeometryCanvasProps) {
+export default function StaticGeometryCanvas({ coordinates, polygonOrder, circles, drawingPhases }: StaticGeometryCanvasProps) {
   const { viewBox, points, paths, circlePaths, spanX } = useMemo(() => {
     if (!coordinates || Object.keys(coordinates).length === 0) {
       return { viewBox: "0 0 100 100", points: [], paths: "", circlePaths: [], spanX: 100 };
@@ -47,8 +53,21 @@ export default function StaticGeometryCanvas({ coordinates, polygonOrder, circle
     const sX = maxX - minX + padding * 2;
 
     let pathsStr = "";
-    if (polygonOrder && polygonOrder.length > 0) {
-      // Use explicit order
+    if (drawingPhases && drawingPhases.length > 0) {
+      // Priority 1: Multi-phase structured drawing
+      const phasePaths: string[] = [];
+      drawingPhases.forEach(phase => {
+        phase.segments.forEach(([p1Label, p2Label]) => {
+          const pt1 = parsedPoints.find(p => p.label === p1Label);
+          const pt2 = parsedPoints.find(p => p.label === p2Label);
+          if (pt1 && pt2) {
+            phasePaths.push(`M ${pt1.x} ${pt1.y} L ${pt2.x} ${pt2.y}`);
+          }
+        });
+      });
+      pathsStr = phasePaths.join(" ");
+    } else if (polygonOrder && polygonOrder.length > 0) {
+      // Priority 2: Single polygon boundary
       const ordered = polygonOrder
         .map(label => parsedPoints.find(p => p.label === label))
         .filter(Boolean) as typeof parsedPoints;
@@ -58,14 +77,13 @@ export default function StaticGeometryCanvas({ coordinates, polygonOrder, circle
         if (ordered.length >= 3) pathsStr += " Z";
       }
     } else if (parsedPoints.length >= 3) {
-      // Default order (fallback)
       pathsStr = parsedPoints.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(" ") + " Z";
     } else if (parsedPoints.length === 2) {
       pathsStr = `M ${parsedPoints[0].x} ${parsedPoints[0].y} L ${parsedPoints[1].x} ${parsedPoints[1].y}`;
     }
 
     return { viewBox: vb, points: parsedPoints, paths: pathsStr, circlePaths: circleParsed, spanX: sX };
-  }, [coordinates, polygonOrder, circles]);
+  }, [coordinates, polygonOrder, circles, drawingPhases]);
 
   if (!coordinates || Object.keys(coordinates).length === 0) {
     return (
