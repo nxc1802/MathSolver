@@ -33,6 +33,12 @@ class GeometryEngine:
             elif c.type == 'segment':
                 segments_meta.append(list(c.targets))
                 # don't add to equations — pure drawing annotation
+            elif c.type == 'lines_metadata':
+                lines_meta_list = [t.split(',') for t in c.targets]
+                real_constraints.append(c) # for passing to builder? or just keep here
+            elif c.type == 'rays_metadata':
+                rays_meta_list = [t.split(',') for t in c.targets]
+                real_constraints.append(c)
             else:
                 real_constraints.append(c)
 
@@ -123,6 +129,18 @@ class GeometryEngine:
                 equations.append(2*vM[1] - vA[1] - vB[1])  # 2*M_y = A_y + B_y
                 logger.debug(f"[GeometryEngine]     -> Midpoint eq: {pM} = mid({pA},{pB})")
 
+            elif c.type == 'section' and len(c.targets) == 3:
+                # SECTION(E, A, C, k)  → E = A + k*(C-A)
+                pE, pA, pC = c.targets
+                if any(t not in point_vars for t in [pE, pA, pC]):
+                    logger.warning(f"[GeometryEngine]   Skip section: missing points in {c.targets}.")
+                    continue
+                vE, vA, vC = point_vars[pE], point_vars[pA], point_vars[pC]
+                k = float(c.value)
+                equations.append(vE[0] - (vA[0] + k * (vC[0] - vA[0])))
+                equations.append(vE[1] - (vA[1] + k * (vC[1] - vA[1])))
+                logger.debug(f"[GeometryEngine]     -> Section eq: {pE} = {pA} + {k}({pC}-{pA})")
+
             elif c.type == 'circle':
                 # Circle doesn't add position constraints for center (already a point)
                 logger.debug(f"[GeometryEngine]     -> Circle: center={c.targets[0]}, r={c.value} (meta only)")
@@ -137,24 +155,34 @@ class GeometryEngine:
 
         # ── Strategy 1: SymPy symbolic ───────────────────────────────────────
         coords = self._try_symbolic(equations, all_vars, point_vars)
+        
+        # Extract lines/rays from constraints for builder
+        lines_ext = []
+        rays_ext = []
+        for c in constraints:
+            if c.type == 'lines_metadata':
+                lines_ext = [t.split(',') for t in c.targets]
+            if c.type == 'rays_metadata':
+                rays_ext = [t.split(',') for t in c.targets]
+
         if coords:
-            return self._build_result(coords, polygon_order, circles_meta, segments_meta, points)
+            return self._build_result(coords, polygon_order, circles_meta, segments_meta, lines_ext, rays_ext, points)
 
         # ── Strategy 2: Numerical nsolve ─────────────────────────────────────
         if n_eqs == n_vars:
             coords = self._try_nsolve(equations, all_vars, point_vars, n_vars)
             if coords:
-                return self._build_result(coords, polygon_order, circles_meta, segments_meta, points)
+                return self._build_result(coords, polygon_order, circles_meta, segments_meta, lines_ext, rays_ext, points)
 
         # ── Strategy 3: Scipy least-squares ─────────────────────────────────
         coords = self._try_lsq(equations, all_vars, point_vars, n_vars)
         if coords:
-            return self._build_result(coords, polygon_order, circles_meta, segments_meta, points)
+            return self._build_result(coords, polygon_order, circles_meta, segments_meta, lines_ext, rays_ext, points)
 
         # ── Strategy 4: Differential evolution ──────────────────────────────
         coords = self._try_global(equations, all_vars, point_vars, n_vars)
         if coords:
-            return self._build_result(coords, polygon_order, circles_meta, segments_meta, points)
+            return self._build_result(coords, polygon_order, circles_meta, segments_meta, lines_ext, rays_ext, points)
 
         logger.error("[GeometryEngine] All strategies exhausted.")
         return None
@@ -259,6 +287,8 @@ class GeometryEngine:
         polygon_order: List[str],
         circles_meta: List[Dict],
         segments_meta: List[List[str]],
+        lines_meta: List[List[str]],
+        rays_meta: List[List[str]],
         points: List[Point],
     ) -> Dict[str, Any]:
         """
@@ -330,5 +360,7 @@ class GeometryEngine:
             "coordinates": coords,
             "polygon_order": polygon_order,
             "circles": circles_meta,
+            "lines": lines_meta,
+            "rays": rays_meta,
             "drawing_phases": drawing_phases,
         }

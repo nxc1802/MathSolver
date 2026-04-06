@@ -15,6 +15,8 @@ class DSLParser:
         polygon_order: List[str] = []
         circles: List[Dict[str, Any]] = []
         segments: List[List[str]] = []
+        lines_ext: List[List[str]] = []
+        rays: List[List[str]] = []
 
         logger.info("==[DSLParser] Parsing DSL input==")
         logger.debug(f"[DSLParser] Raw DSL:\n{text}")
@@ -79,6 +81,16 @@ class DSLParser:
                 logger.debug(f"[DSLParser]   + MIDPOINT: {mid} = mid({seg})")
                 continue
 
+            # SECTION(E, A, C, 0.66)  — E lies on AC s.t. AE = 0.66 * AC
+            m = re.match(r'SECTION\((\w+),\s*(\w+),\s*(\w+),\s*([\d\.-]+)\)', line)
+            if m:
+                target, p1, p2, k = m.group(1), m.group(2), m.group(3), float(m.group(4))
+                if target not in points:
+                    points[target] = Point(id=target)
+                constraints.append(Constraint(type='section', targets=[target, p1, p2], value=k))
+                logger.debug(f"[DSLParser]   + SECTION: {target} = {p1} + {k}({p2}-{p1})")
+                continue
+
             # CIRCLE(O, r)
             m = re.match(r'CIRCLE\((\w+),\s*([\d\.]+)\)', line)
             if m:
@@ -106,6 +118,24 @@ class DSLParser:
                 logger.debug(f"[DSLParser]   + SEGMENT: {p1}—{p2}")
                 continue
 
+            # LINE(A, B) — infinite line
+            m = re.match(r'LINE\((\w+),\s*(\w+)\)', line)
+            if m:
+                p1, p2 = m.group(1), m.group(2)
+                lines_ext.append([p1, p2])
+                constraints.append(Constraint(type='line', targets=[p1, p2], value=0))
+                logger.debug(f"[DSLParser]   + LINE: {p1}-{p2}")
+                continue
+
+            # RAY(A, B) — ray AB starting at A
+            m = re.match(r'RAY\((\w+),\s*(\w+)\)', line)
+            if m:
+                p1, p2 = m.group(1), m.group(2)
+                rays.append([p1, p2])
+                constraints.append(Constraint(type='ray', targets=[p1, p2], value=0))
+                logger.debug(f"[DSLParser]   + RAY: {p1}->{p2}")
+                continue
+
             # TRIANGLE(ABC) — gợi ý vẽ tam giác (polygon_order fallback)
             m = re.match(r'TRIANGLE\((\w+)\)', line)
             if m:
@@ -125,5 +155,11 @@ class DSLParser:
         elif explicit_point_ids:
             # Re-use polygon_order as a carrier for explicit points IF no real order was specified
             constraints.append(Constraint(type='explicit_points', targets=explicit_point_ids, value=0))
+
+        # Add auxiliary metadata for lines and rays
+        if lines_ext:
+            constraints.append(Constraint(type='lines_metadata', targets=[",".join(l) for l in lines_ext], value=0))
+        if rays:
+            constraints.append(Constraint(type='rays_metadata', targets=[",".join(l) for l in rays], value=0))
 
         return list(points.values()), constraints

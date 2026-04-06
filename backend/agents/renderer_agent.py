@@ -19,6 +19,8 @@ class RendererAgent:
         coords: Dict[str, List[float]] = data.get("coordinates", {})
         polygon_order: List[str] = data.get("polygon_order", [])
         circles_meta: List[Dict] = data.get("circles", [])
+        lines_meta: List[List[str]] = data.get("lines", [])
+        rays_meta: List[List[str]] = data.get("rays", [])
         drawing_phases: List[Dict] = data.get("drawing_phases", [])
 
         # ── Fallback: infer polygon_order from coords keys (alphabetical uppercase) ──
@@ -58,6 +60,22 @@ class RendererAgent:
                 lines.append(
                     f"        circle_{i} = Circle(radius={r}, color=BLUE)"
                     f".move_to([{cx}, {cy}, 0])"
+                )
+
+        # ── Infinite Lines ───────────────────────────────────────────────────
+        for i, (p1, p2) in enumerate(lines_meta):
+            if p1 in coords and p2 in coords:
+                lines.append(
+                    f"        line_ext_{i} = Line(p_{p1}.get_center(), p_{p2}.get_center(), color=GRAY_D, stroke_width=2)"
+                    f".scale(20)  # Simulate infinite"
+                )
+
+        # ── Rays ─────────────────────────────────────────────────────────────
+        for i, (p1, p2) in enumerate(rays_meta):
+            if p1 in coords and p2 in coords:
+                lines.append(
+                    f"        ray_{i} = Line(p_{p1}.get_center(), p_{p1}.get_center() + 15 * (p_{p2}.get_center() - p_{p1}.get_center()),"
+                    f" color=GRAY_C, stroke_width=2)"
                 )
 
         # ── Camera auto-fit group ─────────────────────────────────────────────
@@ -117,6 +135,13 @@ class RendererAgent:
         # ── Circles phase ─────────────────────────────────────────────────────
         for i in range(len(circles_meta)):
             lines.append(f"        self.play(Create(circle_{i}), run_time=1.5)")
+
+        # ── Lines & Rays phase ────────────────────────────────────────────────
+        if lines_meta or rays_meta:
+            lr_anims = []
+            for i in range(len(lines_meta)): lr_anims.append(f"Create(line_ext_{i})")
+            for i in range(len(rays_meta)): lr_anims.append(f"Create(ray_{i})")
+            lines.append(f"        self.play({', '.join(lr_anims)}, run_time=1.5)")
 
         lines.append("        self.wait(2)")
 
