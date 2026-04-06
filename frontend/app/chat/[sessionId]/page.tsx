@@ -30,6 +30,11 @@ import {
   saveGeometryState,
   type GeometryState,
 } from "@/lib/session-geometry-cache";
+import {
+  saveActiveJob,
+  getActiveJob,
+  clearActiveJob,
+} from "@/lib/job-tracker";
 import type { ChatMessage } from "@/types/chat";
 
 const SOLVE_POLL_MAX_ATTEMPTS = 300;
@@ -114,6 +119,7 @@ export default function ChatSessionPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollAttemptsRef = useRef(0);
+  const solveWsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
     setSplitPercent(readSplitPercent(14.3));
@@ -261,6 +267,12 @@ export default function ChatSessionPage() {
       setVideoUrl(null);
       setActiveJobId(null);
     }
+
+    // Bug 2 Fix: Check for active jobs and re-attach
+    const activeJobIdForSession = getActiveJob(sessionId);
+    if (activeJobIdForSession) {
+      void attachToJob(activeJobIdForSession);
+    }
   }, [sessionId]);
 
   const handleNextVersion = () => {
@@ -332,15 +344,126 @@ export default function ChatSessionPage() {
     if (file?.type.startsWith("image/")) void runOcrOnFile(file);
   };
 
+  const applyJobRow = useCallback((job: { status?: string; result?: Record<string, any> }) => {
+    const r = job.result || {};
+    const newCoords = r.coordinates && typeof r.coordinates === "object"
+      ? (r.coordinates as Record<string, [number, number]>)
+      : null;
+    const newPolygonOrder = r.polygon_order ?? null;
+    const newCircles = r.circles ?? null;
+    const newLines = r.lines ?? null;
+    const newRays = r.rays ?? null;
+    const newPhases = r.drawing_phases ?? null;
+    const newVideoUrl = typeof r.video_url === "string" && r.video_url ? r.video_url : null;
+
+    if (newCoords) setCoordinates(newCoords);
+    if (newPolygonOrder) setPolygonOrder(newPolygonOrder);
+    if (newCircles) setCircles(newCircles);
+    if (newLines) setLines(newLines);
+    if (newRays) setRays(newRays);
+    if (newPhases) setDrawingPhases(newPhases);
+    if (newVideoUrl) {
+      setVideoUrl(newVideoUrl);
+      setRenderingVideo(false);
+    }
+
+    if (sessionId && !sessionId.startsWith("temp-")) {
+      const geoState: GeometryState = {
+        coordinates: newCoords,
+        polygonOrder: newPolygonOrder,
+        circles: newCircles,
+        lines: newLines,
+        rays: newRays,
+        drawingPhases: newPhases,
+        videoUrl: newVideoUrl,
+        activeJobId: activeJobId,
+      };
+      saveGeometryState(sessionId, geoState);
+    }
+  }, [sessionId, activeJobId]);
+
+  const finishSolveFlow = useCallback(() => {
+    clearSolvePoll();
+    void mutateMessages();
+    void mutateAssets();
+    setCurrentStatus(null);
+    setSolveLoading(false);
+    setRenderingVideo(false);
+    clearActiveJob(sessionId);
+    try {
+      solveWsRef.current?.close();
+      solveWsRef.current = null;
+    } catch { /* ignore */ }
+  }, [sessionId, mutateMessages, mutateAssets, clearSolvePoll]);
+
+  const attachToJob = useCallback(async (jobId: string) => {
+    clearSolvePoll();
+    setActiveJobId(jobId);
+    saveActiveJob(sessionId, jobId);
+
+    const runPollTick = async () => {
+      pollAttemptsRef.current += 1;
+      if (pollAttemptsRef.current > SOLVE_POLL_MAX_ATTEMPTS) {
+        finishSolveFlow();
+        return;
+      }
+      try {
+        const res = await fetch(`${getApiBaseUrl()}/api/v1/solve/${jobId}`);
+        if (!res.ok) return;
+        const job = await res.json();
+        applyJobRow(job);
+        if (job.status === "success" || job.status === "error") {
+          finishSolveFlow();
+        } else {
+          setCurrentStatus(job.status);
+        }
+      } catch { /* ignore */ }
+    };
+
+    clearSolvePoll();
+    pollIntervalRef.current = setInterval(() => {
+      void runPollTick();
+    }, SOLVE_POLL_INTERVAL_MS);
+
+    try {
+      if (solveWsRef.current) {
+        solveWsRef.current.close();
+      }
+      const ws = new WebSocket(`${getWsBaseUrl()}/ws/${jobId}`);
+      solveWsRef.current = ws;
+      
+      ws.onmessage = (event) => {
+        let wsData: any;
+        try { wsData = JSON.parse(event.data); } catch { return; }
+
+        if (wsData.status) {
+          setCurrentStatus(wsData.status);
+          if (wsData.status === "rendering" || wsData.status === "rendering_queued") {
+            setRenderingVideo(true);
+          }
+        }
+        if (wsData.status === "error") {
+          finishSolveFlow();
+          return;
+        }
+        if (wsData.result) {
+          applyJobRow({ status: wsData.status, result: wsData.result });
+        }
+        if (wsData.status === "success") {
+          finishSolveFlow();
+        }
+      };
+    } catch (err) {
+      console.error("WS error:", err);
+    }
+  }, [sessionId, clearSolvePoll, finishSolveFlow, applyJobRow]);
+
   const handleSolve = async () => {
     if (!inputText.trim() || !userSession?.access_token) return;
-    clearSolvePoll();
     setSolveLoading(true);
     setCurrentStatus("processing");
-    // DO NOT clear geometry state here to avoid flickering
     
     const textPayload = inputText;
-
     const tempMsg: ChatMessage = {
       id: "temp-" + Date.now(),
       role: "user",
@@ -349,96 +472,11 @@ export default function ChatSessionPage() {
       timestamp: Date.now(),
     };
     
-    // Optimistic Update
     await mutateMessages((prev) => [...(prev || []), tempMsg], { revalidate: false });
     setInputText("");
 
-    const apiUrl = getApiBaseUrl();
-    const wsBase = getWsBaseUrl();
-
-    let solveWs: WebSocket | null = null;
-
-    const applyJobRow = (job: { status?: string; result?: Record<string, any> }) => {
-      const r = job.result || {};
-      const newCoords = r.coordinates && typeof r.coordinates === "object"
-        ? (r.coordinates as Record<string, [number, number]>)
-        : null;
-      const newPolygonOrder = r.polygon_order ?? null;
-      const newCircles = r.circles ?? null;
-      const newLines = r.lines ?? null;
-      const newRays = r.rays ?? null;
-      const newPhases = r.drawing_phases ?? null;
-      const newVideoUrl = typeof r.video_url === "string" && r.video_url ? r.video_url : null;
-
-      if (newCoords) setCoordinates(newCoords);
-      if (newPolygonOrder) setPolygonOrder(newPolygonOrder);
-      if (newCircles) setCircles(newCircles);
-      if (newLines) setLines(newLines);
-      if (newRays) setRays(newRays);
-      if (newPhases) setDrawingPhases(newPhases);
-      if (newVideoUrl) {
-        setVideoUrl(newVideoUrl);
-        setRenderingVideo(false);
-      }
-
-      // Bug 4: Persist to sessionStorage so switching back is instant
-      if (sessionId && !sessionId.startsWith("temp-")) {
-        const geoState: GeometryState = {
-          coordinates: newCoords,
-          polygonOrder: newPolygonOrder,
-          circles: newCircles,
-          lines: newLines,
-          rays: newRays,
-          drawingPhases: newPhases,
-          videoUrl: newVideoUrl,
-          activeJobId: activeJobId,
-        };
-        saveGeometryState(sessionId, geoState);
-      }
-    };
-
-    const finishSolveFlow = () => {
-      clearSolvePoll();
-      void mutateMessages();
-      void mutateAssets();
-      setCurrentStatus(null);
-      try {
-        solveWs?.close();
-      } catch {
-        /* ignore */
-      }
-    };
-
-    const runPollTick = async (jobId: string) => {
-      pollAttemptsRef.current += 1;
-      if (pollAttemptsRef.current > SOLVE_POLL_MAX_ATTEMPTS) {
-        clearSolvePoll();
-        setRenderingVideo(false);
-        setCurrentStatus(null);
-        return;
-      }
-      try {
-        const res = await fetch(`${apiUrl}/api/v1/solve/${jobId}`);
-        if (!res.ok) return;
-        const job = await res.json();
-        applyJobRow(job);
-        if (job.status === "success" || job.status === "error") {
-          finishSolveFlow();
-        }
-      } catch {
-        /* ignore transient poll errors */
-      }
-    };
-
-    const startSolvePolling = (jobId: string) => {
-      clearSolvePoll();
-      pollIntervalRef.current = setInterval(() => {
-        void runPollTick(jobId);
-      }, SOLVE_POLL_INTERVAL_MS);
-    };
-
     try {
-      const response = await fetch(`${apiUrl}/api/v1/sessions/${sessionId}/solve`, {
+      const response = await fetch(`${getApiBaseUrl()}/api/v1/sessions/${sessionId}/solve`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -448,76 +486,18 @@ export default function ChatSessionPage() {
       });
 
       if (!response.ok) {
-        let detail = `HTTP ${response.status}`;
-        try {
-          const errBody = (await response.json()) as { detail?: unknown };
-          if (errBody.detail !== undefined) {
-            detail = typeof errBody.detail === "string" ? errBody.detail : JSON.stringify(errBody.detail);
-          }
-        } catch {
-          /* ignore */
-        }
-        throw new Error(detail);
+        throw new Error(`HTTP ${response.status}`);
       }
 
       const data = (await response.json()) as { job_id?: string };
-      const jobId = data.job_id;
-      if (!jobId) {
-        throw new Error("Thiếu job_id từ máy chủ");
-      }
+      if (!data.job_id) throw new Error("Missing job_id");
 
-      startSolvePolling(jobId);
-      setActiveJobId(jobId);
-
-      solveWs = new WebSocket(`${wsBase}/ws/${jobId}`);
-
-      solveWs.onmessage = (event) => {
-        let wsData: any;
-        try {
-          wsData = JSON.parse(event.data);
-        } catch {
-          return;
-        }
-
-        if (wsData.status) {
-          setCurrentStatus(wsData.status);
-          if (wsData.status === "rendering" || wsData.status === "rendering_queued") {
-            setRenderingVideo(true);
-          }
-        }
-
-        if (wsData.status === "error") {
-          setRenderingVideo(false);
-          clearSolvePoll();
-          void mutateMessages();
-          setCurrentStatus(null);
-          try {
-            solveWs?.close();
-          } catch {
-            /* ignore */
-          }
-          return;
-        }
-
-        if (wsData.result) {
-          applyJobRow({ status: wsData.status, result: wsData.result });
-        }
-
-        if (wsData.status === "success") {
-          finishSolveFlow();
-        }
-      };
-
-      solveWs.onerror = () => {
-        startSolvePolling(jobId);
-      };
+      await attachToJob(data.job_id);
     } catch (err) {
       console.error(err);
       setCurrentStatus("error");
-      clearSolvePoll();
-      void mutateMessages();
-    } finally {
       setSolveLoading(false);
+      void mutateMessages();
     }
   };
 

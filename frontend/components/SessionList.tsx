@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import { Plus, MessageSquare, Trash2, Loader2, ChevronRight, Check, X } from "lucide-react";
 import { useRouter, useParams } from "next/navigation";
-import useSWR from "swr";
+import useSWR, { useSWRConfig } from "swr";
 import { useAuth } from "@/lib/auth-context";
 import { getApiBaseUrl } from "@/lib/api-config";
 
@@ -30,6 +30,7 @@ export default function SessionList({ compact = false }: SessionListProps) {
   const [creating, setCreating] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const { session: userSession } = useAuth();
+  const { mutate: globalMutate } = useSWRConfig();
   const router = useRouter();
   const params = useParams();
   const currentSessionId = params?.sessionId as string;
@@ -64,6 +65,14 @@ export default function SessionList({ compact = false }: SessionListProps) {
       
       if (res.ok) {
         const realSession = (await res.json()) as Session;
+        
+        // Flicker-free: Prime cache for the real session before navigating
+        const messagesUrl = `${getApiBaseUrl()}/api/v1/sessions/${realSession.id}/messages`;
+        const assetsUrl = `${getApiBaseUrl()}/api/v1/sessions/${realSession.id}/assets`;
+        
+        await globalMutate([messagesUrl, userSession.access_token], [], { revalidate: false });
+        await globalMutate([assetsUrl, userSession.access_token], [], { revalidate: false });
+
         // Replace temp session with real one
         await mutate((prev) => (prev ?? []).map(s => s.id === tempId ? realSession : s), { revalidate: false });
         // Replace URL to use the real ID
