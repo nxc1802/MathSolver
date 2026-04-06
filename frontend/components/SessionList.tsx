@@ -64,7 +64,7 @@ export default function SessionList({ compact = false }: SessionListProps) {
     e.stopPropagation();
     if (!userSession?.access_token) return;
     
-    // If we're not already in the intermediate "confirm" state, just set it
+    // Confirm state check
     if (deletingId !== id) {
       setDeletingId(id);
       return;
@@ -74,38 +74,44 @@ export default function SessionList({ compact = false }: SessionListProps) {
     const wasCurrent = currentSessionId === id;
     const remaining = listBefore.filter((s) => s.id !== id);
 
-    await mutate((p) => (p ?? []).filter((s) => s.id !== id), { revalidate: false });
+    // Optimistic: remove from list instantly
+    mutate(remaining, { revalidate: false });
+    setDeletingId(null); // Clear confirm state immediately
+
+    // If current, navigate away immediately to next or home
+    if (wasCurrent) {
+      const next = remaining[0];
+      if (next) {
+        router.replace(`/chat/${next.id}`);
+      } else {
+        router.replace("/");
+      }
+    }
 
     try {
       const res = await fetch(`${getApiBaseUrl()}/api/v1/sessions/${id}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${userSession.access_token}` },
       });
+      
       if (!res.ok) throw new Error("delete failed");
-
-      if (wasCurrent) {
-        const next = remaining[0];
-        if (next) {
-          router.replace(`/chat/${next.id}`);
-        } else {
-          const createRes = await fetch(`${getApiBaseUrl()}/api/v1/sessions`, {
-            method: "POST",
-            headers: { Authorization: `Bearer ${userSession.access_token}` },
-          });
-          if (createRes.ok) {
-            const newSession = (await createRes.json()) as Session;
-            await mutate((prev) => [newSession, ...(prev ?? [])], { revalidate: false });
-            router.replace(`/chat/${newSession.id}`);
-          } else {
-            router.replace("/");
-          }
+      
+      // If we deleted the last one and navigated to home, maybe create a new auto-session
+      if (wasCurrent && remaining.length === 0) {
+        const createRes = await fetch(`${getApiBaseUrl()}/api/v1/sessions`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${userSession.access_token}` },
+        });
+        if (createRes.ok) {
+          const newSession = (await createRes.json()) as Session;
+          await mutate([newSession], { revalidate: false });
+          router.replace(`/chat/${newSession.id}`);
         }
       }
     } catch (err) {
       console.error("Delete session error:", err);
+      // Rollback on error
       await mutate();
-    } finally {
-      setDeletingId(null);
     }
   };
 

@@ -84,6 +84,13 @@ export default function StaticGeometryCanvas({ coordinates, polygonOrder, circle
         if (ordered.length >= 3) d += " Z";
         resPhasePaths.push({ d, phase: 1 });
       }
+    } else {
+      // Fallback: draw segments between all points if no specifics provided
+      if (parsedPoints.length >= 2) {
+        let d = parsedPoints.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(" ");
+        if (parsedPoints.length >= 3) d += " Z";
+        resPhasePaths.push({ d, phase: 1 });
+      }
     }
 
     return { viewBox: vb, points: parsedPoints, phasePaths: resPhasePaths, circlePaths: circleParsed, spanX: sX };
@@ -95,9 +102,15 @@ export default function StaticGeometryCanvas({ coordinates, polygonOrder, circle
       const delta = e.deltaY > 0 ? 0.9 : 1.1;
       setScale(s => Math.min(Math.max(s * delta, 0.5), 5));
     } else {
+      // Scale move by viewbox ratio
+      const rect = containerRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const vbWidth = Number(viewBox.split(" ")[2]);
+      const ratio = vbWidth / rect.width;
+
       setOffset(prev => ({
-        x: prev.x - e.deltaX,
-        y: prev.y - e.deltaY
+        x: prev.x - (e.deltaX * ratio) / scale,
+        y: prev.y - (e.deltaY * ratio) / scale
       }));
     }
   };
@@ -105,15 +118,25 @@ export default function StaticGeometryCanvas({ coordinates, polygonOrder, circle
   const handleMouseDown = (e: React.MouseEvent) => {
     if (e.button !== 0) return;
     setIsDragging(true);
-    dragStart.current = { x: e.clientX - offset.x, y: e.clientY - offset.y };
+    dragStart.current = { x: e.clientX, y: e.clientY };
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
-    if (!isDragging) return;
-    setOffset({
-      x: e.clientX - dragStart.current.x,
-      y: e.clientY - dragStart.current.y
-    });
+    if (!isDragging || !containerRef.current) return;
+    
+    const rect = containerRef.current.getBoundingClientRect();
+    const vbWidth = Number(viewBox.split(" ")[2]);
+    const ratio = vbWidth / rect.width;
+
+    const dx = (e.clientX - dragStart.current.x) * ratio / scale;
+    const dy = (e.clientY - dragStart.current.y) * ratio / scale;
+
+    setOffset(prev => ({
+      x: prev.x + dx,
+      y: prev.y + dy
+    }));
+
+    dragStart.current = { x: e.clientX, y: e.clientY };
   };
 
   const handleMouseUp = () => setIsDragging(false);

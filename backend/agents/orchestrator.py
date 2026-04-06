@@ -219,6 +219,7 @@ class Orchestrator:
 
         return {
             "status": status,
+            "job_id": job_id,
             "geometry_dsl": dsl_code,
             "coordinates": coordinates,
             "polygon_order": engine_result.get("polygon_order", []),

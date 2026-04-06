@@ -1,5 +1,6 @@
 import os
 import json
+import asyncio
 import logging
 from openai import AsyncOpenAI
 from typing import List, Dict, Any, Optional
@@ -38,28 +39,48 @@ class MultiLayerLLMClient:
         **kwargs
     ) -> str:
         """
-        Tries OpenRouter first, then falls back to MegaLLM on ANY exception.
+        Tries OpenRouter first with retries, then falls back to MegaLLM on failure.
         Returns the text content of the message.
         """
         
-        # --- PHASE 1: OpenRouter ---
+        # --- PHASE 1: OpenRouter (with 3 retries) ---
+        MAX_RETRIES = 3
+        RETRY_DELAY = 5 # seconds
+
         if self.openrouter_api_key:
-            try:
-                logger.info(f"[LLM] Attempting OpenRouter ({self.openrouter_model})...")
-                response = await self.openrouter_client.chat.completions.create(
-                    model=self.openrouter_model,
-                    messages=messages,
-                    response_format=response_format,
-                    **kwargs
-                )
-                content = response.choices[0].message.content
-                if content:
-                    logger.info("[LLM] OpenRouter: SUCCESS.")
-                    return content
-                logger.warning("[LLM] OpenRouter returned empty content, falling back...")
-            except Exception as e:
-                err_msg = f"{type(e).__name__}: {str(e)}"
-                logger.warning(f"[LLM] OpenRouter: FAILED ({err_msg}). Falling back to MegaLLM...")
+            for attempt in range(1, MAX_RETRIES + 1):
+                try:
+                    logger.info(f"[LLM] Attempting OpenRouter ({self.openrouter_model}) - Attempt {attempt}/{MAX_RETRIES}...")
+                    response = await self.openrouter_client.chat.completions.create(
+                        model=self.openrouter_model,
+                        messages=messages,
+                        response_format=response_format,
+                        **kwargs
+                    )
+                    
+                    if not response or not getattr(response, "choices", None):
+                         logger.warning(f"[LLM] OpenRouter returned invalid response structure on attempt {attempt}.")
+                         if attempt < MAX_RETRIES:
+                             await asyncio.sleep(RETRY_DELAY)
+                             continue
+                         break
+
+                    content = response.choices[0].message.content
+                    if content:
+                        logger.info(f"[LLM] OpenRouter: SUCCESS on attempt {attempt}.")
+                        return content
+                    
+                    logger.warning(f"[LLM] OpenRouter returned empty content on attempt {attempt}.")
+                    if attempt < MAX_RETRIES:
+                        await asyncio.sleep(RETRY_DELAY)
+                        continue
+                except Exception as e:
+                    err_msg = f"{type(e).__name__}: {str(e)}"
+                    if attempt < MAX_RETRIES:
+                        logger.warning(f"[LLM] OpenRouter: FAILED ({err_msg}) on attempt {attempt}. Retrying in {RETRY_DELAY}s...")
+                        await asyncio.sleep(RETRY_DELAY)
+                    else:
+                        logger.error(f"[LLM] OpenRouter: FINAL FAILURE after {MAX_RETRIES} attempts ({err_msg}). Falling back...")
         else:
             logger.info("[LLM] OPENROUTER_API_KEY not found, skipping to MegaLLM.")
 

@@ -1,3 +1,7 @@
+import os
+import subprocess
+import glob
+import string
 from typing import Dict, Any, List
 
 
@@ -19,7 +23,6 @@ class RendererAgent:
 
         # ── Fallback: infer polygon_order from coords keys (alphabetical uppercase) ──
         if not polygon_order:
-            import string
             base = sorted(
                 [pid for pid in coords if pid in string.ascii_uppercase],
                 key=lambda p: string.ascii_uppercase.index(p)
@@ -27,7 +30,6 @@ class RendererAgent:
             polygon_order = base
 
         # Separate base points from derived (multi-char or lowercase)
-        import string
         base_ids = [pid for pid in polygon_order if pid in coords]
         derived_ids = [pid for pid in coords if pid not in polygon_order]
 
