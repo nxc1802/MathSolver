@@ -144,6 +144,9 @@ async def process_session_job(
                         "job_id": job_id,
                         "coordinates": result.get("coordinates"),
                         "geometry_dsl": result.get("geometry_dsl"),
+                        "polygon_order": result.get("polygon_order", []),
+                        "drawing_phases": result.get("drawing_phases", []),
+                        "circles": result.get("circles", []),
                     },
                 }
             ).execute()

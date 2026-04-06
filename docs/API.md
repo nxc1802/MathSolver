@@ -167,6 +167,23 @@ Tọa độ cho mỗi điểm lấy từ `coordinates[pointId]` dưới dạng `
 
 ---
 
+## 🛠 Yêu cầu Persistence (Lưu trữ Metadata)
+
+> [!IMPORTANT]
+> Để đảm bảo tính nhất quán khi người dùng **Reload trang** hoặc **Chuyển đổi Session**, Backend **BẮT BUỘC** phải lưu đầy đủ kết quả hình học vào cột `metadata` của bảng `messages` cho mỗi tin nhắn của `assistant`.
+
+### Các trường bắt buộc trong `messages.metadata`:
+1. `job_id`: ID của task xử lý.
+2. `coordinates`: Object chứa tọa độ các điểm.
+3. `polygon_order`: Mảng các điểm tạo thành đa giác chính.
+4. `drawing_phases`: Mảng các bước vẽ chi tiết (Phân biệt nét đứt/nét liền, nét chính/phụ).
+5. `circles`: Danh sách các hình tròn (nếu có).
+6. `video_url`: URL video Manim (phải cập nhật vào metadata sau khi render xong).
+
+**Lưu ý cho BE Engineer:** Hiện tại hệ thống đang bị lỗi "mất nét" hoặc "hình vẽ sai" sau khi tải lại trang do thiếu các trường 3, 4, 5 trong DB. Vui lòng cập nhật logic tại `solve.py` và `tasks.py`.
+
+---
+
 ## Trạng thái job (polling)
 
 ### `GET /api/v1/solve/{job_id}`

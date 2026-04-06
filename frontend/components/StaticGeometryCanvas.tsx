@@ -62,7 +62,9 @@ export default function StaticGeometryCanvas({ coordinates, polygonOrder, circle
     const resPhasePaths: Array<{ d: string, phase: number }> = [];
 
     if (drawingPhases && drawingPhases.length > 0) {
+      // Trust backend drawing_phases — only render phases that actually have segments.
       drawingPhases.forEach(phase => {
+        if (!phase.segments || phase.segments.length === 0) return; // skip empty phases
         const segmentsD: string[] = [];
         phase.segments.forEach(([p1Label, p2Label]) => {
           const pt1 = parsedPoints.find(p => p.label === p1Label);
@@ -77,13 +79,12 @@ export default function StaticGeometryCanvas({ coordinates, polygonOrder, circle
       });
     }
 
-    // Always try to draw the base polygon if not already covered by phases
-    if (resPhasePaths.length === 0) {
-      const activeOrder = (polygonOrder && polygonOrder.length >= 2) ? polygonOrder : parsedPoints.map(p => p.label);
-      const ordered = activeOrder
+    // Fallback: only use polygonOrder — NEVER auto-connect all points (avoids nonsensical lines)
+    if (resPhasePaths.length === 0 && polygonOrder && polygonOrder.length >= 2) {
+      const ordered = polygonOrder
         .map(label => parsedPoints.find(p => p.label === label))
         .filter(Boolean) as typeof parsedPoints;
-      
+
       if (ordered.length >= 2) {
         let d = ordered.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(" ");
         if (ordered.length >= 3) d += " Z";

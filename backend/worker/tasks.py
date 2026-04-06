@@ -60,7 +60,10 @@ def render_geometry_video(job_id: str, data: dict):
                     "job_id": job_id,
                     "video_url": video_url,
                     "coordinates": data.get("coordinates"),
-                    "geometry_dsl": data.get("geometry_dsl")
+                    "geometry_dsl": data.get("geometry_dsl"),
+                    "polygon_order": data.get("polygon_order", []),
+                    "drawing_phases": data.get("drawing_phases", []),
+                    "circles": data.get("circles", []),
                 }
             }).execute()
         

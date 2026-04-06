@@ -195,6 +195,9 @@ class Orchestrator:
                 result_payload = {
                     "geometry_dsl": dsl_code,
                     "coordinates": coordinates,
+                    "polygon_order": engine_result.get("polygon_order", []),
+                    "drawing_phases": engine_result.get("drawing_phases", []),
+                    "circles": engine_result.get("circles", []),
                     "semantic": semantic_json,
                     "semantic_analysis": semantic_json.get("analysis") or semantic_json.get("input_text", ""),
                     "session_id": session_id,

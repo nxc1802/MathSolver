@@ -25,6 +25,11 @@ import {
   MAIN_SPLIT_MIN_PCT,
   MAIN_SPLIT_MAX_PCT,
 } from "@/lib/session-ui-storage";
+import {
+  loadGeometryState,
+  saveGeometryState,
+  type GeometryState,
+} from "@/lib/session-geometry-cache";
 import type { ChatMessage } from "@/types/chat";
 
 const SOLVE_POLL_MAX_ATTEMPTS = 300;
@@ -61,8 +66,10 @@ export default function ChatSessionPage() {
     ? [`${getApiBaseUrl()}/api/v1/sessions/${sessionId}/assets`, userSession.access_token] as const 
     : null;
 
-  const { data: messages = [], isLoading: historyLoading, mutate: mutateMessages } = useSWR(
-    messagesKey,
+  const isTempSession = sessionId?.startsWith("temp-");
+
+  const { data: messages = [], isLoading: historyLoadingRaw, mutate: mutateMessages } = useSWR(
+    !isTempSession ? messagesKey : null,
     fetchChatMessages,
     { 
       revalidateOnFocus: false, 
@@ -71,8 +78,10 @@ export default function ChatSessionPage() {
     }
   );
 
+  const historyLoading = !isTempSession && historyLoadingRaw;
+
   const { data: sessionAssets = [], mutate: mutateAssets } = useSWR(
-    assetsKey,
+    !isTempSession ? assetsKey : null,
     fetchSessionAssets,
     { revalidateOnFocus: false }
   );
@@ -141,7 +150,7 @@ export default function ChatSessionPage() {
 
   useEffect(() => () => clearSolvePoll(), [clearSolvePoll]);
 
-  const applyMediaFromMessages = useCallback((msgList: ChatMessage[]) => {
+  const applyMediaFromMessages = useCallback((msgList: ChatMessage[], sid: string) => {
     // Find the absolute latest assistant message that was successful
     const latestBotMsg = [...msgList]
       .reverse()
@@ -149,28 +158,43 @@ export default function ChatSessionPage() {
 
     if (latestBotMsg?.metadata) {
       const meta = latestBotMsg.metadata;
-      setCoordinates(meta.coordinates || null);
-      setPolygonOrder(meta.polygon_order || null);
-      setCircles(meta.circles || null);
-      setDrawingPhases(meta.drawing_phases || null);
+      const newCoords = meta.coordinates || null;
+      const newPolygonOrder = meta.polygon_order || null;
+      const newCircles = meta.circles || null;
+      const newPhases = meta.drawing_phases || null;
+      const newJobId = meta.job_id || null;
+      const newVideoUrl = meta.video_url || null;
+
+      setCoordinates(newCoords);
+      setPolygonOrder(newPolygonOrder);
+      setCircles(newCircles);
+      setDrawingPhases(newPhases);
       
-      if (meta.job_id) {
-        setActiveJobId(meta.job_id);
+      if (newJobId) setActiveJobId(newJobId);
+      if (newVideoUrl) {
+        setVideoUrl(newVideoUrl);
+        setVideoVersion(1);
       }
-      
-      // Initially pick the latest video if available in the result
-      if (meta.video_url) {
-        setVideoUrl(meta.video_url);
-        setVideoVersion(1); // Latest version is always 1 in the sorted response
+
+      // Bug 4: Cache to sessionStorage so switching back to this session is instant
+      if (sid && !sid.startsWith("temp-")) {
+        saveGeometryState(sid, {
+          coordinates: newCoords,
+          polygonOrder: newPolygonOrder,
+          circles: newCircles,
+          drawingPhases: newPhases,
+          videoUrl: newVideoUrl,
+          activeJobId: newJobId,
+        });
       }
     }
   }, []);
 
   useEffect(() => {
     if (messages.length > 0) {
-      applyMediaFromMessages(messages);
+      applyMediaFromMessages(messages, sessionId);
     }
-  }, [messages, applyMediaFromMessages]);
+  }, [messages, applyMediaFromMessages, sessionId]);
 
   useEffect(() => {
     // When assets change, updating the current video if appropriate
@@ -183,16 +207,46 @@ export default function ChatSessionPage() {
     }
   }, [sessionAssets, currentStatus]);
 
+  // Bug 1 + 4 Fix: When switching sessions, restore from sessionStorage cache instead of
+  // blanking out immediately. Only reset to null if nothing is cached.
+  const prevSessionIdRef = useRef<string | null>(null);
   useEffect(() => {
-    // Clear transient UI state when switching sessions
-    setCoordinates(null);
-    setPolygonOrder(null);
-    setCircles(null);
-    setDrawingPhases(null);
-    setVideoUrl(null);
+    if (!sessionId || sessionId === prevSessionIdRef.current) return;
+    prevSessionIdRef.current = sessionId;
+
+    // Reset transient solve state (not geometry — that comes from cache)
     setCurrentStatus(null);
-    setActiveJobId(null);
     setVideoVersion(1);
+
+    if (sessionId.startsWith("temp-")) {
+      // Temp sessions have no data at all — clear geometry immediately
+      setCoordinates(null);
+      setPolygonOrder(null);
+      setCircles(null);
+      setDrawingPhases(null);
+      setVideoUrl(null);
+      setActiveJobId(null);
+      return;
+    }
+
+    // Try to restore from cache for instant display (Bug 4)
+    const cached = loadGeometryState(sessionId);
+    if (cached) {
+      setCoordinates(cached.coordinates);
+      setPolygonOrder(cached.polygonOrder);
+      setCircles(cached.circles);
+      setDrawingPhases(cached.drawingPhases);
+      setVideoUrl(cached.videoUrl);
+      setActiveJobId(cached.activeJobId);
+    } else {
+      // No cache — blank out and wait for messages to load
+      setCoordinates(null);
+      setPolygonOrder(null);
+      setCircles(null);
+      setDrawingPhases(null);
+      setVideoUrl(null);
+      setActiveJobId(null);
+    }
   }, [sessionId]);
 
   const handleNextVersion = () => {
@@ -292,21 +346,34 @@ export default function ChatSessionPage() {
 
     const applyJobRow = (job: { status?: string; result?: Record<string, any> }) => {
       const r = job.result || {};
-      if (r.coordinates && typeof r.coordinates === "object") {
-        setCoordinates(r.coordinates as Record<string, [number, number]>);
-      }
-      if (r.polygon_order) {
-        setPolygonOrder(r.polygon_order);
-      }
-      if (r.circles) {
-        setCircles(r.circles);
-      }
-      if (r.drawing_phases) {
-        setDrawingPhases(r.drawing_phases);
-      }
-      if (typeof r.video_url === "string" && r.video_url) {
-        setVideoUrl(r.video_url);
+      const newCoords = r.coordinates && typeof r.coordinates === "object"
+        ? (r.coordinates as Record<string, [number, number]>)
+        : null;
+      const newPolygonOrder = r.polygon_order ?? null;
+      const newCircles = r.circles ?? null;
+      const newPhases = r.drawing_phases ?? null;
+      const newVideoUrl = typeof r.video_url === "string" && r.video_url ? r.video_url : null;
+
+      if (newCoords) setCoordinates(newCoords);
+      if (newPolygonOrder) setPolygonOrder(newPolygonOrder);
+      if (newCircles) setCircles(newCircles);
+      if (newPhases) setDrawingPhases(newPhases);
+      if (newVideoUrl) {
+        setVideoUrl(newVideoUrl);
         setRenderingVideo(false);
+      }
+
+      // Bug 4: Persist to sessionStorage so switching back is instant
+      if (sessionId && !sessionId.startsWith("temp-")) {
+        const geoState: GeometryState = {
+          coordinates: newCoords,
+          polygonOrder: newPolygonOrder,
+          circles: newCircles,
+          drawingPhases: newPhases,
+          videoUrl: newVideoUrl,
+          activeJobId: activeJobId,
+        };
+        saveGeometryState(sessionId, geoState);
       }
     };
 

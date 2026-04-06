@@ -9,12 +9,15 @@
 
 ## 2. Các thực thể (Primitives)
 Các từ khoá khai báo thực thể căn bản.
-- `POINT(id)`: Khai báo một điểm bất kỳ.
-- `LINE(id1, id2)`: Khai báo một đoạn thẳng nối 2 điểm.
-- `CIRCLE(center, radius)`: Đường tròn.
+- `POINT(id, x, y, z)`: Khai báo điểm trong không gian 3D (x, y, z là tùy chọn).
+- `LINE(id1, id2)`: Khai báo đoạn thẳng nối 2 điểm.
+- `CIRCLE(center, radius)`: Đường tròn (2D/3D plane).
+- `SPHERE(center, radius)`: Mặt cầu (3D).
 
-### Nhóm hình phức hợp:
+### Nhóm hình phức hợp & Khối không gian:
 - `TRIANGLE(id1_id2_id3)`: Khai báo tam giác.
+- `PYRAMID(base_id, apex_id)`: Hình chóp.
+- `PRISM(base1_id, base2_id)`: Hình lăng trụ.
 
 ## 3. Ràng buộc & Tính chất (Constraints)
 - Ràng buộc độ dài: `LENGTH(id1_id2, value)`

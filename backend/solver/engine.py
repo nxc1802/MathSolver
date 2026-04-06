@@ -272,9 +272,13 @@ class GeometryEngine:
 
         # 1. Infer/clean polygon_order
         if not polygon_order:
-            # Fallback for very simple cases if no explicit points/order provided
-            base_pts = [pid for pid in all_ids if pid in ("A", "B", "C", "D")]
-            polygon_order = sorted(base_pts, key=lambda p: string.ascii_uppercase.index(p) if p in string.ascii_uppercase else 0)
+            # Fallback: use all declared point IDs sorted by conventional uppercase order.
+            # This is far safer than only looking for A/B/C/D.
+            base_pts = sorted(
+                all_ids,
+                key=lambda p: (string.ascii_uppercase.index(p) if p in string.ascii_uppercase else 100, p)
+            )
+            polygon_order = base_pts
 
         base_ids = [pid for pid in polygon_order if pid in all_ids]
         derived_ids = [pid for pid in all_ids if pid not in polygon_order]
