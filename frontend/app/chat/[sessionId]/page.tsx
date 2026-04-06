@@ -269,7 +269,8 @@ export default function ChatSessionPage() {
     clearSolvePoll();
     setSolveLoading(true);
     setCurrentStatus("processing");
-
+    // DO NOT clear geometry state here to avoid flickering
+    
     const textPayload = inputText;
 
     const tempMsg: ChatMessage = {

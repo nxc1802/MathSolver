@@ -22,6 +22,7 @@ export default function StaticGeometryCanvas({ coordinates, polygonOrder, circle
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const dragStart = useRef({ x: 0, y: 0 });
+  const dragStartOffset = useRef({ x: 0, y: 0 });
 
   const { viewBox, points, phasePaths, circlePaths, spanX } = useMemo(() => {
     if (!coordinates || Object.keys(coordinates).length === 0) {
@@ -74,21 +75,18 @@ export default function StaticGeometryCanvas({ coordinates, polygonOrder, circle
           resPhasePaths.push({ d: segmentsD.join(" "), phase: phase.phase });
         }
       });
-    } else if (polygonOrder && polygonOrder.length > 0) {
-      const ordered = polygonOrder
+    }
+
+    // Always try to draw the base polygon if not already covered by phases
+    if (resPhasePaths.length === 0) {
+      const activeOrder = (polygonOrder && polygonOrder.length >= 2) ? polygonOrder : parsedPoints.map(p => p.label);
+      const ordered = activeOrder
         .map(label => parsedPoints.find(p => p.label === label))
         .filter(Boolean) as typeof parsedPoints;
       
       if (ordered.length >= 2) {
         let d = ordered.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(" ");
         if (ordered.length >= 3) d += " Z";
-        resPhasePaths.push({ d, phase: 1 });
-      }
-    } else {
-      // Fallback: draw segments between all points if no specifics provided
-      if (parsedPoints.length >= 2) {
-        let d = parsedPoints.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(" ");
-        if (parsedPoints.length >= 3) d += " Z";
         resPhasePaths.push({ d, phase: 1 });
       }
     }
@@ -119,6 +117,7 @@ export default function StaticGeometryCanvas({ coordinates, polygonOrder, circle
     if (e.button !== 0) return;
     setIsDragging(true);
     dragStart.current = { x: e.clientX, y: e.clientY };
+    dragStartOffset.current = { ...offset };
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
@@ -131,12 +130,10 @@ export default function StaticGeometryCanvas({ coordinates, polygonOrder, circle
     const dx = (e.clientX - dragStart.current.x) * ratio / scale;
     const dy = (e.clientY - dragStart.current.y) * ratio / scale;
 
-    setOffset(prev => ({
-      x: prev.x + dx,
-      y: prev.y + dy
-    }));
-
-    dragStart.current = { x: e.clientX, y: e.clientY };
+    setOffset({
+      x: dragStartOffset.current.x + dx,
+      y: dragStartOffset.current.y + dy
+    });
   };
 
   const handleMouseUp = () => setIsDragging(false);
@@ -214,7 +211,7 @@ export default function StaticGeometryCanvas({ coordinates, polygonOrder, circle
             x: offset.x,
             y: offset.y
           }}
-          transition={{ type: "spring", stiffness: 300, damping: 30 }}
+          transition={isDragging ? { type: "tween", duration: 0 } : { type: "spring", stiffness: 300, damping: 30 }}
           style={{ originX: "center", originY: "center" }}
         >
           {phasePaths.map((p, idx) => {

@@ -43,18 +43,39 @@ export default function SessionList({ compact = false }: SessionListProps) {
   const handleCreateSession = async () => {
     if (!userSession?.access_token || creating) return;
     setCreating(true);
+
+    // Optimistic UI: Create temporary session
+    const tempId = `temp-${Date.now()}`;
+    const tempSession: Session = {
+      id: tempId,
+      title: "Bài toán mới",
+      created_at: new Date().toISOString(),
+    };
+
+    // Update cache and navigate instantly
+    mutate((prev) => [tempSession, ...(prev ?? [])], { revalidate: false });
+    router.replace(`/chat/${tempId}`);
+
     try {
       const res = await fetch(`${getApiBaseUrl()}/api/v1/sessions`, {
         method: "POST",
         headers: { Authorization: `Bearer ${userSession.access_token}` },
       });
+      
       if (res.ok) {
-        const newSession = (await res.json()) as Session;
-        await mutate((prev) => [newSession, ...(prev ?? [])], { revalidate: false });
-        router.replace(`/chat/${newSession.id}`);
+        const realSession = (await res.json()) as Session;
+        // Replace temp session with real one
+        await mutate((prev) => (prev ?? []).map(s => s.id === tempId ? realSession : s), { revalidate: false });
+        // Replace URL to use the real ID
+        router.replace(`/chat/${realSession.id}`);
+      } else {
+        throw new Error("Failed to create session on backend");
       }
     } catch (err) {
       console.error("Create session error:", err);
+      // Rollback on error
+      await mutate((prev) => (prev ?? []).filter(s => s.id !== tempId), { revalidate: false });
+      router.replace("/");
     } finally {
       setCreating(false);
     }
