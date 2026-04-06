@@ -95,6 +95,8 @@ export default function ChatSessionPage() {
   const [coordinates, setCoordinates] = useState<Record<string, [number, number]> | null>(null);
   const [polygonOrder, setPolygonOrder] = useState<string[] | null>(null);
   const [circles, setCircles] = useState<any[] | null>(null);
+  const [lines, setLines] = useState<any[] | null>(null);
+  const [rays, setRays] = useState<any[] | null>(null);
   const [drawingPhases, setDrawingPhases] = useState<any[] | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [renderingVideo, setRenderingVideo] = useState(false);
@@ -161,6 +163,8 @@ export default function ChatSessionPage() {
       const newCoords = meta.coordinates || null;
       const newPolygonOrder = meta.polygon_order || null;
       const newCircles = meta.circles || null;
+      const newLines = meta.lines || null;
+      const newRays = meta.rays || null;
       const newPhases = meta.drawing_phases || null;
       const newJobId = meta.job_id || null;
       const newVideoUrl = meta.video_url || null;
@@ -168,6 +172,8 @@ export default function ChatSessionPage() {
       setCoordinates(newCoords);
       setPolygonOrder(newPolygonOrder);
       setCircles(newCircles);
+      setLines(newLines);
+      setRays(newRays);
       setDrawingPhases(newPhases);
       
       if (newJobId) setActiveJobId(newJobId);
@@ -182,6 +188,8 @@ export default function ChatSessionPage() {
           coordinates: newCoords,
           polygonOrder: newPolygonOrder,
           circles: newCircles,
+          lines: newLines,
+          rays: newRays,
           drawingPhases: newPhases,
           videoUrl: newVideoUrl,
           activeJobId: newJobId,
@@ -223,6 +231,8 @@ export default function ChatSessionPage() {
       setCoordinates(null);
       setPolygonOrder(null);
       setCircles(null);
+      setLines(null);
+      setRays(null);
       setDrawingPhases(null);
       setVideoUrl(null);
       setActiveJobId(null);
@@ -235,6 +245,8 @@ export default function ChatSessionPage() {
       setCoordinates(cached.coordinates);
       setPolygonOrder(cached.polygonOrder);
       setCircles(cached.circles);
+      setLines(cached.lines || null);
+      setRays(cached.rays || null);
       setDrawingPhases(cached.drawingPhases);
       setVideoUrl(cached.videoUrl);
       setActiveJobId(cached.activeJobId);
@@ -243,6 +255,8 @@ export default function ChatSessionPage() {
       setCoordinates(null);
       setPolygonOrder(null);
       setCircles(null);
+      setLines(null);
+      setRays(null);
       setDrawingPhases(null);
       setVideoUrl(null);
       setActiveJobId(null);
@@ -351,12 +365,16 @@ export default function ChatSessionPage() {
         : null;
       const newPolygonOrder = r.polygon_order ?? null;
       const newCircles = r.circles ?? null;
+      const newLines = r.lines ?? null;
+      const newRays = r.rays ?? null;
       const newPhases = r.drawing_phases ?? null;
       const newVideoUrl = typeof r.video_url === "string" && r.video_url ? r.video_url : null;
 
       if (newCoords) setCoordinates(newCoords);
       if (newPolygonOrder) setPolygonOrder(newPolygonOrder);
       if (newCircles) setCircles(newCircles);
+      if (newLines) setLines(newLines);
+      if (newRays) setRays(newRays);
       if (newPhases) setDrawingPhases(newPhases);
       if (newVideoUrl) {
         setVideoUrl(newVideoUrl);
@@ -369,6 +387,8 @@ export default function ChatSessionPage() {
           coordinates: newCoords,
           polygonOrder: newPolygonOrder,
           circles: newCircles,
+          lines: newLines,
+          rays: newRays,
           drawingPhases: newPhases,
           videoUrl: newVideoUrl,
           activeJobId: activeJobId,
@@ -690,6 +710,8 @@ export default function ChatSessionPage() {
                         coordinates={coordinates} 
                         polygonOrder={polygonOrder || undefined}
                         circles={circles || undefined}
+                        lines={lines || undefined}
+                        rays={rays || undefined}
                         drawingPhases={drawingPhases || undefined}
                       />
                     </div>

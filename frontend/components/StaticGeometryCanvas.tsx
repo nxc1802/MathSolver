@@ -8,6 +8,8 @@ interface StaticGeometryCanvasProps {
   coordinates?: Record<string, [number, number]>;
   polygonOrder?: string[];
   circles?: Array<{ center: string; radius: number }>;
+  lines?: Array<[string, string]>;
+  rays?: Array<[string, string]>;
   drawingPhases?: Array<{
     phase: number;
     label: string;
@@ -16,7 +18,7 @@ interface StaticGeometryCanvasProps {
   }>;
 }
 
-export default function StaticGeometryCanvas({ coordinates, polygonOrder, circles, drawingPhases }: StaticGeometryCanvasProps) {
+export default function StaticGeometryCanvas({ coordinates, polygonOrder, circles, lines, rays, drawingPhases }: StaticGeometryCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
@@ -24,9 +26,9 @@ export default function StaticGeometryCanvas({ coordinates, polygonOrder, circle
   const dragStart = useRef({ x: 0, y: 0 });
   const dragStartOffset = useRef({ x: 0, y: 0 });
 
-  const { viewBox, points, phasePaths, circlePaths, spanX } = useMemo(() => {
+  const { viewBox, points, phasePaths, circlePaths, linePaths, rayPaths, spanX } = useMemo(() => {
     if (!coordinates || Object.keys(coordinates).length === 0) {
-      return { viewBox: "0 0 100 100", points: [], phasePaths: [], circlePaths: [], spanX: 100 };
+      return { viewBox: "0 0 100 100", points: [], phasePaths: [], circlePaths: [], linePaths: [], rayPaths: [], spanX: 100 };
     }
 
     const entries = Object.entries(coordinates);
@@ -92,8 +94,40 @@ export default function StaticGeometryCanvas({ coordinates, polygonOrder, circle
       }
     }
 
-    return { viewBox: vb, points: parsedPoints, phasePaths: resPhasePaths, circlePaths: circleParsed, spanX: sX };
-  }, [coordinates, polygonOrder, circles, drawingPhases]);
+    // Lines (Infinite)
+    const resLinePaths: string[] = [];
+    (lines || []).forEach(([p1, p2]) => {
+      const pt1 = parsedPoints.find(p => p.label === p1);
+      const pt2 = parsedPoints.find(p => p.label === p2);
+      if (pt1 && pt2) {
+        const dx = pt2.x - pt1.x;
+        const dy = pt2.y - pt1.y;
+        // Extend far beyond viewBox
+        const x1 = pt1.x - dx * 2000;
+        const y1 = pt1.y - dy * 2000;
+        const x2 = pt1.x + dx * 2000;
+        const y2 = pt1.y + dy * 2000;
+        resLinePaths.push(`M ${x1} ${y1} L ${x2} ${y2}`);
+      }
+    });
+
+    // Rays
+    const resRayPaths: string[] = [];
+    (rays || []).forEach(([p1, p2]) => {
+      const pt1 = parsedPoints.find(p => p.label === p1);
+      const pt2 = parsedPoints.find(p => p.label === p2);
+      if (pt1 && pt2) {
+        const dx = pt2.x - pt1.x;
+        const dy = pt2.y - pt1.y;
+        // Start at pt1, extend far past pt2
+        const x2 = pt1.x + dx * 2000;
+        const y2 = pt1.y + dy * 2000;
+        resRayPaths.push(`M ${pt1.x} ${pt1.y} L ${x2} ${y2}`);
+      }
+    });
+
+    return { viewBox: vb, points: parsedPoints, phasePaths: resPhasePaths, circlePaths: circleParsed, linePaths: resLinePaths, rayPaths: resRayPaths, spanX: sX };
+  }, [coordinates, polygonOrder, circles, lines, rays, drawingPhases]);
 
   const handleWheel = (e: React.WheelEvent) => {
     if (e.ctrlKey || e.metaKey) {
@@ -231,6 +265,30 @@ export default function StaticGeometryCanvas({ coordinates, polygonOrder, circle
               />
             );
           })}
+
+          {linePaths.map((d, i) => (
+            <path 
+              key={`line-${i}`}
+              d={d}
+              fill="none"
+              stroke="rgba(79, 70, 229, 0.6)"
+              strokeWidth="1.5"
+              vectorEffect="non-scaling-stroke"
+              strokeDasharray="10 5"
+            />
+          ))}
+
+          {rayPaths.map((d, i) => (
+            <path 
+              key={`ray-${i}`}
+              d={d}
+              fill="none"
+              stroke="rgba(139, 92, 246, 0.6)"
+              strokeWidth="1.5"
+              vectorEffect="non-scaling-stroke"
+              strokeDasharray="8 4"
+            />
+          ))}
           
           {circlePaths.map((c, i) => (
             <circle 

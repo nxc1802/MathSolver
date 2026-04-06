@@ -29,6 +29,8 @@ export interface ChatMessage {
       points: string[];
       segments: string[][];
     }>;
+    lines?: Array<[string, string]>;
+    rays?: Array<[string, string]>;
     /** Primary key from API / DB (snake_case) */
     video_url?: string;
     /** @deprecated Prefer video_url */

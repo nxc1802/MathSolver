@@ -15,6 +15,8 @@ export interface GeometryState {
     points: string[];
     segments: string[][];
   }> | null;
+  lines: Array<[string, string]> | null;
+  rays: Array<[string, string]> | null;
   videoUrl: string | null;
   activeJobId: string | null;
 }
