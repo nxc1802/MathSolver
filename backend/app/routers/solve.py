@@ -55,6 +55,21 @@ async def solve_problem(
             status_code=403, detail="Forbidden: You do not own this session."
         )
 
+    # NEW: Giới hạn 5 queries mỗi session
+    msg_count_res = (
+        supabase.table("messages")
+        .select("id", count="exact")
+        .eq("session_id", session_id)
+        .eq("role", "user")
+        .execute()
+    )
+    current_count = msg_count_res.count if msg_count_res.count is not None else 0
+    if current_count >= 5:
+        raise HTTPException(
+            status_code=400, 
+            detail="Bạn đã đạt giới hạn 5 câu hỏi cho phiên này. (Session limit reached: 5/5)"
+        )
+
     supabase.table("messages").insert(
         {
             "session_id": session_id,
@@ -147,6 +162,8 @@ async def process_session_job(
                         "polygon_order": result.get("polygon_order", []),
                         "drawing_phases": result.get("drawing_phases", []),
                         "circles": result.get("circles", []),
+                        "lines": result.get("lines", []),
+                        "rays": result.get("rays", []),
                     },
                 }
             ).execute()

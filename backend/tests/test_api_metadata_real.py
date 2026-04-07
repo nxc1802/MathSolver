@@ -13,7 +13,7 @@ async def test_metadata_persistence():
     print(f"🚀 Starting sub-pipeline test for job {job_id}...")
     
     request = SolveRequest(
-        text="Cho hình chữ nhật ABCD có AB=10, AD=20. M là trung điểm AB.",
+        text="Cho hình chữ nhật ABCD có AB=10, AD=20. Vẽ đường thẳng d đi qua A và B.",
         request_video=False
     )
     
@@ -38,13 +38,14 @@ async def test_metadata_persistence():
         return
     
     metadata = res.data[0].get("metadata", {})
-    required_fields = ["job_id", "coordinates", "polygon_order", "drawing_phases", "circles"]
+    required_fields = ["job_id", "coordinates", "polygon_order", "drawing_phases", "circles", "lines", "rays"]
     missing = [f for f in required_fields if f not in metadata]
     
     if not missing:
-        print("✅ SUCCESS: All metadata fields persisted correctly.")
+        print("✅ SUCCESS: All metadata fields (including lines/rays) persisted correctly.")
         print(f"   job_id: {metadata.get('job_id')}")
         print(f"   polygon_order: {metadata.get('polygon_order')}")
+        print(f"   lines: {metadata.get('lines')}")
         print(f"   phases: {len(metadata.get('drawing_phases', []))}")
     else:
         print(f"❌ FAIL: Missing fields in metadata: {missing}")

@@ -64,6 +64,8 @@ def render_geometry_video(job_id: str, data: dict):
                     "polygon_order": data.get("polygon_order", []),
                     "drawing_phases": data.get("drawing_phases", []),
                     "circles": data.get("circles", []),
+                    "lines": data.get("lines", []),
+                    "rays": data.get("rays", []),
                 }
             }).execute()
         

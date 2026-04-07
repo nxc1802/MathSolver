@@ -111,6 +111,13 @@ export default function ChatSessionPage() {
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [pendingQueue, setPendingQueue] = useState<{ id: string; text: string }[]>([]);
 
+  // Feature: 5-query session limit
+  const userQueryCount = useMemo(() => {
+    const historicalUsers = messages.filter((m) => m.role === "user").length;
+    return historicalUsers + pendingQueue.length;
+  }, [messages, pendingQueue]);
+  const isLimitReached = userQueryCount >= 5;
+
   const geometrySnapshots = useMemo(() => {
     return [...messages]
       .filter((m) => m.role === "assistant" && m.type !== "error" && m.metadata?.coordinates)
@@ -445,9 +452,9 @@ export default function ChatSessionPage() {
     const isQueued = typeof input === "string";
     const textToUse = isQueued ? input : inputText;
     
-    if (!textToUse.trim() || !userSession?.access_token) return;
+    if (!textToUse.trim() || !userSession?.access_token || isLimitReached) return;
 
-    // Feature 3: Multi-queuing
+    // Feature 3: Multi-queuing (Push to queue if already solving)
     if (solveLoading && !isQueued) {
       setPendingQueue((prev) => [...prev, { id: "q-" + Date.now(), text: textToUse }]);
       setInputText("");
@@ -627,14 +634,14 @@ export default function ChatSessionPage() {
                           className="p-1.5 hover:bg-white/5 rounded-lg text-zinc-500 hover:text-white transition-colors"
                           title="Sửa"
                         >
-                          <Maximize2 className="w-4 h-4" />
+                          <Pencil className="w-4 h-4" />
                         </button>
                         <button
                           onClick={() => removeQueued(q.id)}
                           className="p-1.5 hover:bg-red-500/10 rounded-lg text-zinc-500 hover:text-red-400 transition-colors"
                           title="Hủy"
                         >
-                          <X className="w-4 h-4" />
+                          <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
                     </div>
@@ -693,22 +700,23 @@ export default function ChatSessionPage() {
                     <textarea
                       value={inputText}
                       onChange={(e) => setInputText(e.target.value)}
-                      placeholder="Nhập đề hoặc dán / kéo ảnh đề..."
+                      placeholder={isLimitReached ? "Bạn đã đạt giới hạn 5 câu hỏi cho phiên này." : "Nhập đề hoặc dán / kéo ảnh đề..."}
+                      disabled={isLimitReached}
                       rows={1}
                       onPaste={onPasteImages}
                       onKeyDown={(e) => {
-                        if (e.key === "Enter" && !e.shiftKey) {
+                        if (e.key === "Enter" && !e.shiftKey && !isLimitReached) {
                           e.preventDefault();
                           void handleSolve();
                         }
                       }}
-                      className="w-full h-14 min-h-[3.5rem] max-h-14 resize-none overflow-y-auto bg-[var(--input-bg)] border border-[var(--border)] rounded-2xl px-4 py-3 text-sm text-[var(--foreground)] leading-snug focus:outline-none focus:border-indigo-500/50 transition-all"
+                      className={`w-full h-14 min-h-[3.5rem] max-h-14 resize-none overflow-y-auto bg-[var(--input-bg)] border border-[var(--border)] rounded-2xl px-4 py-3 text-sm text-[var(--foreground)] leading-snug focus:outline-none focus:border-indigo-500/50 transition-all ${isLimitReached ? "opacity-50 cursor-not-allowed" : ""}`}
                     />
                   </div>
                   <button
                     type="button"
                     onClick={handleSolve}
-                    disabled={solveLoading || !inputText.trim()}
+                    disabled={isLimitReached || !inputText.trim()}
                     className="h-14 w-14 shrink-0 rounded-2xl bg-indigo-600 text-white flex items-center justify-center hover:bg-indigo-500 transition-all disabled:opacity-30 shadow-lg shadow-indigo-500/20"
                   >
                     {solveLoading ? (
