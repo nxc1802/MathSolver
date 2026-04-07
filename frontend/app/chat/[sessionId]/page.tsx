@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useParams } from "next/navigation";
 import { Send, Sparkles, Loader2, Film, Bot, Maximize2 } from "lucide-react";
@@ -9,6 +9,7 @@ import useSWR, { useSWRConfig } from "swr";
 import ChatSidebar from "@/components/ChatSidebar";
 import AnimationPreview from "@/components/AnimationPreview";
 import StaticGeometryCanvas from "@/components/StaticGeometryCanvas";
+import VersionSwitcher from "@/components/VersionSwitcher";
 import ChatMessageComponent from "@/components/ChatMessage";
 import { useAuth } from "@/lib/auth-context";
 import { getApiBaseUrl, getWsBaseUrl } from "@/lib/api-config";
@@ -109,6 +110,12 @@ export default function ChatSessionPage() {
   const [videoVersion, setVideoVersion] = useState(1);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
 
+  const geometrySnapshots = useMemo(() => {
+    return [...messages]
+      .filter((m) => m.role === "assistant" && m.type !== "error" && m.metadata?.coordinates)
+      .reverse();
+  }, [messages]);
+
   const [splitPercent, setSplitPercent] = useState(14.3);
   const [mainSplitPercent, setMainSplitPercent] = useState(50);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -158,57 +165,36 @@ export default function ChatSessionPage() {
 
   useEffect(() => () => clearSolvePoll(), [clearSolvePoll]);
 
-  const applyMediaFromMessages = useCallback((msgList: ChatMessage[], sid: string) => {
-    // Find the absolute latest assistant message that was successful
-    const latestBotMsg = [...msgList]
-      .reverse()
-      .find((m) => m.role === "assistant" && m.type !== "error" && m.metadata?.coordinates);
-
-    if (latestBotMsg?.metadata) {
-      const meta = latestBotMsg.metadata;
-      const newCoords = meta.coordinates || null;
-      const newPolygonOrder = meta.polygon_order || null;
-      const newCircles = meta.circles || null;
-      const newLines = meta.lines || null;
-      const newRays = meta.rays || null;
-      const newPhases = meta.drawing_phases || null;
-      const newJobId = meta.job_id || null;
-      const newVideoUrl = meta.video_url || null;
-
-      setCoordinates(newCoords);
-      setPolygonOrder(newPolygonOrder);
-      setCircles(newCircles);
-      setLines(newLines);
-      setRays(newRays);
-      setDrawingPhases(newPhases);
-      
-      if (newJobId) setActiveJobId(newJobId);
-      if (newVideoUrl) {
-        setVideoUrl(newVideoUrl);
-        setVideoVersion(1);
-      }
-
-      // Bug 4: Cache to sessionStorage so switching back to this session is instant
-      if (sid && !sid.startsWith("temp-")) {
-        saveGeometryState(sid, {
-          coordinates: newCoords,
-          polygonOrder: newPolygonOrder,
-          circles: newCircles,
-          lines: newLines,
-          rays: newRays,
-          drawingPhases: newPhases,
-          videoUrl: newVideoUrl,
-          activeJobId: newJobId,
-        });
-      }
+  const setGeometryFromSnapshot = useCallback((snapshot: ChatMessage) => {
+    if (snapshot?.metadata) {
+      const meta = snapshot.metadata;
+      setCoordinates(meta.coordinates || null);
+      setPolygonOrder(meta.polygon_order || null);
+      setCircles(meta.circles || null);
+      setLines(meta.lines || null);
+      setRays(meta.rays || null);
+      setDrawingPhases(meta.drawing_phases || null);
+      setVideoUrl(meta.video_url || null);
+      if (meta.job_id) setActiveJobId(meta.job_id);
     }
   }, []);
 
   useEffect(() => {
-    if (messages.length > 0) {
-      applyMediaFromMessages(messages, sessionId);
+    if (geometrySnapshots.length > 0) {
+      // Default to version 1 (latest) if out of bounds
+      const safeVersion = Math.min(Math.max(videoVersion, 1), geometrySnapshots.length);
+      setGeometryFromSnapshot(geometrySnapshots[safeVersion - 1]);
+    } else {
+      // No geometry
+      setCoordinates(null);
+      setPolygonOrder(null);
+      setCircles(null);
+      setLines(null);
+      setRays(null);
+      setDrawingPhases(null);
+      setVideoUrl(null);
     }
-  }, [messages, applyMediaFromMessages, sessionId]);
+  }, [geometrySnapshots, videoVersion, setGeometryFromSnapshot]);
 
   useEffect(() => {
     // When assets change, updating the current video if appropriate
@@ -277,16 +263,12 @@ export default function ChatSessionPage() {
 
   const handleNextVersion = () => {
     if (videoVersion > 1) {
-      const nextIdx = videoVersion - 2;
-      setVideoUrl(sessionAssets[nextIdx].public_url);
       setVideoVersion(videoVersion - 1);
     }
   };
 
   const handlePrevVersion = () => {
-    if (videoVersion < sessionAssets.length) {
-      const prevIdx = videoVersion;
-      setVideoUrl(sessionAssets[prevIdx].public_url);
+    if (videoVersion < geometrySnapshots.length) {
       setVideoVersion(videoVersion + 1);
     }
   };
@@ -685,7 +667,7 @@ export default function ChatSessionPage() {
                       <div className="w-1 h-3 bg-indigo-500 rounded-full" />
                       <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-[0.2em]">Hình vẽ mô phỏng</span>
                     </div>
-                    <div className="bg-[var(--card-bg)] rounded-3xl border border-[var(--border)] p-1 shadow-2xl overflow-hidden self-center">
+                    <div className="bg-[var(--card-bg)] rounded-3xl border border-[var(--border)] p-1 shadow-2xl overflow-hidden self-center relative group/canvas">
                       <StaticGeometryCanvas 
                         coordinates={coordinates} 
                         polygonOrder={polygonOrder || undefined}
@@ -694,6 +676,16 @@ export default function ChatSessionPage() {
                         rays={rays || undefined}
                         drawingPhases={drawingPhases || undefined}
                       />
+                      {geometrySnapshots.length > 1 && (
+                        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 opacity-0 group-hover/canvas:opacity-100 transition-opacity">
+                          <VersionSwitcher 
+                            currentVersion={videoVersion}
+                            totalVersions={geometrySnapshots.length}
+                            onNext={handleNextVersion}
+                            onPrev={handlePrevVersion}
+                          />
+                        </div>
+                      )}
                     </div>
                   </motion.div>
                 )}
@@ -706,12 +698,12 @@ export default function ChatSessionPage() {
                         {videoUrl ? "🎬 Phim minh họa" : "🎨 Đang dựng hình..."}
                       </span>
                     </div>
-                    <div className="bg-[var(--card-bg)] rounded-3xl border border-[var(--border)] p-1 shadow-2xl relative overflow-hidden">
+                    <div className="bg-[var(--card-bg)] rounded-3xl border border-[var(--border)] p-1 shadow-2xl relative overflow-hidden group/video">
                       <AnimationPreview 
                         videoUrl={videoUrl || undefined} 
                         loading={renderingVideo} 
                         currentVersion={videoVersion}
-                        totalVersions={sessionAssets.length}
+                        totalVersions={geometrySnapshots.length}
                         onNext={handleNextVersion}
                         onPrev={handlePrevVersion}
                       />
