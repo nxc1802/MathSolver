@@ -59,11 +59,14 @@ async function fetchSessionAssets([url, token]: [string, string]): Promise<any[]
 }
 
 export default function ChatSessionPage() {
+  // --- 1. Params & Context ---
   const params = useParams();
   const sessionId = params?.sessionId as string;
   const { session: userSession } = useAuth();
   const { mutate: globalMutate } = useSWRConfig();
+  const isTempSession = sessionId?.startsWith("temp-");
 
+  // --- 2. Keys & SWR ---
   const messagesKey = userSession?.access_token && sessionId 
     ? [`${getApiBaseUrl()}/api/v1/sessions/${sessionId}/messages`, userSession.access_token] as const 
     : null;
@@ -71,8 +74,6 @@ export default function ChatSessionPage() {
   const assetsKey = userSession?.access_token && sessionId 
     ? [`${getApiBaseUrl()}/api/v1/sessions/${sessionId}/assets`, userSession.access_token] as const 
     : null;
-
-  const isTempSession = sessionId?.startsWith("temp-");
 
   const { data: messages = [], isLoading: historyLoadingRaw, mutate: mutateMessages } = useSWR(
     !isTempSession ? messagesKey : null,
@@ -92,6 +93,7 @@ export default function ChatSessionPage() {
     { revalidateOnFocus: false }
   );
 
+  // --- 3. State ---
   const [inputText, setInputText] = useState("");
   const [solveLoading, setSolveLoading] = useState(false);
   const [ocrLoading, setOcrLoading] = useState(false);
@@ -111,48 +113,34 @@ export default function ChatSessionPage() {
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [pendingQueue, setPendingQueue] = useState<{ id: string; text: string }[]>([]);
 
-  // Feature: 5-query session limit
-  const userQueryCount = useMemo(() => {
-    const historicalUsers = messages.filter((m) => m.role === "user").length;
-    return historicalUsers + pendingQueue.length;
-  }, [messages, pendingQueue]);
-  const isLimitReached = userQueryCount >= 5;
-
-  const geometrySnapshots = useMemo(() => {
-    return [...messages]
-      .filter((m) => m.role === "assistant" && m.type !== "error" && m.metadata?.coordinates)
-      .reverse();
-  }, [messages]);
-
   const [splitPercent, setSplitPercent] = useState(14.3);
   const [mainSplitPercent, setMainSplitPercent] = useState(50);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [uiHydrated, setUiHydrated] = useState(false);
 
+  // --- 4. Refs ---
   const draggingType = useRef<'sidebar' | 'main' | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollAttemptsRef = useRef(0);
   const solveWsRef = useRef<WebSocket | null>(null);
+  const isProcessingRef = useRef(false);
+  const prevSessionIdRef = useRef<string | null>(null);
+  const prevSnapshotsCountRef = useRef(0);
 
-  useEffect(() => {
-    setSplitPercent(readSplitPercent(14.3));
-    setMainSplitPercent(readMainSplitPercent(50));
-    setSidebarCollapsed(readSidebarCollapsed());
-    setUiHydrated(true);
-  }, []);
+  // --- 5. Memos ---
+  const userQueryCount = useMemo(() => {
+    const historicalUsers = messages.filter((m) => m.role === "user").length;
+    return historicalUsers + pendingQueue.length;
+  }, [messages, pendingQueue]);
 
-  useEffect(() => {
-    if (!uiHydrated) return;
-    writeSplitPercent(splitPercent);
-    writeMainSplitPercent(mainSplitPercent);
-  }, [splitPercent, mainSplitPercent, uiHydrated]);
+  const isLimitReached = userQueryCount >= 5;
 
-  useEffect(() => {
-    if (!uiHydrated) return;
-    writeSidebarCollapsed(sidebarCollapsed);
-  }, [sidebarCollapsed, uiHydrated]);
+  const geometrySnapshots = useMemo(() => {
+    return [...messages]
+      .filter((m) => m.role === "assistant" && m.type !== "error" && m.metadata?.coordinates);
+  }, [messages]);
 
   const statusLabels: Record<string, string> = {
     processing: "🔄 Đang xử lý bài toán...",
@@ -163,6 +151,7 @@ export default function ChatSessionPage() {
     error: "❌ Có lỗi xảy ra.",
   };
 
+  // --- 6. Callbacks ---
   const clearSolvePoll = useCallback(() => {
     if (pollIntervalRef.current !== null) {
       clearInterval(pollIntervalRef.current);
@@ -170,8 +159,6 @@ export default function ChatSessionPage() {
     }
     pollAttemptsRef.current = 0;
   }, []);
-
-  useEffect(() => () => clearSolvePoll(), [clearSolvePoll]);
 
   const setGeometryFromSnapshot = useCallback((snapshot: ChatMessage) => {
     if (snapshot?.metadata) {
@@ -186,153 +173,6 @@ export default function ChatSessionPage() {
       if (meta.job_id) setActiveJobId(meta.job_id);
     }
   }, []);
-
-  useEffect(() => {
-    if (geometrySnapshots.length > 0) {
-      // Default to version 1 (latest) if out of bounds
-      const safeVersion = Math.min(Math.max(videoVersion, 1), geometrySnapshots.length);
-      setGeometryFromSnapshot(geometrySnapshots[safeVersion - 1]);
-    } else {
-      // No geometry
-      setCoordinates(null);
-      setPolygonOrder(null);
-      setCircles(null);
-      setLines(null);
-      setRays(null);
-      setDrawingPhases(null);
-      setVideoUrl(null);
-    }
-  }, [geometrySnapshots, videoVersion, setGeometryFromSnapshot]);
-
-  useEffect(() => {
-    // When assets change, updating the current video if appropriate
-    if (sessionAssets.length > 0) {
-      // By default, if we are not in the middle of a solve, use the latest asset
-      if (!currentStatus) {
-        setVideoUrl(sessionAssets[0].public_url);
-        setVideoVersion(1);
-      }
-    }
-  }, [sessionAssets, currentStatus]);
-
-  // Bug 1 + 4 Fix: When switching sessions, restore from sessionStorage cache instead of
-  // blanking out immediately. Only reset to null if nothing is cached.
-  const prevSessionIdRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (!sessionId || sessionId === prevSessionIdRef.current) return;
-    prevSessionIdRef.current = sessionId;
-
-    // Reset transient solve state (not geometry — that comes from cache)
-    setCurrentStatus(null);
-    setVideoVersion(1);
-
-    if (sessionId.startsWith("temp-")) {
-      // Temp sessions have no data at all — clear geometry immediately
-      setCoordinates(null);
-      setPolygonOrder(null);
-      setCircles(null);
-      setLines(null);
-      setRays(null);
-      setDrawingPhases(null);
-      setVideoUrl(null);
-      setActiveJobId(null);
-      return;
-    }
-
-    // Try to restore from cache for instant display (Bug 4)
-    const cached = loadGeometryState(sessionId);
-    if (cached) {
-      setCoordinates(cached.coordinates);
-      setPolygonOrder(cached.polygonOrder);
-      setCircles(cached.circles);
-      setLines(cached.lines || null);
-      setRays(cached.rays || null);
-      setDrawingPhases(cached.drawingPhases);
-      setVideoUrl(cached.videoUrl);
-      setActiveJobId(cached.activeJobId);
-    } else {
-      // No cache — blank out and wait for messages to load
-      setCoordinates(null);
-      setPolygonOrder(null);
-      setCircles(null);
-      setLines(null);
-      setRays(null);
-      setDrawingPhases(null);
-      setVideoUrl(null);
-      setActiveJobId(null);
-    }
-
-    // Bug 2 Fix: Check for active jobs and re-attach
-    const activeJobIdForSession = getActiveJob(sessionId);
-    if (activeJobIdForSession) {
-      void attachToJob(activeJobIdForSession);
-    }
-  }, [sessionId]);
-
-  const handleNextVersion = () => {
-    if (videoVersion > 1) {
-      setVideoVersion(videoVersion - 1);
-    }
-  };
-
-  const handlePrevVersion = () => {
-    if (videoVersion < geometrySnapshots.length) {
-      setVideoVersion(videoVersion + 1);
-    }
-  };
-
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, currentStatus]);
-
-  const runOcrOnFile = async (file: File) => {
-    if (!file.type.startsWith("image/")) return;
-    setOcrLoading(true);
-    const formData = new FormData();
-    formData.append("file", file);
-    const apiUrl = getApiBaseUrl();
-    try {
-      const res = await fetch(`${apiUrl}/api/v1/ocr`, {
-        method: "POST",
-        body: formData,
-      });
-      const data = (await res.json()) as { text?: string };
-      const extracted = data.text;
-      if (extracted) {
-        setInputText((prev) => (prev ? `${prev}\n${extracted}` : extracted));
-      }
-    } catch (err) {
-      console.error("OCR Error:", err);
-    } finally {
-      setOcrLoading(false);
-    }
-  };
-
-  const onPasteImages = (e: React.ClipboardEvent) => {
-    const items = e.clipboardData?.items;
-    if (!items?.length) return;
-    for (let i = 0; i < items.length; i++) {
-      const item = items[i];
-      if (item.kind === "file" && item.type.startsWith("image/")) {
-        e.preventDefault();
-        const file = item.getAsFile();
-        if (file) void runOcrOnFile(file);
-        return;
-      }
-    }
-  };
-
-  const onDragOverInput = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-  };
-
-  const onDropInput = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const file = e.dataTransfer?.files?.[0];
-    if (file?.type.startsWith("image/")) void runOcrOnFile(file);
-  };
 
   const applyJobRow = useCallback((job: { status?: string; result?: Record<string, any> }) => {
     const r = job.result || {};
@@ -378,6 +218,7 @@ export default function ChatSessionPage() {
     void mutateAssets();
     setCurrentStatus(null);
     setSolveLoading(false);
+    isProcessingRef.current = false;
     setRenderingVideo(false);
     clearActiveJob(sessionId);
     try {
@@ -448,19 +289,25 @@ export default function ChatSessionPage() {
     }
   }, [sessionId, clearSolvePoll, finishSolveFlow, applyJobRow]);
 
+  const attachToJobWithLoading = useCallback(async (jobId: string) => {
+    isProcessingRef.current = true;
+    setSolveLoading(true);
+    return attachToJob(jobId);
+  }, [attachToJob]);
+
   const handleSolve = async (input?: string | React.MouseEvent | React.KeyboardEvent) => {
     const isQueued = typeof input === "string";
     const textToUse = isQueued ? input : inputText;
     
     if (!textToUse.trim() || !userSession?.access_token || isLimitReached) return;
 
-    // Feature 3: Multi-queuing (Push to queue if already solving)
-    if (solveLoading && !isQueued) {
+    if (isProcessingRef.current && !isQueued) {
       setPendingQueue((prev) => [...prev, { id: "q-" + Date.now(), text: textToUse }]);
       setInputText("");
       return;
     }
 
+    isProcessingRef.current = true;
     setSolveLoading(true);
     setCurrentStatus("processing");
     
@@ -502,15 +349,6 @@ export default function ChatSessionPage() {
     }
   };
 
-  // Feature 3: Process queue
-  useEffect(() => {
-    if (!solveLoading && pendingQueue.length > 0) {
-      const next = pendingQueue[0];
-      setPendingQueue((prev) => prev.slice(1));
-      void handleSolve(next.text);
-    }
-  }, [solveLoading, pendingQueue]);
-
   const removeQueued = (id: string) => {
     setPendingQueue((prev) => prev.filter((q) => q.id !== id));
   };
@@ -527,13 +365,176 @@ export default function ChatSessionPage() {
     document.body.style.userSelect = "none";
   }, []);
 
+  const handleNextVersion = () => {
+    if (videoVersion < geometrySnapshots.length) {
+      setVideoVersion((v) => v + 1);
+    }
+  };
+
+  const handlePrevVersion = () => {
+    if (videoVersion > 1) {
+      setVideoVersion((v) => v - 1);
+    }
+  };
+
+  const runOcrOnFile = async (file: File) => {
+    if (!file.type.startsWith("image/")) return;
+    setOcrLoading(true);
+    const formData = new FormData();
+    formData.append("file", file);
+    const apiUrl = getApiBaseUrl();
+    try {
+      const res = await fetch(`${apiUrl}/api/v1/ocr`, {
+        method: "POST",
+        body: formData,
+      });
+      const data = (await res.json()) as { text?: string };
+      const extracted = data.text;
+      if (extracted) {
+        setInputText((prev) => (prev ? `${prev}\n${extracted}` : extracted));
+      }
+    } catch (err) {
+      console.error("OCR Error:", err);
+    } finally {
+      setOcrLoading(false);
+    }
+  };
+
+  const onPasteImages = (e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items;
+    if (!items?.length) return;
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (item.kind === "file" && item.type.startsWith("image/")) {
+        e.preventDefault();
+        const file = item.getAsFile();
+        if (file) void runOcrOnFile(file);
+        return;
+      }
+    }
+  };
+
+  const onDragOverInput = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const onDropInput = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const file = e.dataTransfer?.files?.[0];
+    if (file?.type.startsWith("image/")) void runOcrOnFile(file);
+  };
+
+  // --- 7. Effects ---
+  useEffect(() => {
+    setSplitPercent(readSplitPercent(14.3));
+    setMainSplitPercent(readMainSplitPercent(50));
+    setSidebarCollapsed(readSidebarCollapsed());
+    setUiHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!uiHydrated) return;
+    writeSplitPercent(splitPercent);
+    writeMainSplitPercent(mainSplitPercent);
+  }, [splitPercent, mainSplitPercent, uiHydrated]);
+
+  useEffect(() => {
+    if (!uiHydrated) return;
+    writeSidebarCollapsed(sidebarCollapsed);
+  }, [sidebarCollapsed, uiHydrated]);
+
+  useEffect(() => () => clearSolvePoll(), [clearSolvePoll]);
+
+  useEffect(() => {
+    if (geometrySnapshots.length > 0) {
+      const safeVersion = Math.min(Math.max(videoVersion, 1), geometrySnapshots.length);
+      setGeometryFromSnapshot(geometrySnapshots[safeVersion - 1]);
+    } else {
+      setCoordinates(null);
+      setPolygonOrder(null);
+      setCircles(null);
+      setLines(null);
+      setRays(null);
+      setDrawingPhases(null);
+      setVideoUrl(null);
+    }
+  }, [geometrySnapshots, videoVersion, setGeometryFromSnapshot]);
+
+  useEffect(() => {
+    if (geometrySnapshots.length > prevSnapshotsCountRef.current) {
+      setVideoVersion(geometrySnapshots.length);
+    }
+    prevSnapshotsCountRef.current = geometrySnapshots.length;
+  }, [geometrySnapshots.length]);
+
+  useEffect(() => {
+    if (sessionAssets.length > 0) {
+      if (!currentStatus && !videoUrl) {
+        setVideoUrl(sessionAssets[0].public_url);
+      }
+    }
+  }, [sessionAssets.length, currentStatus, !!videoUrl]);
+
+  useEffect(() => {
+    if (!sessionId || sessionId === prevSessionIdRef.current) return;
+    prevSessionIdRef.current = sessionId;
+    setCurrentStatus(null);
+    setVideoVersion(1);
+
+    if (sessionId.startsWith("temp-")) {
+      setCoordinates(null);
+      setPolygonOrder(null);
+      setCircles(null);
+      setLines(null);
+      setRays(null);
+      setDrawingPhases(null);
+      setVideoUrl(null);
+      setActiveJobId(null);
+      return;
+    }
+
+    const cached = loadGeometryState(sessionId);
+    if (cached) {
+      setCoordinates(cached.coordinates);
+      setPolygonOrder(cached.polygonOrder);
+      setCircles(cached.circles);
+      setLines(cached.lines || null);
+      setRays(cached.rays || null);
+      setDrawingPhases(cached.drawingPhases);
+      setVideoUrl(cached.videoUrl);
+      setActiveJobId(cached.activeJobId);
+    } else {
+      setCoordinates(null);
+      setPolygonOrder(null);
+      setCircles(null);
+      setLines(null);
+      setRays(null);
+      setDrawingPhases(null);
+      setVideoUrl(null);
+      setActiveJobId(null);
+    }
+
+    const activeJobIdForSession = getActiveJob(sessionId);
+    if (activeJobIdForSession) {
+      void attachToJobWithLoading(activeJobIdForSession);
+    }
+  }, [sessionId, attachToJobWithLoading]);
+
+  useEffect(() => {
+    if (!solveLoading && pendingQueue.length > 0) {
+      const next = pendingQueue[0];
+      setPendingQueue((prev) => prev.slice(1));
+      void handleSolve(next.text);
+    }
+  }, [solveLoading, pendingQueue]);
+
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       if (!draggingType.current || !containerRef.current) return;
-      
       const rect = containerRef.current.getBoundingClientRect();
       const x = e.clientX - rect.left;
-      
       if (draggingType.current === 'sidebar' && !sidebarCollapsed) {
         const pct = (x / rect.width) * 100;
         setSplitPercent(Math.min(Math.max(pct, SPLIT_MIN_PCT), SPLIT_MAX_PCT));
@@ -557,6 +558,10 @@ export default function ChatSessionPage() {
       window.removeEventListener("mouseup", handleMouseUp);
     };
   }, [sidebarCollapsed, splitPercent]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages.length, currentStatus, pendingQueue.length]);
 
   return (
     <div ref={containerRef} className="h-screen w-screen flex bg-[var(--background)] text-[var(--foreground)] overflow-hidden">
@@ -586,7 +591,6 @@ export default function ChatSessionPage() {
             style={{ width: `${mainSplitPercent}%` }}
           >
             <div className="flex-1 overflow-y-auto p-4 space-y-6 scrollbar-thin">
-              {/* Feature 2: Flicker-free loading */}
               {historyLoading && messages.length === 0 && !isTempSession && (
                 <div className="flex flex-col items-center justify-center py-16 gap-3 text-zinc-500 animate-in fade-in duration-700 delay-500">
                   <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
@@ -610,7 +614,6 @@ export default function ChatSessionPage() {
                 <ChatMessageComponent key={msg.id} message={msg} />
               ))}
 
-              {/* Feature 3: Pending Queue UI */}
               <AnimatePresence>
                 {pendingQueue.map((q, idx) => (
                   <motion.div
@@ -625,7 +628,7 @@ export default function ChatSessionPage() {
                     </div>
                     <div className="flex-1 max-w-2xl bg-zinc-900/40 border border-white/5 rounded-2xl px-5 py-4 flex items-center justify-between group">
                       <div className="flex flex-col gap-1">
-                        <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest">Hàng đợi (Pending)</span>
+                        <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest">Hàng đợi (Queued)</span>
                         <p className="text-sm text-zinc-400 line-clamp-1 italic">{q.text}</p>
                       </div>
                       <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -791,13 +794,6 @@ export default function ChatSessionPage() {
                       />
                     </div>
                   </motion.div>
-                )}
-
-                {!coordinates && !videoUrl && !renderingVideo && (
-                  <div className="h-full flex flex-col items-center justify-center opacity-20 py-20 grayscale">
-                    <Bot className="w-16 h-16 mb-4" />
-                    <p className="text-sm font-bold uppercase tracking-[0.3em]">No Data</p>
-                  </div>
                 )}
               </AnimatePresence>
             </div>

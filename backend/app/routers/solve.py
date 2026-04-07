@@ -164,6 +164,7 @@ async def process_session_job(
                         "circles": result.get("circles", []),
                         "lines": result.get("lines", []),
                         "rays": result.get("rays", []),
+                        "video_url": result.get("video_url"),
                     },
                 }
             ).execute()

@@ -25,14 +25,18 @@ export default function VersionSwitcher({ currentVersion, totalVersions, onNext,
         <button
           onClick={onPrev}
           disabled={currentVersion <= 1}
-          className="p-1 hover:bg-white/10 rounded-md transition-colors disabled:opacity-20 disabled:cursor-not-allowed group"
+          data-testid="version-prev"
+          aria-label="Previous version"
+          className="p-2.5 hover:bg-white/10 active:scale-95 rounded-md transition-all disabled:opacity-20 disabled:cursor-not-allowed group"
         >
           <ChevronLeft className="w-4 h-4 text-zinc-400 group-hover:text-white" />
         </button>
         <button
           onClick={onNext}
           disabled={currentVersion >= totalVersions}
-          className="p-1 hover:bg-white/10 rounded-md transition-colors disabled:opacity-20 disabled:cursor-not-allowed group"
+          data-testid="version-next"
+          aria-label="Next version"
+          className="p-2.5 hover:bg-white/10 active:scale-95 rounded-md transition-all disabled:opacity-20 disabled:cursor-not-allowed group"
         >
           <ChevronRight className="w-4 h-4 text-zinc-400 group-hover:text-white" />
         </button>
