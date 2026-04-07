@@ -46,6 +46,10 @@ export function normalizeMessageMetadata(
     Array.isArray(raw.circles) ? (raw.circles as Array<{ center: string; radius: number }>) : undefined;
   const drawing_phases = 
     Array.isArray(raw.drawing_phases) ? (raw.drawing_phases as any[]) : undefined;
+  const lines = 
+    Array.isArray(raw.lines) ? (raw.lines as Array<[string, string]>) : undefined;
+  const rays = 
+    Array.isArray(raw.rays) ? (raw.rays as Array<[string, string]>) : undefined;
 
   let coordinates: Record<string, [number, number]> | undefined;
   if (raw.coordinates && typeof raw.coordinates === "object") {
@@ -62,6 +66,8 @@ export function normalizeMessageMetadata(
   if (polygon_order) out.polygon_order = polygon_order;
   if (circles) out.circles = circles;
   if (drawing_phases) out.drawing_phases = drawing_phases;
+  if (lines) out.lines = lines;
+  if (rays) out.rays = rays;
 
   return Object.keys(out).length ? out : undefined;
 }

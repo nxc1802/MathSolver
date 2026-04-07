@@ -8,6 +8,7 @@
 interface ActiveJob {
   jobId: string;
   timestamp: number;
+  pendingQueue?: { id: string; text: string }[];
 }
 
 const STORAGE_KEY = "mathsolver_active_jobs";
@@ -65,6 +66,39 @@ export function clearActiveJob(sessionId: string) {
   const jobs = getAllJobs();
   if (jobs[sessionId]) {
     delete jobs[sessionId];
+    saveAllJobs(jobs);
+  }
+}
+
+/**
+ * Save the pending queue for a session.
+ */
+export function savePendingQueue(sessionId: string, queue: { id: string; text: string }[]) {
+  const jobs = getAllJobs();
+  if (!jobs[sessionId]) {
+    // If no active job, we still want to save the queue
+    jobs[sessionId] = { jobId: "", timestamp: Date.now(), pendingQueue: queue };
+  } else {
+    jobs[sessionId].pendingQueue = queue;
+  }
+  saveAllJobs(jobs);
+}
+
+/**
+ * Get the pending queue for a session.
+ */
+export function getPendingQueue(sessionId: string): { id: string; text: string }[] {
+  const jobs = getAllJobs();
+  return jobs[sessionId]?.pendingQueue || [];
+}
+
+/**
+ * Clear the pending queue for a session.
+ */
+export function clearPendingQueue(sessionId: string) {
+  const jobs = getAllJobs();
+  if (jobs[sessionId]) {
+    delete jobs[sessionId].pendingQueue;
     saveAllJobs(jobs);
   }
 }

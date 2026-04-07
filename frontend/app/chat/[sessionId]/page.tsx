@@ -35,6 +35,9 @@ import {
   saveActiveJob,
   getActiveJob,
   clearActiveJob,
+  savePendingQueue,
+  getPendingQueue,
+  clearPendingQueue,
 } from "@/lib/job-tracker";
 import type { ChatMessage } from "@/types/chat";
 
@@ -221,6 +224,7 @@ export default function ChatSessionPage() {
     isProcessingRef.current = false;
     setRenderingVideo(false);
     clearActiveJob(sessionId);
+    clearPendingQueue(sessionId);
     try {
       solveWsRef.current?.close();
       solveWsRef.current = null;
@@ -340,6 +344,11 @@ export default function ChatSessionPage() {
       const data = (await response.json()) as { job_id?: string };
       if (!data.job_id) throw new Error("Missing job_id");
 
+      // Once job is sent to BE, we can clear this item from our local pending queue 
+      // (if it was from the queue) or just proceed. 
+      // In handleSolve, the item is already removed from pendingQueue state by the useEffect 
+      // that triggers handleSolve(next.text).
+      
       await attachToJob(data.job_id);
     } catch (err) {
       console.error(err);
@@ -350,7 +359,11 @@ export default function ChatSessionPage() {
   };
 
   const removeQueued = (id: string) => {
-    setPendingQueue((prev) => prev.filter((q) => q.id !== id));
+    setPendingQueue((prev) => {
+      const next = prev.filter((q) => q.id !== id);
+      savePendingQueue(sessionId, next);
+      return next;
+    });
   };
 
   const editQueued = (id: string, text: string) => {
@@ -480,8 +493,13 @@ export default function ChatSessionPage() {
   useEffect(() => {
     if (!sessionId || sessionId === prevSessionIdRef.current) return;
     prevSessionIdRef.current = sessionId;
+    prevSnapshotsCountRef.current = 0; // CRITICAL: Reset snapshot tracking for new session
     setCurrentStatus(null);
     setVideoVersion(1);
+    
+    // Reset processing state on switch unless specialized below
+    isProcessingRef.current = false;
+    setSolveLoading(false);
 
     if (sessionId.startsWith("temp-")) {
       setCoordinates(null);
@@ -492,6 +510,7 @@ export default function ChatSessionPage() {
       setDrawingPhases(null);
       setVideoUrl(null);
       setActiveJobId(null);
+      setPendingQueue([]);
       return;
     }
 
@@ -516,6 +535,10 @@ export default function ChatSessionPage() {
       setActiveJobId(null);
     }
 
+    // Restore pending queue
+    const savedQueue = getPendingQueue(sessionId);
+    setPendingQueue(savedQueue);
+
     const activeJobIdForSession = getActiveJob(sessionId);
     if (activeJobIdForSession) {
       void attachToJobWithLoading(activeJobIdForSession);
@@ -525,10 +548,21 @@ export default function ChatSessionPage() {
   useEffect(() => {
     if (!solveLoading && pendingQueue.length > 0) {
       const next = pendingQueue[0];
-      setPendingQueue((prev) => prev.slice(1));
+      setPendingQueue((prev) => {
+        const remaining = prev.slice(1);
+        savePendingQueue(sessionId, remaining);
+        return remaining;
+      });
       void handleSolve(next.text);
     }
-  }, [solveLoading, pendingQueue]);
+  }, [solveLoading, pendingQueue, sessionId]);
+
+  // Sync queue to storage on change (redundant but safe)
+  useEffect(() => {
+    if (sessionId && !sessionId.startsWith("temp-")) {
+      savePendingQueue(sessionId, pendingQueue);
+    }
+  }, [pendingQueue, sessionId]);
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
