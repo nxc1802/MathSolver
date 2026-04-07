@@ -546,14 +546,21 @@ export default function ChatSessionPage() {
   }, [sessionId, attachToJobWithLoading]);
 
   useEffect(() => {
+    // Sequential Solve Manager: Wait for solveLoading to be false AND optionally for history sync
     if (!solveLoading && pendingQueue.length > 0) {
-      const next = pendingQueue[0];
-      setPendingQueue((prev) => {
-        const remaining = prev.slice(1);
-        savePendingQueue(sessionId, remaining);
-        return remaining;
-      });
-      void handleSolve(next.text);
+      // Small timeout to ensure the previous message's record is definitely committed in backend 
+      // and SWR has a chance to update the UI history if needed.
+      const timer = setTimeout(() => {
+        const next = pendingQueue[0];
+        setPendingQueue((prev) => {
+          const remaining = prev.slice(1);
+          savePendingQueue(sessionId, remaining);
+          return remaining;
+        });
+        void handleSolve(next.text);
+      }, 800); // 800ms safe delay for context-aware solving
+      
+      return () => clearTimeout(timer);
     }
   }, [solveLoading, pendingQueue, sessionId]);
 
@@ -649,6 +656,27 @@ export default function ChatSessionPage() {
               ))}
 
               <AnimatePresence>
+                {currentStatus && currentStatus !== "success" && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0 }}
+                    className="flex gap-4"
+                  >
+                    <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center animate-pulse flex-shrink-0">
+                      <Bot className="w-5 h-5 text-white" />
+                    </div>
+                    <div className="bg-zinc-900/60 border border-white/5 rounded-2xl px-5 py-4 flex items-center gap-3">
+                      <Loader2 className="w-4 h-4 animate-spin text-indigo-400" />
+                      <span className="text-sm text-zinc-400 italic font-medium">
+                        {statusLabels[currentStatus] || currentStatus}
+                      </span>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              <AnimatePresence>
                 {pendingQueue.map((q, idx) => (
                   <motion.div
                     key={q.id}
@@ -684,27 +712,6 @@ export default function ChatSessionPage() {
                     </div>
                   </motion.div>
                 ))}
-              </AnimatePresence>
-
-              <AnimatePresence>
-                {currentStatus && currentStatus !== "success" && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0 }}
-                    className="flex gap-4"
-                  >
-                    <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center animate-pulse flex-shrink-0">
-                      <Bot className="w-5 h-5 text-white" />
-                    </div>
-                    <div className="bg-zinc-900/60 border border-white/5 rounded-2xl px-5 py-4 flex items-center gap-3">
-                      <Loader2 className="w-4 h-4 animate-spin text-indigo-400" />
-                      <span className="text-sm text-zinc-400 italic font-medium">
-                        {statusLabels[currentStatus] || currentStatus}
-                      </span>
-                    </div>
-                  </motion.div>
-                )}
               </AnimatePresence>
               <div ref={messagesEndRef} />
             </div>
