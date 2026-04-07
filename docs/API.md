@@ -174,8 +174,10 @@ Tọa độ cho mỗi điểm lấy từ `coordinates[pointId]` dưới dạng `
 
 ## 🛠 Yêu cầu Persistence (Lưu trữ Metadata)
 
-> [!IMPORTANT]
-> Để đảm bảo tính nhất quán khi người dùng **Reload trang** hoặc **Chuyển đổi Session**, Backend **BẮT BUỘC** phải lưu đầy đủ kết quả hình học vào cột `metadata` của bảng `messages` cho mỗi tin nhắn của `assistant`.
+> [!CAUTION]
+> **CỰC KỲ QUAN TRỌNG**: Để tính năng **Chuyển đổi Version (Version Switching)** và **Duy trì Session** hoạt động, Backend **BẮT BUỘC** phải lưu đầy đủ kết quả hình học vào cột `metadata` của bảng `messages` cho **TẤT CẢ** các tin nhắn của `assistant` trong lịch sử, không chỉ tin nhắn mới nhất.
+>
+> Nếu thiếu metadata ở các tin nhắn cũ, người dùng sẽ không thể nhấn nút quay lại các phiên bản vẽ trước đó.
 
 ### Các trường bắt buộc trong `messages.metadata`:
 1. `job_id`: ID của task xử lý.
@@ -187,7 +189,7 @@ Tọa độ cho mỗi điểm lấy từ `coordinates[pointId]` dưới dạng `
 7. `rays`: Danh sách các tia (nếu có).
 8. `video_url`: URL video Manim (phải cập nhật vào metadata sau khi render xong).
 
-**Lưu ý cho BE Engineer:** Hiện tại hệ thống đang bị lỗi "mất nét" hoặc "hình vẽ sai" sau khi tải lại trang do thiếu các trường 3, 4, 5 trong DB. Vui lòng cập nhật logic tại `solve.py` và `tasks.py`.
+**Lưu ý cho BE Engineer:** Hiện tại khi gọi `GET /messages`, các tin nhắn cũ đang bị thiếu metadata dẫn đến lỗi "không có version cũ nào được lưu lại". Vui lòng kiểm tra lại hàm lưu tin nhắn trong `solve.py` và worker `tasks.py`.
 
 ---
 

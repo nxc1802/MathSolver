@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useParams } from "next/navigation";
-import { Send, Sparkles, Loader2, Film, Bot, Maximize2 } from "lucide-react";
+import { Send, Sparkles, Loader2, Film, Bot, Maximize2, Trash2, Check, X, Pencil } from "lucide-react";
 
 import useSWR, { useSWRConfig } from "swr";
 import ChatSidebar from "@/components/ChatSidebar";
@@ -109,6 +109,7 @@ export default function ChatSessionPage() {
   
   const [videoVersion, setVideoVersion] = useState(1);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
+  const [pendingQueue, setPendingQueue] = useState<{ id: string; text: string }[]>([]);
 
   const geometrySnapshots = useMemo(() => {
     return [...messages]
@@ -440,12 +441,23 @@ export default function ChatSessionPage() {
     }
   }, [sessionId, clearSolvePoll, finishSolveFlow, applyJobRow]);
 
-  const handleSolve = async () => {
-    if (!inputText.trim() || !userSession?.access_token) return;
+  const handleSolve = async (input?: string | React.MouseEvent | React.KeyboardEvent) => {
+    const isQueued = typeof input === "string";
+    const textToUse = isQueued ? input : inputText;
+    
+    if (!textToUse.trim() || !userSession?.access_token) return;
+
+    // Feature 3: Multi-queuing
+    if (solveLoading && !isQueued) {
+      setPendingQueue((prev) => [...prev, { id: "q-" + Date.now(), text: textToUse }]);
+      setInputText("");
+      return;
+    }
+
     setSolveLoading(true);
     setCurrentStatus("processing");
     
-    const textPayload = inputText;
+    const textPayload = textToUse;
     const tempMsg: ChatMessage = {
       id: "temp-" + Date.now(),
       role: "user",
@@ -455,7 +467,7 @@ export default function ChatSessionPage() {
     };
     
     await mutateMessages((prev) => [...(prev || []), tempMsg], { revalidate: false });
-    setInputText("");
+    if (!isQueued) setInputText("");
 
     try {
       const response = await fetch(`${getApiBaseUrl()}/api/v1/sessions/${sessionId}/solve`, {
@@ -481,6 +493,24 @@ export default function ChatSessionPage() {
       setSolveLoading(false);
       void mutateMessages();
     }
+  };
+
+  // Feature 3: Process queue
+  useEffect(() => {
+    if (!solveLoading && pendingQueue.length > 0) {
+      const next = pendingQueue[0];
+      setPendingQueue((prev) => prev.slice(1));
+      void handleSolve(next.text);
+    }
+  }, [solveLoading, pendingQueue]);
+
+  const removeQueued = (id: string) => {
+    setPendingQueue((prev) => prev.filter((q) => q.id !== id));
+  };
+
+  const editQueued = (id: string, text: string) => {
+    removeQueued(id);
+    setInputText(text);
   };
 
   const handleMouseDown = useCallback((type: 'sidebar' | 'main') => (e: React.MouseEvent) => {
@@ -549,14 +579,15 @@ export default function ChatSessionPage() {
             style={{ width: `${mainSplitPercent}%` }}
           >
             <div className="flex-1 overflow-y-auto p-4 space-y-6 scrollbar-thin">
-              {historyLoading && messages.length === 0 && (
-                <div className="flex flex-col items-center justify-center py-16 gap-3 text-zinc-500">
+              {/* Feature 2: Flicker-free loading */}
+              {historyLoading && messages.length === 0 && !isTempSession && (
+                <div className="flex flex-col items-center justify-center py-16 gap-3 text-zinc-500 animate-in fade-in duration-700 delay-500">
                   <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
                   <p className="text-xs font-medium uppercase tracking-widest">Đang tải hội thoại...</p>
                 </div>
               )}
 
-              {!historyLoading && messages.length === 0 && (
+              {((!historyLoading && messages.length === 0) || isTempSession) && (
                 <div className="h-full flex flex-col items-center justify-center text-center gap-4 opacity-50">
                   <Sparkles className="w-12 h-12 text-indigo-500/30" />
                   <div>
@@ -571,6 +602,45 @@ export default function ChatSessionPage() {
               {messages.map((msg) => (
                 <ChatMessageComponent key={msg.id} message={msg} />
               ))}
+
+              {/* Feature 3: Pending Queue UI */}
+              <AnimatePresence>
+                {pendingQueue.map((q, idx) => (
+                  <motion.div
+                    key={q.id}
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, scale: 0.95 }}
+                    className="flex gap-4"
+                  >
+                    <div className="w-9 h-9 rounded-xl bg-zinc-800 flex items-center justify-center flex-shrink-0">
+                      <div className="text-[10px] font-bold text-zinc-500">{idx + 1}</div>
+                    </div>
+                    <div className="flex-1 max-w-2xl bg-zinc-900/40 border border-white/5 rounded-2xl px-5 py-4 flex items-center justify-between group">
+                      <div className="flex flex-col gap-1">
+                        <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest">Hàng đợi (Pending)</span>
+                        <p className="text-sm text-zinc-400 line-clamp-1 italic">{q.text}</p>
+                      </div>
+                      <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={() => editQueued(q.id, q.text)}
+                          className="p-1.5 hover:bg-white/5 rounded-lg text-zinc-500 hover:text-white transition-colors"
+                          title="Sửa"
+                        >
+                          <Maximize2 className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => removeQueued(q.id)}
+                          className="p-1.5 hover:bg-red-500/10 rounded-lg text-zinc-500 hover:text-red-400 transition-colors"
+                          title="Hủy"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  </motion.div>
+                ))}
+              </AnimatePresence>
 
               <AnimatePresence>
                 {currentStatus && currentStatus !== "success" && (
@@ -663,9 +733,13 @@ export default function ChatSessionPage() {
               <AnimatePresence mode="popLayout">
                 {coordinates && (
                   <motion.div key="static" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="space-y-4">
-                    <div className="flex items-center gap-2">
-                      <div className="w-1 h-3 bg-indigo-500 rounded-full" />
-                      <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-[0.2em]">Hình vẽ mô phỏng</span>
+                    <div className="flex items-center justify-between gap-2">
+                       <div className="flex items-center gap-2">
+                         <div className="w-1 h-3 bg-indigo-500 rounded-full" />
+                         <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-[0.2em]">
+                           HÌNH VẼ MÔ PHỎNG {geometrySnapshots.length > 1 ? `(VERSION ${videoVersion}/${geometrySnapshots.length})` : ""}
+                         </span>
+                       </div>
                     </div>
                     <div className="bg-[var(--card-bg)] rounded-3xl border border-[var(--border)] p-1 shadow-2xl overflow-hidden self-center relative group/canvas">
                       <StaticGeometryCanvas 
@@ -677,7 +751,7 @@ export default function ChatSessionPage() {
                         drawingPhases={drawingPhases || undefined}
                       />
                       {geometrySnapshots.length > 1 && (
-                        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 opacity-0 group-hover/canvas:opacity-100 transition-opacity">
+                        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30">
                           <VersionSwitcher 
                             currentVersion={videoVersion}
                             totalVersions={geometrySnapshots.length}
@@ -695,7 +769,7 @@ export default function ChatSessionPage() {
                     <div className="flex items-center gap-2">
                       <div className="w-1 h-3 bg-purple-500 rounded-full" />
                       <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-[0.2em]">
-                        {videoUrl ? "🎬 Phim minh họa" : "🎨 Đang dựng hình..."}
+                        {videoUrl ? `🎬 Phim minh họa (VERSION ${videoVersion}/${geometrySnapshots.length})` : "🎨 Đang dựng hình..."}
                       </span>
                     </div>
                     <div className="bg-[var(--card-bg)] rounded-3xl border border-[var(--border)] p-1 shadow-2xl relative overflow-hidden group/video">
