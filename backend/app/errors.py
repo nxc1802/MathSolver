@@ -34,8 +34,7 @@ def format_error_for_user(exc: BaseException) -> str:
                 url_hint or "?",
             )
             return (
-                f"Lỗi gọi dịch vụ ngoài (HTTP {code}). "
-                "Kiểm tra URL API, khóa bí mật và biến môi trường (MegaLLM/Supabase/Redis)."
+                "Kiểm tra URL API, khóa bí mật và biến môi trường (OpenRouter/Supabase/Redis)."
             )
 
         if isinstance(exc, httpx.RequestError):
@@ -51,7 +50,7 @@ def format_error_for_user(exc: BaseException) -> str:
         logger.warning("Suppressed HTML error body from user-facing message")
         return (
             "Dịch vụ trả về trang lỗi (thường là URL API sai hoặc endpoint không tồn tại — HTTP 404). "
-            "Kiểm tra MEGALLM_BASE_URL và khóa API trên server."
+            "Kiểm tra OPENROUTER_MODEL và khóa API trên server."
         )
 
     if len(raw) > 800:

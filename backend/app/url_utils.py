@@ -14,7 +14,7 @@ def sanitize_env(value: str | None) -> str | None:
 
 
 # OpenAI SDK (>=1.x) requires a non-empty api_key at client construction (Docker build / prewarm has no secrets).
-_OPENAI_API_KEY_BUILD_PLACEHOLDER = "build-placeholder-megallm-not-for-production"
+_OPENAI_API_KEY_BUILD_PLACEHOLDER = "build-placeholder-openrouter-not-for-production"
 
 
 def openai_compatible_api_key(raw: str | None) -> str:
