@@ -6,7 +6,7 @@
  */
 
 export interface GeometryState {
-  coordinates: Record<string, [number, number]> | null;
+  coordinates: Record<string, [number, number, number] | [number, number]> | null;
   polygonOrder: string[] | null;
   circles: Array<{ center: string; radius: number }> | null;
   drawingPhases: Array<{
@@ -19,6 +19,7 @@ export interface GeometryState {
   rays: Array<[string, string]> | null;
   videoUrl: string | null;
   activeJobId: string | null;
+  is3d?: boolean;
 }
 
 const PREFIX = "mathsolver_geo_";

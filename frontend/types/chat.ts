@@ -18,8 +18,8 @@ export interface ChatMessage {
   content: string;
   timestamp: number;
   metadata?: {
-    coordinates?: Record<string, [number, number]>;
-    /** New in API v4.0 */
+    coordinates?: Record<string, [number, number] | [number, number, number]>;
+    /** New in API v4.0/5.1 */
     semantic_analysis?: string;
     polygon_order?: string[];
     circles?: Array<{ center: string; radius: number }>;
@@ -31,6 +31,13 @@ export interface ChatMessage {
     }>;
     lines?: Array<[string, string]>;
     rays?: Array<[string, string]>;
+    /** Symbolic Solver Result (v5.1) */
+    solution?: {
+      answer: string;
+      steps: string[];
+      symbolic_math?: Record<string, string>;
+    };
+    is_3d?: boolean;
     /** Primary key from API / DB (snake_case) */
     video_url?: string;
     /** @deprecated Prefer video_url */

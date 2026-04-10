@@ -45,6 +45,19 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const checkSession = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
+        
+        // DEV BYPASS: If no session and we're local, allow a mock user
+        if (!session && process.env.NODE_ENV === 'development') {
+           const mockSession = { 
+             access_token: 'Test user-123', 
+             user: { id: 'user-123', email: 'dev@local.test', user_metadata: { full_name: 'Dev User' } } 
+           } as any as Session;
+           setSession(mockSession);
+           setUser(mockSession.user);
+           setLoading(false);
+           return;
+        }
+
         setSession(session);
         setUser(session?.user ?? null);
         

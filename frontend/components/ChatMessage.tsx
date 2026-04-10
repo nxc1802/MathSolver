@@ -1,10 +1,14 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { Bot, User, Loader2, AlertCircle, Code2, BrainCircuit, Shapes } from "lucide-react";
 import type { ChatMessage as ChatMessageType } from "@/types/chat";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
+import { ChevronDown, ChevronUp, CheckCircle2 } from "lucide-react";
+import { useState } from "react";
 
 interface ChatMessageProps {
   message: ChatMessageType;
@@ -22,6 +26,7 @@ const statusLabels: Record<string, string> = {
 export default function ChatMessageComponent({ message }: ChatMessageProps) {
   const isUser = message.role === "user";
   const isSystem = message.role === "system";
+  const [showSteps, setShowSteps] = useState(false);
 
   return (
     <motion.div
@@ -52,7 +57,7 @@ export default function ChatMessageComponent({ message }: ChatMessageProps) {
             ? "bg-blue-500/15 border border-blue-500/20 text-blue-500"
             : isSystem
             ? "bg-[var(--card-bg)] border border-[var(--border)] text-[var(--text-muted)] text-xs italic"
-            : "bg-[var(--msg-bot)] border border-[var(--border)] text-[var(--text-primary)]"
+            : "bg-[var(--msg-bot)] border border-[var(--border)] text-[var(--text-primary)] shadow-sm"
         }`}
       >
         {message.type === "status" && (
@@ -82,7 +87,7 @@ export default function ChatMessageComponent({ message }: ChatMessageProps) {
               </span>
             </div>
             <div className="prose prose-invert prose-sm max-w-none text-[var(--text-secondary)]">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
                 {message.content}
               </ReactMarkdown>
             </div>
@@ -107,14 +112,14 @@ export default function ChatMessageComponent({ message }: ChatMessageProps) {
           <div className="flex items-center gap-2 text-sm">
             <Shapes className="w-4 h-4 text-amber-400" />
             <span className="text-zinc-300">
-              Đã tính toạ độ hình học — xem bên phải →
+              Đã tính toạ độ hình học {message.metadata?.is_3d ? "3D" : "2D"} — xem bên phải →
             </span>
           </div>
         )}
 
         {message.type === "text" && (
-          <div className="space-y-3">
-            {message.role === "assistant" && message.metadata?.semantic_analysis ? (
+          <div className="space-y-4">
+            {message.role === "assistant" && message.metadata?.semantic_analysis && (
               <div className="space-y-2">
                 <div className="flex items-center gap-2 mb-1.5 opacity-60">
                   <BrainCircuit className="w-3.5 h-3.5 text-indigo-400" />
@@ -123,26 +128,71 @@ export default function ChatMessageComponent({ message }: ChatMessageProps) {
                   </span>
                 </div>
                 <div className="prose prose-invert prose-sm max-w-none italic text-[var(--text-secondary)]">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                  <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
                     {message.metadata.semantic_analysis}
                   </ReactMarkdown>
                 </div>
                 <div className="h-px w-full bg-[var(--border)] my-2" />
-                <div className="prose prose-invert prose-sm max-w-none text-[var(--text-primary)]">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                    {message.content}
+              </div>
+            )}
+
+            {/* Main Content */}
+            <div className="prose prose-invert prose-sm max-w-none text-[var(--text-primary)]">
+              <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
+                {message.content}
+              </ReactMarkdown>
+            </div>
+
+            {/* Solver Solution (v5.1) */}
+            {message.metadata?.solution && (
+              <div className="mt-4 p-4 rounded-xl bg-indigo-500/5 border border-indigo-500/10 space-y-3">
+                <div className="flex items-center gap-2 text-indigo-400">
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span className="text-xs font-bold uppercase tracking-widest">Kết quả giải toán</span>
+                </div>
+                
+                <div className="text-sm font-medium text-indigo-100">
+                  <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
+                    {message.metadata.solution.answer}
                   </ReactMarkdown>
                 </div>
-              </div>
-            ) : (
-              <div className="prose prose-invert prose-sm max-w-none text-[var(--text-primary)]">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                  {message.content}
-                </ReactMarkdown>
+
+                {message.metadata.solution.steps && (
+                  <div className="pt-2">
+                    <button 
+                      onClick={() => setShowSteps(!showSteps)}
+                      className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-zinc-500 hover:text-indigo-400 transition-colors"
+                    >
+                      {showSteps ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                      {showSteps ? "Ẩn các bước giải" : "Xem các bước giải chi tiết"}
+                    </button>
+                    
+                    <AnimatePresence>
+                      {showSteps && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: "auto", opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          className="overflow-hidden"
+                        >
+                          <div className="pt-3 space-y-2 border-l border-zinc-800 ml-1.5 pl-4">
+                            {message.metadata.solution.steps.map((step, idx) => (
+                              <div key={idx} className="text-sm text-zinc-400 leading-relaxed">
+                                <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
+                                  {step}
+                                </ReactMarkdown>
+                              </div>
+                            ))}
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                )}
               </div>
             )}
             
-            {/* Render Image from Metadata (User upload or AI result) */}
+            {/* Render Image from Metadata */}
             {message.metadata?.image_url && (
               <div className="rounded-xl overflow-hidden border border-white/5 bg-black/20">
                 <img 
@@ -153,7 +203,7 @@ export default function ChatMessageComponent({ message }: ChatMessageProps) {
               </div>
             )}
 
-            {/* Render Video from Metadata (AI Animation Result); API uses video_url */}
+            {/* Render Video from Metadata */}
             {(message.metadata?.video_url ?? message.metadata?.videoUrl) && (
               <div className="rounded-xl overflow-hidden border border-white/5 bg-black/20">
                 <video 

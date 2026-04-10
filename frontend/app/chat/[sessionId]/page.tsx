@@ -9,6 +9,7 @@ import useSWR, { useSWRConfig } from "swr";
 import ChatSidebar from "@/components/ChatSidebar";
 import AnimationPreview from "@/components/AnimationPreview";
 import StaticGeometryCanvas from "@/components/StaticGeometryCanvas";
+import Interactive3DCanvas from "@/components/Interactive3DCanvas";
 import VersionSwitcher from "@/components/VersionSwitcher";
 import ChatMessageComponent from "@/components/ChatMessage";
 import { useAuth } from "@/lib/auth-context";
@@ -103,7 +104,8 @@ export default function ChatSessionPage() {
   const [requestVideo, setRequestVideo] = useState(false);
   const [currentStatus, setCurrentStatus] = useState<string | null>(null);
 
-  const [coordinates, setCoordinates] = useState<Record<string, [number, number]> | null>(null);
+  const [coordinates, setCoordinates] = useState<Record<string, [number, number, number] | [number, number]> | null>(null);
+  const [is3d, setIs3d] = useState(false);
   const [polygonOrder, setPolygonOrder] = useState<string[] | null>(null);
   const [circles, setCircles] = useState<any[] | null>(null);
   const [lines, setLines] = useState<any[] | null>(null);
@@ -141,8 +143,7 @@ export default function ChatSessionPage() {
   const isLimitReached = userQueryCount >= 5;
 
   const geometrySnapshots = useMemo(() => {
-    return [...messages]
-      .filter((m) => m.role === "assistant" && m.type !== "error" && m.metadata?.coordinates);
+    return messages?.filter((m) => m.role === "assistant" && m.type !== "error" && m.metadata?.coordinates) || [];
   }, [messages]);
 
   const statusLabels: Record<string, string> = {
@@ -167,6 +168,7 @@ export default function ChatSessionPage() {
     if (snapshot?.metadata) {
       const meta = snapshot.metadata;
       setCoordinates(meta.coordinates || null);
+      setIs3d(meta.is_3d || false);
       setPolygonOrder(meta.polygon_order || null);
       setCircles(meta.circles || null);
       setLines(meta.lines || null);
@@ -180,7 +182,7 @@ export default function ChatSessionPage() {
   const applyJobRow = useCallback((job: { status?: string; result?: Record<string, any> }) => {
     const r = job.result || {};
     const newCoords = r.coordinates && typeof r.coordinates === "object"
-      ? (r.coordinates as Record<string, [number, number]>)
+      ? (r.coordinates as Record<string, [number, number] | [number, number, number]>)
       : null;
     const newPolygonOrder = r.polygon_order ?? null;
     const newCircles = r.circles ?? null;
@@ -189,7 +191,12 @@ export default function ChatSessionPage() {
     const newPhases = r.drawing_phases ?? null;
     const newVideoUrl = typeof r.video_url === "string" && r.video_url ? r.video_url : null;
 
-    if (newCoords) setCoordinates(newCoords);
+    if (newCoords) {
+      setCoordinates(newCoords);
+      // Auto-detect 3D if any point has a non-zero Z or if explicitly set in result
+      const hasZ = Object.values(newCoords).some((c: any) => Array.isArray(c) && c.length === 3 && c[2] !== 0);
+      setIs3d(r.is_3d || hasZ);
+    }
     if (newPolygonOrder) setPolygonOrder(newPolygonOrder);
     if (newCircles) setCircles(newCircles);
     if (newLines) setLines(newLines);
@@ -210,6 +217,7 @@ export default function ChatSessionPage() {
         drawingPhases: newPhases,
         videoUrl: newVideoUrl,
         activeJobId: activeJobId,
+        is3d: r.is_3d || false // Add this if you update GeometryState type
       };
       saveGeometryState(sessionId, geoState);
     }
@@ -793,26 +801,33 @@ export default function ChatSessionPage() {
                          </span>
                        </div>
                     </div>
-                    <div className="bg-[var(--card-bg)] rounded-3xl border border-[var(--border)] p-1 shadow-2xl overflow-hidden self-center relative group/canvas">
-                      <StaticGeometryCanvas 
-                        coordinates={coordinates} 
-                        polygonOrder={polygonOrder || undefined}
-                        circles={circles || undefined}
-                        lines={lines || undefined}
-                        rays={rays || undefined}
-                        drawingPhases={drawingPhases || undefined}
-                      />
-                      {geometrySnapshots.length > 1 && (
-                        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30">
-                          <VersionSwitcher 
-                            currentVersion={videoVersion}
-                            totalVersions={geometrySnapshots.length}
-                            onNext={handleNextVersion}
-                            onPrev={handlePrevVersion}
-                          />
-                        </div>
+                    <div className="bg-[var(--card-bg)] rounded-3xl border border-[var(--border)] p-1 shadow-2xl overflow-hidden self-center relative group/canvas w-full">
+                      {is3d ? (
+                        <Interactive3DCanvas 
+                          coordinates={coordinates}
+                          drawingPhases={drawingPhases || undefined}
+                        />
+                      ) : (
+                        <StaticGeometryCanvas 
+                          coordinates={coordinates as Record<string, [number, number]>} 
+                          polygonOrder={polygonOrder || undefined}
+                          circles={circles || undefined}
+                          lines={lines || undefined}
+                          rays={rays || undefined}
+                          drawingPhases={drawingPhases || undefined}
+                        />
                       )}
                     </div>
+                    {geometrySnapshots.length > 1 && (
+                      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30">
+                        <VersionSwitcher 
+                          currentVersion={videoVersion}
+                          totalVersions={geometrySnapshots.length}
+                          onNext={handleNextVersion}
+                          onPrev={handlePrevVersion}
+                        />
+                      </div>
+                    )}
                   </motion.div>
                 )}
 

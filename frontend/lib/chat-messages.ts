@@ -51,9 +51,12 @@ export function normalizeMessageMetadata(
   const rays = 
     Array.isArray(raw.rays) ? (raw.rays as Array<[string, string]>) : undefined;
 
-  let coordinates: Record<string, [number, number]> | undefined;
+  const is_3d = typeof raw.is_3d === "boolean" ? raw.is_3d : undefined;
+  const solution = raw.solution && typeof raw.solution === "object" ? (raw.solution as any) : undefined;
+
+  let coordinates: Record<string, [number, number] | [number, number, number]> | undefined;
   if (raw.coordinates && typeof raw.coordinates === "object") {
-    coordinates = raw.coordinates as Record<string, [number, number]>;
+    coordinates = raw.coordinates as Record<string, any>;
   }
 
   const out: NonNullable<ChatMessage["metadata"]> = {};
@@ -68,6 +71,8 @@ export function normalizeMessageMetadata(
   if (drawing_phases) out.drawing_phases = drawing_phases;
   if (lines) out.lines = lines;
   if (rays) out.rays = rays;
+  if (is_3d !== undefined) out.is_3d = is_3d;
+  if (solution) out.solution = solution;
 
   return Object.keys(out).length ? out : undefined;
 }
