@@ -1,3 +1,4 @@
+import pytest
 import asyncio
 import uuid
 import time
@@ -5,6 +6,7 @@ from app.routers.solve import process_session_job
 from app.models.schemas import SolveRequest
 from app.supabase_client import get_supabase
 
+@pytest.mark.asyncio
 async def test_metadata_persistence():
     session_id = "81f87517-88f2-40bd-96a9-7b34f1d14b6a"
     user_id = "8cd3adb0-7964-4575-949c-d0cadcd8b679"

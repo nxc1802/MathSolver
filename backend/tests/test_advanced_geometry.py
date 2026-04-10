@@ -1,3 +1,4 @@
+import pytest
 import asyncio
 import logging
 from solver.dsl_parser import DSLParser
@@ -5,6 +6,7 @@ from solver.engine import GeometryEngine
 
 logging.basicConfig(level=logging.DEBUG)
 
+@pytest.mark.asyncio
 async def test_section_internal():
     print("\n--- Test: Section Point (Internal AE=2/3 AC) ---")
     dsl = """
@@ -40,6 +42,7 @@ async def test_section_internal():
     else:
         print("  ❌ Solve failed")
 
+@pytest.mark.asyncio
 async def test_section_external():
     print("\n--- Test: Section Point (External AE=2*AC) ---")
     dsl = """
@@ -69,6 +72,7 @@ async def test_section_external():
     else:
         print("  ❌ Solve failed")
 
+@pytest.mark.asyncio
 async def test_line_ray_metadata():
     print("\n--- Test: Line and Ray Metadata ---")
     dsl = """

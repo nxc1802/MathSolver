@@ -5,6 +5,7 @@ class Point(BaseModel):
     id: str
     x: Optional[float] = None
     y: Optional[float] = None
+    z: Optional[float] = None
 
 class Constraint(BaseModel):
     type: str # 'length', 'angle', 'parallel', etc.

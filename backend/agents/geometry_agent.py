@@ -32,38 +32,61 @@ If a PREVIOUS DSL is provided, your job is to UPDATE or EXTEND it.
 
 === DSL COMMANDS ===
 POINT(A)                    — declare a point
-LENGTH(AB, 5)               — distance between A and B is 5
-ANGLE(A, 90)                — interior angle at vertex A is 90°
-PARALLEL(AB, CD)            — segment AB is parallel to CD
-PERPENDICULAR(AB, CD)       — segment AB is perpendicular to CD
+POINT(A, x, y, z)           — declare a point with explicit coordinates
+LENGTH(AB, 5)               — distance between A and B is 5 (2D/3D)
+ANGLE(A, 90)                — interior angle at vertex A is 90° (2D/3D)
+PARALLEL(AB, CD)            — segment AB is parallel to CD (2D/3D)
+PERPENDICULAR(AB, CD)       — segment AB is perpendicular to CD (2D/3D)
 MIDPOINT(M, AB)             — M is the midpoint of segment AB
 SECTION(E, A, C, k)         — E satisfies vector AE = k * vector AC (k is decimal)
 LINE(A, B)                  — infinite line passing through A and B
 RAY(A, B)                   — ray starting at A and passing through B
-CIRCLE(O, 5)                — circle with center O and radius 5
+CIRCLE(O, 5)                — circle with center O and radius 5 (2D)
+SPHERE(O, 5)                — sphere with center O and radius 5 (3D)
 SEGMENT(M, N)               — auxiliary segment MN to be drawn
 POLYGON_ORDER(A, B, C, D)   — the order in which vertices form the polygon boundary
+TRIANGLE(ABC)               — equilateral/arbitrary triangle
+PYRAMID(S_ABCD)             — pyramid with apex S and base ABCD
+PRISM(ABC_DEF)              — triangular prism
 
 === RULES ===
-1. Primary Vertices: Always declare the main vertices of the shape (e.g., A, B, C, D) using POINT(X).
-2. POLYGON_ORDER: Always emit POLYGON_ORDER(...) for the main shape using ONLY these primary vertices.
-3. Auxiliary Points: Points like midpoints (M, N), intersections, or foot of perpendiculars should NOT be declared with POINT() individually; they are created via specific commands.
-4. RECTANGLES/SQUARES: Emit PERPENDICULAR(AB, AD) + PARALLEL(AB, CD) + PARALLEL(AD, BC).
-5. PARALLELOGRAMS: Emit PARALLEL(AB, CD) + PARALLEL(AD, BC) only.
-6. TRAPEZOIDS: Emit PARALLEL for the parallel pair only.
-7. ARBITRARY POINTS (SECTION): Use SECTION(E, A, C, k) where k = AE/AC.
-   - For internal point E (A-E-C): E is at 2/3 of AC -> SECTION(E, A, C, 0.6667).
-   - For external point E (A-C-E): AE=2EC -> E is at 2.0 of AC -> SECTION(E, A, C, 2.0).
-8. MIDPOINTS: Use MIDPOINT(M, AB) which is equivalent to SECTION(M, A, B, 0.5).
-9. LINES/RAYS: Use LINE(A, B) or RAY(A, B) for infinite lines or rays mentioned.
-10. AUXILIARY LINES: Always use SEGMENT(X, Y) for any line mentioned (e.g., altitude, connecting midpoints) that is NOT a boundary of the main polygon.
-11. CIRCLES: Use CIRCLE(O, r). No polygon needed.
-12. Uniqueness: Emit enough constraints to uniquely determine the shape.
-13. Format: Output ONLY DSL lines — NO explanation, NO markdown, NO code blocks.
+1. 3D Coordinates: Use POINT(A, x, y, z) if specific coordinates are given in the problem.
+2. Space Geometry: For pyramids/prisms, use the specialized commands.
+3. Primary Vertices: Always declare the main vertices of the shape (e.g., A, B, C, D) using POINT(X).
+4. POLYGON_ORDER: Always emit POLYGON_ORDER(...) for the main shape using ONLY these primary vertices.
+5. All Points: EVERY point mentioned (A, B, C, H, M, etc.) MUST be declared with POINT(Name) first.
+6. Altitudes/Perpendiculars: For an altitude AH to BC, use POINT(H) + PERPENDICULAR(AH, BC).
+7. Format: Output ONLY DSL lines — NO explanation, NO markdown, NO code blocks.
 
 === SHAPE EXAMPLES ===
 
-[Rectangle ABCD, AB=5, AD=10]
+--- Case: Square Pyramid S.ABCD with side 10, height 15 ---
+PYRAMID(S_ABCD)
+POINT(A, 0, 0, 0)
+POINT(B, 10, 0, 0)
+POINT(C, 10, 10, 0)
+POINT(D, 0, 10, 0)
+POINT(S)
+POINT(O)
+SECTION(O, A, C, 0.5)
+LENGTH(SO, 15)
+PERPENDICULAR(SO, AC)
+PERPENDICULAR(SO, AB)
+POLYGON_ORDER(A, B, C, D)
+
+--- Case: Right Triangle ABC at A, AB=3, AC=4, altitude AH ---
+POLYGON_ORDER(A, B, C)
+POINT(A)
+POINT(B)
+POINT(C)
+POINT(H)
+LENGTH(AB, 3)
+LENGTH(AC, 4)
+ANGLE(A, 90)
+PERPENDICULAR(AH, BC)
+SEGMENT(A, H)
+
+--- Case: Rectangle ABCD with AB=5, AD=10 ---
 POLYGON_ORDER(A, B, C, D)
 POINT(A)
 POINT(B)
@@ -74,43 +97,6 @@ LENGTH(AD, 10)
 PERPENDICULAR(AB, AD)
 PARALLEL(AB, CD)
 PARALLEL(AD, BC)
-
-[Triangle ABC, AB=6, BC=8, right angle at C]
-POLYGON_ORDER(A, B, C)
-POINT(A)
-POINT(B)
-POINT(C)
-LENGTH(AB, 6)
-LENGTH(BC, 8)
-PERPENDICULAR(CA, CB)
-
-[Parallelogram ABCD, AB=8, AD=5]
-POLYGON_ORDER(A, B, C, D)
-POINT(A)
-POINT(B)
-POINT(C)
-POINT(D)
-LENGTH(AB, 8)
-LENGTH(AD, 5)
-PARALLEL(AB, CD)
-PARALLEL(AD, BC)
-
-[Rectangle ABCD AB=10, AD=20, M midpoint AB, N midpoint AD, find MN]
-POLYGON_ORDER(A, B, C, D)
-POINT(A)
-POINT(B)
-POINT(C)
-POINT(D)
-POINT(M)
-POINT(N)
-LENGTH(AB, 10)
-LENGTH(AD, 20)
-PERPENDICULAR(AB, AD)
-PARALLEL(AB, CD)
-PARALLEL(AD, BC)
-MIDPOINT(M, AB)
-MIDPOINT(N, AD)
-SEGMENT(M, N)
 
 [Circle with center O radius 7]
 POINT(O)

@@ -36,12 +36,14 @@ class ParserAgent:
         Output ONLY a JSON object with this EXACT structure (no extra keys, no markdown):
         {
             "entities": ["Point A", "Point B", ...],
-            "type": "rectangle|triangle|circle|parallelogram|trapezoid|square|rhombus|general",
-            "values": {"AB": 5, "AC": 7, "angle_A": 60, "radius": 3},
+            "type": "pyramid|prism|sphere|rectangle|triangle|circle|parallelogram|trapezoid|square|rhombus|general",
+            "values": {"AB": 5, "SO": 15, "radius": 3},
+            "target_question": "Câu hỏi cụ thể cần giải (ví dụ: 'Tính diện tích tam giác ABC'). NẾU KHÔNG CÓ CÂU HỎI THÌ ĐỂ null.",
             "analysis": "Tóm tắt ngắn gọn toàn bộ bài toán sau khi đã cập nhật các yêu cầu mới bằng tiếng Việt."
         }
         Rules:
         - "analysis" MUST be a meaningful and UP-TO-DATE summary of the problem in Vietnamese. 
+        - "target_question" must be concise.
         - Include midpoints, auxiliary points in "entities" if mentioned.
         - If feedback is provided, correct your previous output accordingly.
         """
@@ -61,7 +63,44 @@ class ParserAgent:
             ],
             response_format={"type": "json_object"}
         )
-        result = json.loads(raw)
+        
+        # Pre-process raw string: extract the JSON block if present
+        import re
+        clean_raw = raw.strip()
+        # Handle potential markdown code blocks
+        if clean_raw.startswith("```"):
+            import re
+            match = re.search(r"```(?:json)?\s*(.*?)\s*```", clean_raw, re.DOTALL)
+            if match:
+                clean_raw = match.group(1).strip()
+            
+        try:
+            result = json.loads(clean_raw)
+        except json.JSONDecodeError as e:
+            logger.error(f"[ParserAgent] JSON Parse Error: {e}. Attempting regex fallback...")
+            import re
+            json_match = re.search(r'(\{.*\})', clean_raw, re.DOTALL)
+            if json_match:
+                try:
+                    # Handle single quotes if present (common LLM failure)
+                    json_str = json_match.group(1)
+                    if "'" in json_str and '"' not in json_str:
+                         json_str = json_str.replace("'", '"')
+                    result = json.loads(json_str)
+                except:
+                    result = None
+            else:
+                result = None
+
+            if not result:
+                # Fallback for critical failure
+                result = {
+                    "entities": [],
+                    "type": "general",
+                    "values": {},
+                    "target_question": None,
+                    "analysis": text
+                }
         logger.info(f"[ParserAgent] LLM response received.")
         logger.debug(f"[ParserAgent] Parsed JSON: {json.dumps(result, ensure_ascii=False, indent=2)}")
         return result

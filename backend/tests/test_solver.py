@@ -25,16 +25,17 @@ def test_triangle_abc():
     results = engine.solve(points, constraints)
     
     if results:
+        coords = results["coordinates"]
         print("Success! Coordinates:")
-        for pid, coords in results.items():
-            print(f"Point {pid}: {coords}")
+        for pid, c in coords.items():
+            print(f"Point {pid}: {c}")
             
         # Verify distance AB
-        dist_ab = ((results["B"][0] - results["A"][0])**2 + (results["B"][1] - results["A"][1])**2)**0.5
+        dist_ab = ((coords["B"][0] - coords["A"][0])**2 + (coords["B"][1] - coords["A"][1])**2)**0.5
         print(f"Verified AB distance: {dist_ab:.2f}")
         
         # Verify distance AC
-        dist_ac = ((results["C"][0] - results["A"][0])**2 + (results["C"][1] - results["A"][1])**2)**0.5
+        dist_ac = ((coords["C"][0] - coords["A"][0])**2 + (coords["C"][1] - coords["A"][1])**2)**0.5
         print(f"Verified AC distance: {dist_ac:.2f}")
     else:
         print("Solver failed.")

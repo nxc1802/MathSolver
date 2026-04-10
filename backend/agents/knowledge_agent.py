@@ -80,8 +80,8 @@ class KnowledgeAgent:
         elif shape == "square":
             side = ab or ad or bc or cd or values.get("side")
             if side:
-                values.update({"AB": side, "BC": side, "CD": side, "DA": side, "angle_A": 90})
-                logger.info(f"[KnowledgeAgent] Square: all sides={side}, angle_A=90°")
+                values.update({"AB": side, "AD": side, "angle_A": 90})
+                logger.info(f"[KnowledgeAgent] Square: side={side}, angle_A=90°")
             else:
                 values.setdefault("angle_A", 90)
 

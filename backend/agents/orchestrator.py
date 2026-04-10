@@ -7,6 +7,7 @@ from agents.knowledge_agent import KnowledgeAgent
 from agents.ocr_agent import OCRAgent
 from agents.parser_agent import ParserAgent
 from agents.renderer_agent import RendererAgent
+from agents.solver_agent import SolverAgent
 from app.logutil import log_step
 from solver.dsl_parser import DSLParser
 from solver.engine import GeometryEngine
@@ -40,6 +41,7 @@ class Orchestrator:
         self.ocr_agent = OCRAgent()
         self.knowledge_agent = KnowledgeAgent()
         self.renderer_agent = RendererAgent()
+        self.solver_agent = SolverAgent()
         self.solver_engine = GeometryEngine()
         self.dsl_parser = DSLParser()
 
@@ -154,18 +156,20 @@ class Orchestrator:
             _step_io("step4_geometry_dsl", input_val=None, output_val=dsl_code)
 
             _step_io("step5_dsl_parse", input_val=dsl_code, output_val=None)
-            points, constraints = self.dsl_parser.parse(dsl_code)
+            points, constraints, is_3d = self.dsl_parser.parse(dsl_code)
             _step_io(
                 "step5_dsl_parse",
                 input_val=None,
                 output_val={
                     "points": len(points),
                     "constraints": len(constraints),
+                    "is_3d": is_3d,
                 },
             )
 
-            _step_io("step6_solve", input_val=f"{len(points)} pts / {len(constraints)} cons", output_val=None)
-            engine_result = self.solver_engine.solve(points, constraints)
+            _step_io("step6_solve", input_val=f"{len(points)} pts / {len(constraints)} cons (is_3d={is_3d})", output_val=None)
+            import anyio
+            engine_result = await anyio.to_thread.run_sync(self.solver_engine.solve, points, constraints, is_3d)
 
             if engine_result:
                 coordinates = engine_result.get("coordinates")
@@ -220,6 +224,13 @@ class Orchestrator:
 
         _step_io("orchestrate_done", input_val=job_id, output_val=status)
 
+        # 8. Solution calculation (New in v5.1)
+        solution = None
+        if engine_result:
+            _step_io("step8_solve_math", input_val=semantic_json.get("target_question"), output_val=None)
+            solution = await self.solver_agent.solve(semantic_json, engine_result)
+            _step_io("step8_solve_math", input_val=None, output_val=solution.get("answer"))
+
         final_analysis = self._generate_step_description(semantic_json, engine_result)
 
         return {
@@ -234,4 +245,5 @@ class Orchestrator:
             "drawing_phases": engine_result.get("drawing_phases", []),
             "semantic": semantic_json,
             "semantic_analysis": final_analysis,
+            "solution": solution,
         }

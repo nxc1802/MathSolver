@@ -7,7 +7,7 @@ logger = logging.getLogger(__name__)
 
 
 class DSLParser:
-    def parse(self, text: str) -> Tuple[List[Point], List[Constraint]]:
+    def parse(self, text: str) -> Tuple[List[Point], List[Constraint], bool]:
         """Parse DSL text into points and constraints. Stateless per call."""
         points: Dict[str, Point] = {}
         explicit_point_ids: List[str] = []
@@ -17,6 +17,7 @@ class DSLParser:
         segments: List[List[str]] = []
         lines_ext: List[List[str]] = []
         rays: List[List[str]] = []
+        is_3d = False
 
         logger.info("==[DSLParser] Parsing DSL input==")
         logger.debug(f"[DSLParser] Raw DSL:\n{text}")
@@ -27,14 +28,19 @@ class DSLParser:
             if not line or line.startswith('//') or line.startswith('#'):
                 continue
 
-            # POINT(A) -> Explicit vertex
-            m = re.match(r'POINT\((\w+)\)', line)
+            # POINT(A) or POINT(A, 0, 0, 5)
+            m = re.match(r'POINT\((\w+)(?:,\s*([\d\.-]+),\s*([\d\.-]+)(?:,\s*([\d\.-]+))?)?\)', line)
             if m:
                 name = m.group(1)
-                points[name] = Point(id=name)
+                x = float(m.group(2)) if m.group(2) else None
+                y = float(m.group(3)) if m.group(3) else None
+                z = float(m.group(4)) if m.group(4) else None
+                if z is not None:
+                    is_3d = True
+                points[name] = Point(id=name, x=x, y=y, z=z)
                 if name not in explicit_point_ids:
                     explicit_point_ids.append(name)
-                logger.debug(f"[DSLParser]   + POINT: {name} (explicit)")
+                logger.debug(f"[DSLParser]   + POINT: {name} ({x}, {y}, {z})")
                 continue
 
             # LENGTH(AB, 5)
@@ -136,18 +142,57 @@ class DSLParser:
                 logger.debug(f"[DSLParser]   + RAY: {p1}->{p2}")
                 continue
 
-            # TRIANGLE(ABC) — gợi ý vẽ tam giác (polygon_order fallback)
-            m = re.match(r'TRIANGLE\((\w+)\)', line)
+            # TRIANGLE(ABC) / PYRAMID(S_ABCD) / PRISM(ABC_DEF)
+            m = re.match(r'(TRIANGLE|PYRAMID|PRISM)\(([^)]+)\)', line)
             if m:
-                tri = m.group(1)
-                if not polygon_order:
-                    polygon_order = list(tri)
-                logger.debug(f"[DSLParser]   + TRIANGLE: {tri}")
+                pt_type = m.group(1)
+                targets = m.group(2)
+                if pt_type in ["PYRAMID", "PRISM"]:
+                    is_3d = True
+                if pt_type == "TRIANGLE":
+                    if not polygon_order: polygon_order = list(targets)
+                elif pt_type == "PYRAMID":
+                    # S_ABCD -> S is apex, ABCD is base
+                    if "_" in targets:
+                        apex, base = targets.split("_")
+                        # Add segments from apex to all base points
+                        for p in base:
+                            segments.append([apex, p])
+                            constraints.append(Constraint(type='segment', targets=[apex, p], value=0))
+                        if not polygon_order: polygon_order = list(base)
+                elif pt_type == "PRISM":
+                    # ABC_DEF -> two bases
+                    if "_" in targets:
+                        b1, b2 = targets.split("_")
+                        for p1, p2 in zip(b1, b2):
+                            segments.append([p1, p2])
+                            constraints.append(Constraint(type='segment', targets=[p1, p2], value=0))
+                logger.debug(f"[DSLParser]   + {pt_type}: {targets}")
+                continue
+
+            # SPHERE(O, r)
+            m = re.match(r'SPHERE\((\w+),\s*([\d\.]+)\)', line)
+            if m:
+                is_3d = True
+                center, radius = m.group(1), float(m.group(2))
+                if center not in points:
+                    points[center] = Point(id=center)
+                constraints.append(Constraint(type='sphere', targets=[center], value=radius))
+                logger.debug(f"[DSLParser]   + SPHERE: center={center}, r={radius}")
                 continue
 
             logger.warning(f"[DSLParser]   ? Unrecognized DSL line: '{line}'")
 
         logger.info(f"[DSLParser] Parsed {len(points)} points, {len(constraints)} constraints.")
+
+        # Safety sweep: Ensure all points referenced in constraints actually exist in the points dictionary
+        for c in constraints:
+            for pid in c.targets:
+                # Some targets might be values or comma-separated strings (handled elsewhere), 
+                # but most are single-character point IDs.
+                if isinstance(pid, str) and len(pid) == 1 and pid not in points:
+                    points[pid] = Point(id=pid)
+                    logger.debug(f"[DSLParser]   ! Auto-declared missing point from constraint: {pid}")
 
         # Attach metadata to a synthetic constraint for downstream use
         if polygon_order:
@@ -162,4 +207,4 @@ class DSLParser:
         if rays:
             constraints.append(Constraint(type='rays_metadata', targets=[",".join(l) for l in rays], value=0))
 
-        return list(points.values()), constraints
+        return list(points.values()), constraints, is_3d

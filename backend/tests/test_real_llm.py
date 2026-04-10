@@ -1,3 +1,4 @@
+import pytest
 import asyncio
 import os
 import logging
@@ -8,6 +9,7 @@ from app.llm_client import get_llm_client
 logging.basicConfig(level=logging.INFO)
 load_dotenv()
 
+@pytest.mark.asyncio
 async def test_real_llm():
     client = get_llm_client()
     
