@@ -1,0 +1,93 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+@import url('https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css');
+@import "tailwindcss";
+
+:root {
+  --background: #0a0a0f;
+  --bg-secondary: #08080d;
+  --foreground: #ffffff;
+  --card-bg: #0c0c14;
+  --panel-bg: rgba(12, 12, 20, 0.4);
+  --border: rgba(255, 255, 255, 0.05);
+  --text-primary: #ffffff;
+  --text-secondary: #a1a1aa;
+  --text-muted: #71717a;
+  --input-bg: rgba(24, 24, 27, 0.8);
+  --scrollbar-thumb: rgba(255, 255, 255, 0.08);
+  --msg-bot: rgba(24, 24, 27, 0.6);
+  --msg-user: rgba(59, 130, 246, 0.15);
+}
+
+[data-theme='light'] {
+  --background: #f8fafc;
+  --bg-secondary: #f1f5f9;
+  --foreground: #0f172a;
+  --card-bg: #ffffff;
+  --panel-bg: rgba(255, 255, 255, 0.8);
+  --border: rgba(0, 0, 0, 0.08);
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #64748b;
+  --input-bg: #ffffff;
+  --scrollbar-thumb: rgba(0, 0, 0, 0.1);
+  --msg-bot: #f1f5f9;
+  --msg-user: rgba(59, 130, 246, 0.1);
+}
+
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+/* Glassmorphism Utilities */
+.glass {
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.text-gradient {
+  background: linear-gradient(to right, #818cf8, #c084fc);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Thin scrollbar variant */
+.scrollbar-thin::-webkit-scrollbar {
+  width: 4px;
+}
+/* Dark Glassmorphism */
+:root {
+  --background: #0a0a0f;
+  --card-bg: rgba(255, 255, 255, 0.05);
+  --panel-bg: rgba(255, 255, 255, 0.03);
+  --border: rgba(255, 255, 255, 0.08);
+}
+body { background-color: var(--background); }
