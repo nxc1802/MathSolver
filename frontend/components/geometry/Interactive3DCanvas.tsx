@@ -113,14 +113,14 @@ export default function Interactive3DCanvas({ coordinates, drawingPhases }: Inte
 
   if (!coordinates || points.length === 0) {
     return (
-      <div className="bg-zinc-950 border border-white/5 rounded-3xl aspect-video flex items-center justify-center p-8">
+      <div className="bg-zinc-950 border border-white/5 rounded-3xl flex-1 min-h-0 flex items-center justify-center p-8">
         <p className="text-zinc-500 font-medium animate-pulse">Đang khởi tạo không gian 3D...</p>
       </div>
     );
   }
 
   return (
-    <div className="bg-zinc-950 border border-white/10 rounded-3xl overflow-hidden aspect-video relative group select-none">
+    <div className="bg-zinc-950 border border-white/10 rounded-3xl overflow-hidden flex-1 min-h-0 relative group select-none">
       {/* HUD Controls */}
       <div className="absolute top-4 right-4 flex flex-col gap-2 z-20">
         <button 

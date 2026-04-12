@@ -25,7 +25,7 @@ export default function AnimationPreview({
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="bg-zinc-950 border border-white/10 rounded-3xl overflow-hidden aspect-video relative group flex items-center justify-center p-2"
+      className="bg-zinc-950 border border-white/10 rounded-3xl overflow-hidden flex-1 min-h-0 relative group flex items-center justify-center p-2"
     >
       {videoUrl ? (
         <div className="relative w-full h-full">

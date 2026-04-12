@@ -275,10 +275,10 @@ export default function ChatSessionPage() {
           <div role="separator" onMouseDown={() => { draggingType.current = 'main'; document.body.style.cursor = "col-resize"; }} className="w-1 cursor-col-resize hover:bg-indigo-500/30 z-10 shrink-0" />
 
           <div className="flex-1 flex flex-col bg-black/40 overflow-hidden relative">
-            <div className="flex-1 overflow-y-auto px-6 py-6 space-y-10 scrollbar-thin">
+            <div className="flex-1 flex flex-col p-6 space-y-6 overflow-hidden">
               <AnimatePresence mode="popLayout">
                 {coordinates && (
-                  <motion.div key="static" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="space-y-4">
+                  <motion.div key="static" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="flex-1 flex flex-col min-h-0 space-y-3">
                      <div className="flex items-center justify-between gap-2">
                        <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-[0.2em]">HÌNH VẼ MÔ PHỎNG</span>
                        <VersionSwitcher currentVersion={videoVersion} totalVersions={geometrySnapshots.length} onPrev={() => {
@@ -293,7 +293,7 @@ export default function ChatSessionPage() {
                          }
                        }} />
                      </div>
-                     <div className="bg-zinc-900 border border-white/5 rounded-2xl p-2 h-[450px] flex items-center justify-center relative overflow-hidden shadow-2xl">
+                     <div className="bg-zinc-900 border border-white/5 rounded-2xl p-2 flex-1 min-h-0 flex items-center justify-center relative overflow-hidden shadow-2xl">
                        {is3d ? (
                          <Interactive3DCanvas coordinates={coordinates} drawingPhases={drawingPhases || []} />
                        ) : (
@@ -303,7 +303,7 @@ export default function ChatSessionPage() {
                   </motion.div>
                 )}
                 {(videoUrl || job.phase === 'rendering' || job.phase === 'rendering_queued') && (
-                  <motion.div key="animation" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="space-y-4">
+                  <motion.div key="animation" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="flex-1 flex flex-col min-h-0 space-y-3">
                      <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-[0.2em]">ANIMATION MANIM</span>
                      <AnimationPreview videoUrl={videoUrl || undefined} loading={job.phase === 'rendering' || job.phase === 'rendering_queued'} />
                   </motion.div>

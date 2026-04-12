@@ -183,7 +183,7 @@ export default function StaticGeometryCanvas({ coordinates, polygonOrder, circle
       <motion.div
         initial={{ opacity: 0, scale: 0.9 }}
         animate={{ opacity: 1, scale: 1 }}
-        className="bg-zinc-950 border border-white/5 rounded-3xl overflow-hidden aspect-video relative flex items-center justify-center p-8"
+        className="bg-zinc-950 border border-white/5 rounded-3xl overflow-hidden flex-1 min-h-0 relative flex items-center justify-center p-8"
       >
         <p className="text-zinc-500 font-medium animate-pulse">Hệ thống đang dựng tọa độ...</p>
       </motion.div>
@@ -196,7 +196,7 @@ export default function StaticGeometryCanvas({ coordinates, polygonOrder, circle
   return (
     <div 
       ref={containerRef}
-      className="bg-zinc-950 border border-white/10 rounded-3xl overflow-hidden aspect-video relative group select-none cursor-grab active:cursor-grabbing"
+      className="bg-zinc-950 border border-white/10 rounded-3xl overflow-hidden flex-1 min-h-0 relative group select-none cursor-grab active:cursor-grabbing"
       onWheel={handleWheel}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
