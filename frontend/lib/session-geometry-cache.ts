@@ -19,7 +19,8 @@ export interface GeometryState {
   rays: Array<[string, string]> | null;
   videoUrl: string | null;
   activeJobId: string | null;
-  is3d?: boolean;
+  is3d?: boolean; // @deprecated - use is_3d
+  is_3d?: boolean;
 }
 
 const PREFIX = "mathsolver_geo_";

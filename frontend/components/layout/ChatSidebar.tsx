@@ -2,10 +2,11 @@
 
 import React from "react";
 import { Calculator, ChevronLeft, ChevronRight, LogOut, User as UserIcon, Settings } from "lucide-react";
-import { useAuth } from "@/shared/lib/auth-context";
+import { useAuth } from "@/lib/auth-context";
 import SessionList from "./SessionList";
-import SettingsModal from "./SettingsModal";
+import SettingsModal from "../settings/SettingsModal";
 import { useState } from "react";
+import { motion } from "framer-motion";
 
 type ChatSidebarProps = {
   /** Narrow rail: icon-only session strip + mini header/footer */
@@ -20,7 +21,10 @@ export default function ChatSidebar({ compact = false, onCollapse, onExpand }: C
 
   if (compact) {
     return (
-      <div className="flex flex-col h-full bg-[var(--card-bg)] border-r border-[var(--border)]">
+      <motion.div 
+        layout
+        className="flex flex-col h-full bg-[var(--card-bg)] border-r border-[var(--border)]"
+      >
         <div className="flex-shrink-0 flex flex-col items-center gap-2 pt-2 pb-3 px-1 border-b border-[var(--border)]">
           <button
             type="button"
@@ -70,12 +74,15 @@ export default function ChatSidebar({ compact = false, onCollapse, onExpand }: C
         </div>
 
         <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
-      </div>
+      </motion.div>
     );
   }
 
   return (
-    <div className="flex flex-col h-full bg-[var(--card-bg)]">
+    <motion.div 
+      layout
+      className="flex flex-col h-full bg-[var(--card-bg)]"
+    >
       <div className="flex-shrink-0 px-4 py-4 border-b border-[var(--border)]">
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-center gap-2.5 min-w-0">
@@ -84,7 +91,7 @@ export default function ChatSidebar({ compact = false, onCollapse, onExpand }: C
             </div>
             <div className="min-w-0">
               <h1 className="text-base font-bold text-white tracking-tight leading-none truncate">MathSolver</h1>
-              <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-[0.2em] mt-1">v4.0 Agentic AI</p>
+              <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-[0.2em] mt-1">v5.1 Agentic AI</p>
             </div>
           </div>
           {onCollapse && (
@@ -148,6 +155,6 @@ export default function ChatSidebar({ compact = false, onCollapse, onExpand }: C
 
         <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
       </div>
-    </div>
+    </motion.div>
   );
 }

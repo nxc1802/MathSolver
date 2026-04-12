@@ -3,8 +3,6 @@
 
 ## I. Phân tích UI & Thẩm mỹ (UI Styles Integration)
 
-Dự án hiện tại đang đi theo hướng **Dark Glassmorphism** phối hợp với **OLED Optimized**. Để dự án đạt tới đẳng cấp "v5.1 chuyên nghiệp", chúng ta sẽ áp dụng các đặc điểm từ hình ảnh bạn gửi vào từng trạng thái:
-
 ### 1\. Phân tích Style chủ đạo
 
   * **Dark Mode (OLED Optimized):** Sử dụng nền `#0a0a0f` (True Black) giúp tăng độ tương phản cho công thức Toán học và tiết kiệm pin trên màn hình di động.
@@ -35,22 +33,7 @@ Codebase hiện tại có một file `page.tsx` dài hơn 800 dòng. Đây là "
 Tôi đề xuất tái cấu trúc để tách biệt Logic và UI, giúp dễ dàng bảo trì khi lên bản v6.0:
 
 ```text
-frontend/
-├── src/
-│   ├── features/                 # Tách theo tính năng lớn
-│   │   ├── chat/                 # Logic chat, input, messages
-│   │   │   ├── components/
-│   │   │   ├── hooks/            # useChatActions.ts, useJobSocket.ts
-│   │   │   └── store/            # Jotai/Zustand cho chat state
-│   │   ├── geometry/             # 2D & 3D Visualization
-│   │   │   ├── engines/          # Three.js & SVG logic
-│   │   │   └── components/
-│   │   └── auth/                 # Login, User context
-│   ├── shared/                   # Thành phần dùng chung
-│   │   ├── components/ui/        # ShadcnUI (Button, Slider, Modal)
-│   │   ├── lib/                  # api-client, utils
-│   │   └── types/
-│   └── app/                      # Next.js App Router (chỉ giữ file routing)
+Tự suy luận, miễn là các file không quá dài và dễ bảo trì.
 ```
 
 ### 2\. Tinh chỉnh Logic xử lý (Refinement)

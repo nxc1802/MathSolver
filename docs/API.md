@@ -76,6 +76,7 @@ Khi job hoàn thành, kết quả `result` trả về sẽ có cấu trúc như 
       "result": "500"
     }
   },
+  "is_3d": true,
   "video_url": "https://.../video_v1.mp4"
 }
 ```

@@ -2,7 +2,7 @@
 
 import { motion, AnimatePresence } from "framer-motion";
 import { Bot, User, Loader2, AlertCircle, Code2, BrainCircuit, Shapes } from "lucide-react";
-import type { ChatMessage as ChatMessageType } from "@/shared/types/chat";
+import type { ChatMessage as ChatMessageType } from "@/types/chat";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
@@ -177,7 +177,7 @@ export default function ChatMessageComponent({ message }: ChatMessageProps) {
                         >
                           <div className="pt-3 space-y-2 border-l border-zinc-800 ml-1.5 pl-4">
                             {message.metadata.solution.steps.map((step, idx) => (
-                              <div key={idx} className="text-sm text-zinc-400 leading-relaxed">
+                              <div key={idx} className="mb-4 p-4 bg-amber-500/10 border-2 border-amber-500/40 shadow-[6px_6px_0px_0px_rgba(245,158,11,0.3)] rounded-xl text-sm text-amber-50/90 leading-relaxed font-semibold">
                                 <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
                                   {step}
                                 </ReactMarkdown>

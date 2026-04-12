@@ -58,7 +58,7 @@ export default function LoginPage() {
           <div className="w-16 h-16 mx-auto mb-6 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-2xl shadow-indigo-500/20">
             <Calculator className="w-8 h-8 text-white" />
           </div>
-          <h1 className="text-3xl font-bold text-white tracking-tight">MathSolver v4.0</h1>
+          <h1 className="text-3xl font-bold text-white tracking-tight">MathSolver v5.1</h1>
           <p className="text-zinc-500 mt-2 text-sm font-medium uppercase tracking-widest">Hệ thống giải toán Agentic AI</p>
         </div>
 

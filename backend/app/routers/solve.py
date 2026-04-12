@@ -167,6 +167,7 @@ async def process_session_job(
                         "rays": result.get("rays", []),
                         "video_url": result.get("video_url"),
                         "solution": result.get("solution"),
+                        "is_3d": result.get("is_3d", False),
                     },
                 }
             ).execute()

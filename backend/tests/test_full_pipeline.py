@@ -82,6 +82,12 @@ QUERIES = [
         "expect_pts": ["A", "B", "C"],
         "expect_phases": 2,
         "request_video": True
+    },
+    {
+        "id": "Q12-3D",
+        "text": "Cho tứ diện ABCD đều có cạnh bằng 5.",
+        "expect_pts": ["A", "B", "C", "D"],
+        "expect_phases": 1,
     }
 ]
 

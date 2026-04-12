@@ -246,4 +246,5 @@ class Orchestrator:
             "semantic": semantic_json,
             "semantic_analysis": final_analysis,
             "solution": solution,
+            "is_3d": is_3d,
         }

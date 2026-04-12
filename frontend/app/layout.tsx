@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "MathSolver v4.0",
+  title: "MathSolver v5.1",
   description: "Visual Math Solver with Multi-Agent Intelligence",
 };
 
