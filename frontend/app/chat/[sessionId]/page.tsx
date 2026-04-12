@@ -293,7 +293,7 @@ export default function ChatSessionPage() {
                          }
                        }} />
                      </div>
-                     <div className="bg-zinc-900 border border-white/5 rounded-2xl p-2 flex-1 min-h-0 flex items-center justify-center relative overflow-hidden shadow-2xl">
+                     <div className="bg-zinc-900 border border-white/5 rounded-2xl p-2 flex-1 min-h-0 relative overflow-hidden shadow-2xl">
                        {is3d ? (
                          <Interactive3DCanvas coordinates={coordinates} drawingPhases={drawingPhases || []} />
                        ) : (

@@ -120,7 +120,7 @@ export default function Interactive3DCanvas({ coordinates, drawingPhases }: Inte
   }
 
   return (
-    <div className="bg-zinc-950 border border-white/10 rounded-3xl overflow-hidden flex-1 min-h-0 relative group select-none">
+    <div className="bg-zinc-950 border border-white/10 rounded-3xl overflow-hidden w-full h-full flex-1 min-h-0 relative group select-none">
       {/* HUD Controls */}
       <div className="absolute top-4 right-4 flex flex-col gap-2 z-20">
         <button 
