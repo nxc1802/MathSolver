@@ -9,14 +9,14 @@ import { getApiBaseUrl } from "@/lib/api-config";
 import { messageFromApi } from "@/lib/chat-messages";
 import type { ChatMessage } from "@/types/chat";
 
-import ChatSidebar from "@/components/layout/ChatSidebar";
-import ChatInput from "@/components/chat/ChatInput";
-import ChatMessageList from "@/components/chat/ChatMessageList";
-import HeroWelcome from "@/components/chat/HeroWelcome";
-import StaticGeometryCanvas from "@/components/geometry/StaticGeometryCanvas";
-import Interactive3DCanvas from "@/components/geometry/Interactive3DCanvas";
-import AnimationPreview from "@/components/media/AnimationPreview";
-import VersionSwitcher from "@/components/geometry/VersionSwitcher";
+import ChatSidebar from "../../../components/layout/ChatSidebar";
+import ChatInput from "../../../components/chat/ChatInput";
+import ChatMessageList from "../../../components/chat/ChatMessageList";
+import HeroWelcome from "../../../components/chat/HeroWelcome";
+import StaticGeometryCanvas from "../../../components/geometry/StaticGeometryCanvas";
+import Interactive3DCanvas from "../../../components/geometry/Interactive3DCanvas";
+import AnimationPreview from "../../../components/media/AnimationPreview";
+import VersionSwitcher from "../../../components/geometry/VersionSwitcher";
 
 import { useSolverJob } from "@/hooks/useSolverJob";
 import { loadGeometryState, saveGeometryState, type GeometryState } from "@/lib/session-geometry-cache";

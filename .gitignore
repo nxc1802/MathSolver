@@ -27,12 +27,12 @@ dist/
 Thumbs.db
 
 # Media (Manim output)
-media/
-video/
-videos/
-images/
-texts/
-Tex/
+/backend/media/
+/backend/video/
+/backend/videos/
+/backend/images/
+/backend/texts/
+/backend/Tex/
 *.mp4
 *.png
 *.svg
