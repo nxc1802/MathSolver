@@ -64,6 +64,9 @@ class SolveResponse(BaseModel):
     job_id: str
     status: str
 
+class RenderVideoRequest(BaseModel):
+    job_id: Optional[str] = None
+
 class RenderVideoResponse(BaseModel):
     job_id: str
     status: str

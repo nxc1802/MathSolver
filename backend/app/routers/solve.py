@@ -9,7 +9,7 @@ from agents.orchestrator import Orchestrator
 from app.dependencies import get_current_user_id
 from app.errors import format_error_for_user
 from app.logutil import log_pipeline_failure, log_pipeline_success, log_step
-from app.models.schemas import SolveRequest, SolveResponse
+from app.models.schemas import SolveRequest, SolveResponse, RenderVideoRequest, RenderVideoResponse
 from app.session_cache import invalidate_for_user, session_owned_by_user
 from app.supabase_client import get_supabase
 
@@ -110,6 +110,7 @@ async def solve_problem(
 @router.post("/{session_id}/render_video", response_model=RenderVideoResponse)
 async def render_video(
     session_id: str,
+    request: RenderVideoRequest,
     background_tasks: BackgroundTasks,
     user_id=Depends(get_current_user_id),
 ):
@@ -123,14 +124,14 @@ async def render_video(
     if not res.data:
         raise HTTPException(status_code=403, detail="Forbidden: You do not own this session.")
 
-    # 2. Tìm tin nhắn assistant mới nhất có metadata hình học
+    # 2. Tìm tin nhắn assistant có metadata hình học (cụ thể job_id hoặc mới nhất trong 10 tin nhắn gần nhất)
     msg_res = (
         supabase.table("messages")
         .select("metadata")
         .eq("session_id", session_id)
         .eq("role", "assistant")
         .order("created_at", desc=True)
-        .limit(10) # Look back a bit
+        .limit(10)
         .execute()
     )
     
@@ -138,6 +139,11 @@ async def render_video(
     if msg_res.data:
         for msg in msg_res.data:
             meta = msg.get("metadata", {})
+            # Nếu có yêu cầu job_id cụ thể, phải khớp job_id
+            if request.job_id and meta.get("job_id") != request.job_id:
+                continue
+            
+            # Phải có dữ liệu hình học
             if meta.get("geometry_dsl") and meta.get("coordinates"):
                 latest_geometry = meta
                 break
