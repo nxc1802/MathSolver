@@ -79,7 +79,6 @@ class Orchestrator:
         job_id: str = None,
         session_id: str = None,
         status_callback=None,
-        request_video: bool = False,
         history: list = None,
     ) -> Dict[str, Any]:
         """
@@ -91,7 +90,6 @@ class Orchestrator:
                 "job_id": job_id,
                 "text_len": len(text or ""),
                 "image_url": image_url,
-                "request_video": request_video,
                 "history_len": len(history or []),
             },
             output_val=None,
@@ -193,36 +191,7 @@ class Orchestrator:
                     "last_dsl": dsl_code,
                 }
 
-        status = "success"
-        if request_video:
-            try:
-                result_payload = {
-                    "geometry_dsl": dsl_code,
-                    "coordinates": coordinates,
-                    "polygon_order": engine_result.get("polygon_order", []),
-                    "drawing_phases": engine_result.get("drawing_phases", []),
-                    "circles": engine_result.get("circles", []),
-                    "lines": engine_result.get("lines", []),
-                    "rays": engine_result.get("rays", []),
-                    "semantic": semantic_json,
-                    "semantic_analysis": semantic_json.get("analysis") or semantic_json.get("input_text", ""),
-                    "session_id": session_id,
-                }
-                task = render_geometry_video.delay(job_id, result_payload)
-                status = "rendering_queued"
-                _step_io(
-                    "step7_video",
-                    input_val={"job_id": job_id, "broker": BROKER_URL.split("@")[-1] if "@" in BROKER_URL else BROKER_URL},
-                    output_val={"task_id": str(task.id), "status": status},
-                )
-            except Exception as e:
-                logger.exception("Celery queue failed for job %s", job_id)
-                _step_io("step7_video", input_val=job_id, output_val=str(e))
-                status = "success"
-        else:
-            _step_io("step7_video", input_val=request_video, output_val="skipped")
-
-        _step_io("orchestrate_done", input_val=job_id, output_val=status)
+        _step_io("orchestrate_done", input_val=job_id, output_val="success")
 
         # 8. Solution calculation (New in v5.1)
         solution = None

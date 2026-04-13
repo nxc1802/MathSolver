@@ -15,21 +15,38 @@ Authorization: Bearer <supabase_access_token>
 ## 🚀 Tính năng mới trong v5.1
 - **Symbolic Solver**: Trả về đáp án cuối cùng và các bước giải chi tiết thông qua trường `solution`.
 - **3D Geometry**: Tọa độ hiện hỗ trợ 3 trục `[x, y, z]`. Nếu $z=0$ cho tất cả các điểm, hệ thống coi là bài toán 2D.
-- **Enhanced Manim**: Hỗ trợ xuất video 3D với hiệu ứng xoay camera.
+- **On-demand Manim**: Video minh họa được tạo theo yêu cầu dựa trên trạng thái hình học mới nhất, không tự động render để tối ưu tài nguyên.
 
 ---
 
 ## Giải bài (Solve)
 
 ### `POST /api/v1/sessions/{session_id}/solve`
-Gửi bài toán trong một session (Context-aware).
+Gửi bài toán trong một session (Context-aware). Chỉ tạo hình ảnh tĩnh và lời giải văn bản.
 
 **Request body (JSON):**
 | Trường | Kiểu | Mô tả |
 |--------|------|--------|
 | `text` | string | Đề bài hoặc lệnh bổ sung |
 | `image_url` | string | URL ảnh đề bài (tùy chọn) |
-| `request_video` | boolean | Yêu cầu render video Manim |
+
+---
+
+## Tạo Video (Render Video) — v5.1 New Endpoint
+
+### `POST /api/v1/sessions/{session_id}/render_video`
+Yêu cầu hệ thống tạo video Manim mô phỏng quy trình vẽ hình từ trạng thái hình học mới nhất hiện có trong session.
+
+**Request body**: Trống.
+
+**Response (JSON):**
+```json
+{
+  "job_id": "render_job_uuid_456",
+  "status": "rendering_queued"
+}
+```
+FE nên lắng nghe WebSocket của `job_id` này để nhận kết quả khi video hoàn thành.
 
 ---
 

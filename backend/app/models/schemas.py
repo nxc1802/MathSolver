@@ -54,7 +54,6 @@ class Message(MessageBase):
 class SolveRequest(BaseModel):
     text: str
     image_url: Optional[str] = None
-    request_video: bool = False
 
     @field_validator("image_url", mode="before")
     @classmethod
@@ -62,5 +61,9 @@ class SolveRequest(BaseModel):
         return sanitize_url(v) if v is not None else None
 
 class SolveResponse(BaseModel):
+    job_id: str
+    status: str
+
+class RenderVideoResponse(BaseModel):
     job_id: str
     status: str
