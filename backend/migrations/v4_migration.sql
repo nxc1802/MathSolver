@@ -93,3 +93,34 @@ GRANT ALL ON public.profiles TO authenticated;
 GRANT ALL ON public.sessions TO authenticated;
 GRANT ALL ON public.messages TO authenticated;
 GRANT ALL ON public.jobs TO authenticated;
+
+-- 6. Session Assets Table (Assets like videos/images tied to sessions)
+CREATE TABLE IF NOT EXISTS public.session_assets (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    session_id UUID NOT NULL REFERENCES public.sessions(id) ON DELETE CASCADE,
+    job_id UUID,
+    asset_type TEXT NOT NULL DEFAULT 'video',
+    storage_path TEXT NOT NULL,
+    public_url TEXT NOT NULL,
+    version INTEGER NOT NULL DEFAULT 1,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Index for session_assets
+CREATE INDEX IF NOT EXISTS idx_session_assets_session_id ON public.session_assets(session_id);
+CREATE INDEX IF NOT EXISTS idx_session_assets_job_id ON public.session_assets(job_id);
+
+-- RLS for session_assets
+ALTER TABLE public.session_assets ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can view own session assets" ON public.session_assets
+    FOR SELECT USING (
+        session_id IN (SELECT id FROM public.sessions WHERE user_id = auth.uid())
+    );
+
+CREATE POLICY "Service role can manage all assets" ON public.session_assets
+    FOR ALL USING (true) WITH CHECK (true);
+
+-- Grant permissions
+GRANT ALL ON public.session_assets TO service_role;
+GRANT SELECT ON public.session_assets TO authenticated;

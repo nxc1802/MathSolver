@@ -40,6 +40,10 @@ def upload_session_asset(
     Returns (storage_path, public_url).
     """
     supabase = get_supabase()
+    if not supabase:
+        logger.error("[AssetManager] Failed to initialize Supabase client")
+        raise RuntimeError("Supabase client internal error")
+        
     bucket_name = os.getenv("SUPABASE_BUCKET", "video")
     
     version = get_next_version(session_id, asset_type)
