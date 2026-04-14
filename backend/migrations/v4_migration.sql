@@ -59,14 +59,31 @@ CREATE TABLE IF NOT EXISTS public.messages (
 CREATE INDEX IF NOT EXISTS idx_messages_session_id ON public.messages(session_id);
 CREATE INDEX IF NOT EXISTS idx_messages_created_at ON public.messages(session_id, created_at);
 
--- 4. Update Jobs Table
+-- 4. Session Assets Table (v5.1 Versioning)
+CREATE TABLE IF NOT EXISTS public.session_assets (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    session_id UUID NOT NULL REFERENCES public.sessions(id) ON DELETE CASCADE,
+    job_id UUID NOT NULL,
+    asset_type TEXT NOT NULL CHECK (asset_type IN ('video', 'image')),
+    storage_path TEXT NOT NULL,
+    public_url TEXT NOT NULL,
+    version INTEGER NOT NULL DEFAULT 1,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Index for session_assets
+CREATE INDEX IF NOT EXISTS idx_session_assets_session_id ON public.session_assets(session_id);
+
+-- 5. Update Jobs Table
 ALTER TABLE public.jobs ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES auth.users(id);
 ALTER TABLE public.jobs ADD COLUMN IF NOT EXISTS session_id UUID REFERENCES public.sessions(id);
 
--- 5. Row Level Security (RLS)
+-- 6. Row Level Security (RLS)
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.jobs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.session_assets ENABLE ROW LEVEL SECURITY;
 
 -- Polices for public.profiles
 DROP POLICY IF EXISTS "Users view own profile" ON public.profiles;
@@ -79,48 +96,36 @@ DROP POLICY IF EXISTS "Users manage own sessions" ON public.sessions;
 CREATE POLICY "Users manage own sessions" ON public.sessions FOR ALL USING (auth.uid() = user_id);
 
 -- Policies for public.messages
-DROP POLICY IF EXISTS "Users view own messages" ON public.messages;
-CREATE POLICY "Users view own messages" ON public.messages FOR ALL USING (
+DROP POLICY IF EXISTS "Users manage own messages" ON public.messages;
+CREATE POLICY "Users manage own messages" ON public.messages FOR ALL USING (
     session_id IN (SELECT id FROM public.sessions WHERE user_id = auth.uid())
+    OR (auth.jwt() ->> 'role' = 'service_role')
 );
 
+-- Policies for public.session_assets
+DROP POLICY IF EXISTS "Users view own assets" ON public.session_assets;
+CREATE POLICY "Users view own assets" ON public.session_assets FOR SELECT USING (
+    session_id IN (SELECT id FROM public.sessions WHERE user_id = auth.uid())
+);
+DROP POLICY IF EXISTS "Service role manages assets" ON public.session_assets;
+CREATE POLICY "Service role manages assets" ON public.session_assets FOR ALL USING (true);
+
 -- Policies for public.jobs
-DROP POLICY IF EXISTS "Users view own jobs" ON public.jobs;
-CREATE POLICY "Users view own jobs" ON public.jobs FOR ALL USING (auth.uid() = user_id OR user_id IS NULL);
+DROP POLICY IF EXISTS "Users manage own jobs" ON public.jobs;
+CREATE POLICY "Users manage own jobs" ON public.jobs FOR ALL USING (
+    auth.uid() = user_id OR user_id IS NULL OR (auth.jwt() ->> 'role' = 'service_role')
+);
+
+-- 7. Storage Policies (Bucket: video)
+-- (Run this in Supabase Dashboard if not allowed in migration)
+-- INSERT INTO storage.buckets (id, name, public) VALUES ('video', 'video', true) ON CONFLICT (id) DO NOTHING;
+-- CREATE POLICY "Service Role manage videos" ON storage.objects FOR ALL TO service_role USING (bucket_id = 'video');
+-- CREATE POLICY "Public read videos" ON storage.objects FOR SELECT TO public USING (bucket_id = 'video');
 
 -- Grant permissions to public/authenticated
 GRANT ALL ON public.profiles TO authenticated;
 GRANT ALL ON public.sessions TO authenticated;
 GRANT ALL ON public.messages TO authenticated;
 GRANT ALL ON public.jobs TO authenticated;
-
--- 6. Session Assets Table (Assets like videos/images tied to sessions)
-CREATE TABLE IF NOT EXISTS public.session_assets (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    session_id UUID NOT NULL REFERENCES public.sessions(id) ON DELETE CASCADE,
-    job_id UUID,
-    asset_type TEXT NOT NULL DEFAULT 'video',
-    storage_path TEXT NOT NULL,
-    public_url TEXT NOT NULL,
-    version INTEGER NOT NULL DEFAULT 1,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- Index for session_assets
-CREATE INDEX IF NOT EXISTS idx_session_assets_session_id ON public.session_assets(session_id);
-CREATE INDEX IF NOT EXISTS idx_session_assets_job_id ON public.session_assets(job_id);
-
--- RLS for session_assets
-ALTER TABLE public.session_assets ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Users can view own session assets" ON public.session_assets
-    FOR SELECT USING (
-        session_id IN (SELECT id FROM public.sessions WHERE user_id = auth.uid())
-    );
-
-CREATE POLICY "Service role can manage all assets" ON public.session_assets
-    FOR ALL USING (true) WITH CHECK (true);
-
--- Grant permissions
+GRANT ALL ON public.session_assets TO authenticated;
 GRANT ALL ON public.session_assets TO service_role;
-GRANT SELECT ON public.session_assets TO authenticated;

@@ -2,7 +2,10 @@ import os
 import subprocess
 import glob
 import string
+import logging
 from typing import Dict, Any, List
+
+logger = logging.getLogger(__name__)
 
 
 class RendererAgent:
@@ -224,25 +227,38 @@ class RendererAgent:
                     f.write(b"dummy video content")
                 return dummy_path
 
-            print(f"Running Manim for job {job_id}...")
+            # Determine manim executable path
+            manim_exe = "manim"
+            venv_manim = os.path.join(os.getcwd(), "venv", "bin", "manim")
+            if os.path.exists(venv_manim):
+                manim_exe = venv_manim
+            
+            # Prepare environment with homebrew paths
+            custom_env = os.environ.copy()
+            brew_path = "/opt/homebrew/bin:/usr/local/bin"
+            custom_env["PATH"] = f"{brew_path}:{custom_env.get('PATH', '')}"
+
+            logger.info(f"Running {manim_exe} for job {job_id}...")
             result = subprocess.run(
-                ["manim", "-ql", "--media_dir", ".", "-o", f"{job_id}.mp4", script_file, "GeometryScene"],
+                [manim_exe, "-ql", "--media_dir", ".", "-o", f"{job_id}.mp4", script_file, "GeometryScene"],
                 capture_output=True,
                 text=True,
+                env=custom_env
             )
-            print(f"Manim STDOUT: {result.stdout}")
-            print(f"Manim STDERR: {result.stderr}")
+            logger.info(f"Manim STDOUT: {result.stdout}")
+            if result.returncode != 0:
+                logger.error(f"Manim STDERR: {result.stderr}")
 
             for pattern in [f"**/videos/**/{job_id}.mp4", f"**/{job_id}*.mp4"]:
                 found = glob.glob(pattern, recursive=True)
                 if found:
-                    print(f"Manim Success: Found {found[0]}")
+                    logger.info(f"Manim Success: Found {found[0]}")
                     return found[0]
 
-            print(f"Manim file not found for job {job_id}")
+            logger.error(f"Manim file not found for job {job_id}. Return code: {result.returncode}")
             return ""
         except Exception as e:
-            print(f"Manim Execution Error: {e}")
+            logger.exception(f"Manim Execution Error: {e}")
             return ""
         finally:
             if os.path.exists(script_file):

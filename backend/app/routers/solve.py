@@ -255,11 +255,11 @@ async def process_render_job(job_id: str, session_id: str, geometry_data: dict):
     }
     
     try:
+        logger.info(f"[RenderJob] Attempting to dispatch Celery task for job {job_id}...")
         render_geometry_video.delay(job_id, result_payload)
-        # Note: The Celery task itself updates the job status to 'success' and adds the message when done.
-        logger.info(f"[RenderJob] Dispatched Celery task for job {job_id}")
+        logger.info(f"[RenderJob] SUCCESS: Dispatched Celery task for job {job_id}")
     except Exception as e:
-        logger.exception("Failed to dispatch Celery rendering task")
+        logger.exception(f"[RenderJob] FAILED to dispatch Celery task: {e}")
         supabase = get_supabase()
-        supabase.table("jobs").update({"status": "error", "result": {"error": str(e)}}).eq("id", job_id).execute()
+        supabase.table("jobs").update({"status": "error", "result": {"error": f"Task dispatch failed: {str(e)}"}}).eq("id", job_id).execute()
         await notify_status(job_id, {"status": "error", "error": str(e)})
