@@ -4,8 +4,6 @@ import { Send, Loader2, Film } from "lucide-react";
 interface ChatInputProps {
   inputText: string;
   setInputText: (val: string | ((prev: string) => string)) => void;
-  requestVideo: boolean;
-  setRequestVideo: (val: boolean) => void;
   isLimitReached: boolean;
   solveLoading: boolean;
   ocrLoading: boolean;
@@ -16,8 +14,6 @@ interface ChatInputProps {
 export default function ChatInput({
   inputText,
   setInputText,
-  requestVideo,
-  setRequestVideo,
   isLimitReached,
   solveLoading,
   ocrLoading,
@@ -55,18 +51,6 @@ export default function ChatInput({
     <div className="p-4 border-t border-[var(--border)] bg-[var(--panel-bg)]">
       <div className="max-w-3xl mx-auto space-y-3">
         <div className="flex items-center gap-2 px-1">
-          <button
-            type="button"
-            onClick={() => setRequestVideo(!requestVideo)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border transition-all text-xs font-bold ${
-              requestVideo
-                ? "bg-indigo-500/20 border-indigo-500/40 text-indigo-300"
-                : "bg-white/5 border-[rgba(255,255,255,0.05)] text-zinc-500 hover:text-white"
-            }`}
-          >
-            <Film className="w-3.5 h-3.5" />
-            MANIM VIDEO
-          </button>
           {ocrLoading && (
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-[10px] font-bold text-indigo-400 animate-pulse">
               <Loader2 className="w-3 h-3 animate-spin" />

@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useParams } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
+import { Film, Loader2 } from "lucide-react";
 import useSWR, { useSWRConfig } from "swr";
 import { useAuth } from "@/lib/auth-context";
 import { getApiBaseUrl } from "@/lib/api-config";
@@ -59,7 +60,6 @@ export default function ChatSessionPage() {
   const { data: sessionAssets = [], mutate: mutateAssets } = useSWR(assetsKey, fetchSessionAssets, { revalidateOnFocus: false });
 
   const [inputText, setInputText] = useState("");
-  const [requestVideo, setRequestVideo] = useState(false);
   const [ocrLoading, setOcrLoading] = useState(false);
   const [pendingQueue, setPendingQueue] = useState<{ id: string; text: string }[]>([]);
 
@@ -79,10 +79,11 @@ export default function ChatSessionPage() {
   const [drawingPhases, setDrawingPhases] = useState<any[] | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [videoVersion, setVideoVersion] = useState(1);
+  const [activeSnapshotJobId, setActiveSnapshotJobId] = useState<string | null>(null);
   const prevSnapshotsCountRef = useRef(0);
 
   // Job Hooks
-  const { job, startSolve, resetJob } = useSolverJob(sessionId, userSession?.access_token);
+  const { job, startSolve, startRenderVideo, resetJob } = useSolverJob(sessionId, userSession?.access_token);
 
   const geometrySnapshots = useMemo(() => {
     return messages?.filter((m) => m.role === "assistant" && m.type !== "error" && m.metadata?.coordinates) || [];
@@ -108,6 +109,7 @@ export default function ChatSessionPage() {
     setPolygonOrder(meta.polygon_order || meta.polygonOrder || null);
     setDrawingPhases(meta.drawing_phases || meta.drawingPhases || null);
     setVideoUrl(meta.video_url || meta.videoUrl || null);
+    setActiveSnapshotJobId(meta.job_id || meta.jobId || null);
   };
 
   // Restore cache on session change
@@ -154,9 +156,9 @@ export default function ChatSessionPage() {
     if (job.phase === 'idle' && pendingQueue.length > 0) {
       const next = pendingQueue[0];
       setPendingQueue(prev => prev.slice(1));
-      startSolve(next.text, requestVideo);
+      startSolve(next.text);
     }
-  }, [job.phase, pendingQueue, startSolve, requestVideo]);
+  }, [job.phase, pendingQueue, startSolve]);
 
   // Layout dragging
   useEffect(() => {
@@ -212,7 +214,7 @@ export default function ChatSessionPage() {
     
     if (!text) setInputText("");
     await mutateMessages((prev) => [...(prev || []), { id: "temp", role: "user", type: "text", content: payload, timestamp: Date.now() }], { revalidate: false });
-    startSolve(payload, requestVideo);
+    startSolve(payload);
   };
 
   const handleOcr = async (file: File) => {
@@ -263,8 +265,6 @@ export default function ChatSessionPage() {
             <ChatInput
               inputText={inputText}
               setInputText={setInputText}
-              requestVideo={requestVideo}
-              setRequestVideo={setRequestVideo}
               isLimitReached={isLimitReached}
               solveLoading={job.phase !== 'idle'}
               ocrLoading={ocrLoading}
@@ -279,20 +279,38 @@ export default function ChatSessionPage() {
               <AnimatePresence mode="popLayout">
                 {coordinates && (
                   <motion.div key="static" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="flex-1 flex flex-col min-h-0 space-y-3">
-                     <div className="flex items-center justify-between gap-2">
-                       <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-[0.2em]">HÌNH VẼ MÔ PHỎNG</span>
-                       <VersionSwitcher currentVersion={videoVersion} totalVersions={geometrySnapshots.length} onPrev={() => {
-                         if (videoVersion > 1) {
-                           setVideoVersion(v => v - 1);
-                           applyGeometryFromSnapshot(geometrySnapshots[videoVersion - 2].metadata);
-                         }
-                       }} onNext={() => {
-                         if (videoVersion < geometrySnapshots.length) {
-                           setVideoVersion(v => v + 1);
-                           applyGeometryFromSnapshot(geometrySnapshots[videoVersion].metadata);
-                         }
-                       }} />
-                     </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-3">
+                        <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-[0.2em]">HÌNH VẼ MÔ PHỎNG</span>
+                        
+                        {coordinates && !videoUrl && (
+                          <button
+                            onClick={() => startRenderVideo(activeSnapshotJobId || undefined)}
+                            disabled={job.phase === 'rendering' || job.phase === 'rendering_queued'}
+                            className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-[9px] font-bold text-indigo-400 hover:bg-indigo-500/20 transition-all disabled:opacity-50"
+                          >
+                            {job.phase === 'rendering' || job.phase === 'rendering_queued' ? (
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                            ) : (
+                              <Film className="w-3 h-3" />
+                            )}
+                            TẠO ANIMATION
+                          </button>
+                        )}
+                      </div>
+
+                      <VersionSwitcher currentVersion={videoVersion} totalVersions={geometrySnapshots.length} onPrev={() => {
+                        if (videoVersion > 1) {
+                          setVideoVersion(v => v - 1);
+                          applyGeometryFromSnapshot(geometrySnapshots[videoVersion - 2].metadata);
+                        }
+                      }} onNext={() => {
+                        if (videoVersion < geometrySnapshots.length) {
+                          setVideoVersion(v => v + 1);
+                          applyGeometryFromSnapshot(geometrySnapshots[videoVersion].metadata);
+                        }
+                      }} />
+                    </div>
                      <div className="bg-zinc-900 border border-white/5 rounded-2xl p-2 flex-1 min-h-0 relative overflow-hidden shadow-2xl">
                        {is3d ? (
                          <Interactive3DCanvas coordinates={coordinates} drawingPhases={drawingPhases || []} />

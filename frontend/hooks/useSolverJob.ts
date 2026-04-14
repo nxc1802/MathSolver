@@ -178,5 +178,31 @@ export function useSolverJob(sessionId: string, token?: string | null) {
     setJob({ phase: 'idle', progress: 0, message: '' });
   }, [cleanup]);
 
-  return { job, startSolve, attachToJob, resetJob };
+  const startRenderVideo = useCallback(async (targetJobId?: string) => {
+    if (!token) return;
+    cleanup();
+    setJob({ phase: 'rendering_queued', progress: 80, message: 'Đang gửi yêu cầu render...', result: null, error: undefined });
+    
+    try {
+      const response = await fetch(`${getApiBaseUrl()}/api/v1/sessions/${sessionId}/render_video`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ job_id: targetJobId }),
+      });
+
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const data = await response.json();
+      if (!data.job_id) throw new Error("Missing job_id");
+
+      attachToJob(data.job_id);
+    } catch (err) {
+      setJob(prev => ({ ...prev, phase: 'error', progress: 0, message: 'Lỗi khởi tạo render', error: String(err) }));
+      cleanup();
+    }
+  }, [sessionId, token, attachToJob, cleanup]);
+
+  return { job, startSolve, startRenderVideo, attachToJob, resetJob };
 }
