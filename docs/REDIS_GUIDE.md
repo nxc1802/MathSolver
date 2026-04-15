@@ -1,6 +1,16 @@
 # Hướng dẫn Cấu hình Upstash Redis (Serverless)
 
-Dự án sử dụng Redis để làm Broker cho Celery (xử lý render video ngầm). **Upstash Redis** là lựa chọn tối ưu cho môi trường Serverless và Cloud vì tính ổn định và miễn phí (Free Tier).
+Dự án sử dụng Redis để làm Broker cho Celery (render video và pipeline giải toán/OCR trên worker). **Upstash Redis** là lựa chọn tối ưu cho môi trường Serverless và Cloud vì tính ổn định và miễn phí (Free Tier).
+
+### Hàng đợi Celery (`render` / `solve`)
+
+- Task render video được route tới queue `render`; task giải toán (`process_solve_session_job`) tới queue `solve`.
+- Worker phải lắng nghe đúng queue, ví dụ: `celery -A worker.celery_app worker -Q render,solve --loglevel=info`.
+- Biến `CELERY_SOLVE_QUEUE` (mặc định `solve`) phải khớp với queue worker đang consume.
+
+### WebSocket và Redis pub/sub
+
+API chạy WebSocket trong process riêng với Celery worker. Khi `JOB_WS_REDIS_BRIDGE=true` (mặc định) và có `REDIS_URL` / `CELERY_BROKER_URL`, worker **publish** trạng thái job lên kênh Redis; process API **subscribe** và gọi `notify_status` để client WS nhận cập nhật. Tắt bridge: `JOB_WS_REDIS_BRIDGE=false` (khi đó có thể dùng polling `GET /api/v1/solve/{job_id}`).
 
 ## 1. Tạo Database trên Upstash
 1. Truy cập [Upstash Console](https://console.upstash.com/) và đăng nhập.

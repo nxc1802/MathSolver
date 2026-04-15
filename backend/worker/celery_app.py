@@ -44,4 +44,8 @@ celery_app.conf.update(
     result_serializer="json",
     timezone="UTC",
     enable_utc=True,
+    task_routes={
+        "worker.tasks.render_geometry_video": {"queue": "render"},
+        "worker.tasks.process_solve_session_job": {"queue": "solve"},
+    },
 )

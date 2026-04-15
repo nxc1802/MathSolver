@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import time
 import uuid
 import warnings
+from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
@@ -27,6 +29,7 @@ setup_application_logging()
 
 # Routers (after logging)
 from app.dependencies import get_current_user_id
+from app.job_events import job_ws_bridge_loop, job_ws_bridge_should_start
 from app.routers import auth, sessions, solve
 from agents.ocr_agent import OCRAgent
 from app.routers.solve import get_orchestrator
@@ -36,7 +39,23 @@ from app.websocket_manager import register_websocket_routes
 logger = logging.getLogger("app.main")
 _access = logging.getLogger(ACCESS_LOGGER_NAME)
 
-app = FastAPI(title="Visual Math Solver API v5.1")
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    bridge_task: asyncio.Task | None = None
+    if job_ws_bridge_should_start():
+        bridge_task = asyncio.create_task(job_ws_bridge_loop())
+        logger.info("Started Redis job WebSocket bridge subscriber")
+    yield
+    if bridge_task is not None:
+        bridge_task.cancel()
+        try:
+            await bridge_task
+        except asyncio.CancelledError:
+            pass
+
+
+app = FastAPI(title="Visual Math Solver API v5.1", lifespan=lifespan)
 
 
 @app.middleware("http")

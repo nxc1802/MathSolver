@@ -54,9 +54,10 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```bash
 cd backend
 source venv/bin/activate
-# Loglevel debug để xem chi tiết quá trình render
-celery -A worker.celery_app worker --loglevel=debug
+# Phải consume cả queue render (video) và solve (OCR + giải toán)
+celery -A worker.celery_app worker --loglevel=debug -Q render,solve
 ```
+Có thể chạy hai process worker riêng (`-Q render` và `-Q solve`) nếu muốn tách tài nguyên.
 
 ### 3. Frontend (Next.js - Dev/Log Mode)
 ```bash

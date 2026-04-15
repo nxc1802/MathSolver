@@ -5,10 +5,15 @@ on:
     branches: [ main ]
     paths:
       - 'backend/worker/**'
+      - 'backend/worker_health.py'
+      - 'backend/app/jobs/**'
+      - 'backend/app/job_events.py'
       - 'backend/agents/renderer_agent.py'
+      - 'backend/agents/orchestrator.py'
       - 'backend/solver/**'
       - 'backend/requirements.txt'
       - 'backend/Dockerfile.worker'
+      - 'backend/README_HF_WORKER.md'
       - '.github/workflows/deploy-worker.yml'
 
 jobs:

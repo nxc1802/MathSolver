@@ -1,6 +1,8 @@
 import os
+
 from .celery_app import celery_app
 from agents.renderer_agent import RendererAgent
+from app.jobs.solve_session_job import run_solve_session_job_sync
 from app.supabase_client import get_supabase
 from .asset_manager import upload_session_asset
 
@@ -74,3 +76,18 @@ def render_geometry_video(job_id: str, data: dict):
         # 6. Cleanup local file
         if os.path.exists(video_local_path):
             os.remove(video_local_path)
+
+
+@celery_app.task(name="worker.tasks.process_solve_session_job")
+def process_solve_session_job(
+    job_id: str,
+    session_id: str,
+    user_id: str,
+    text: str,
+    image_url: str | None,
+):
+    """
+    Run full solve pipeline (OCR + agents) off the API process.
+    Queue: solve (see worker.celery_app task_routes).
+    """
+    run_solve_session_job_sync(job_id, session_id, user_id, text, image_url)

@@ -14,7 +14,8 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile.worker
-    command: celery -A worker.celery_app worker --loglevel=info
+    # Consume both queues: render (Manim) and solve (OCR + agents). Split into two services with -Q render / -Q solve if you scale workers separately.
+    command: celery -A worker.celery_app worker --loglevel=info -Q render,solve
     env_file:
       - ./backend/.env
 

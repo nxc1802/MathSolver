@@ -1,0 +1,58 @@
+# Optional second Hugging Face Space dedicated to the `solve` queue (OCR + agents).
+# 1. Create Space (Docker), same pattern as the main worker Space.
+# 2. Add repo secret HF_SOLVE_WORKER_REPO = owner/space-name (e.g. Cuong2004/math-solver-worker-solve).
+# 3. In that Space's variables: CELERY_WORKER_QUEUES=solve (and same Redis/Supabase/OpenRouter as API).
+# If HF_SOLVE_WORKER_REPO is unset, this workflow is skipped.
+
+name: Deploy Solve Worker to Hugging Face
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'backend/worker/**'
+      - 'backend/worker_health.py'
+      - 'backend/app/jobs/**'
+      - 'backend/app/job_events.py'
+      - 'backend/agents/**'
+      - 'backend/solver/**'
+      - 'backend/requirements.txt'
+      - 'backend/Dockerfile.worker'
+      - 'backend/README_HF_WORKER.md'
+      - '.github/workflows/deploy-worker-solve.yml'
+
+jobs:
+  deploy-worker-solve:
+    if: ${{ secrets.HF_SOLVE_WORKER_REPO != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Push to Hugging Face Spaces (Solve worker)
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_SOLVE_WORKER_REPO: ${{ secrets.HF_SOLVE_WORKER_REPO }}
+        run: |
+          git config --global user.email "cuong@example.com"
+          git config --global user.name "Cuong2004"
+
+          mkdir hf_worker_solve_copy
+          cp -r backend/* hf_worker_solve_copy/
+
+          cd hf_worker_solve_copy
+
+          if [ -f "Dockerfile.worker" ]; then
+            mv Dockerfile.worker Dockerfile
+          fi
+
+          if [ -f "README_HF_WORKER.md" ]; then
+            mv README_HF_WORKER.md README.md
+          fi
+
+          git init
+          git remote add origin "https://Cuong2004:${HF_TOKEN}@huggingface.co/spaces/${HF_SOLVE_WORKER_REPO}"
+          git add .
+          git commit -m "Deploy solve worker from GitHub Actions"
+          git push --force origin master:main
