@@ -1,15 +1,23 @@
 from __future__ import annotations
 
 import logging
+import os
 import uuid
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
 
 from agents.orchestrator import Orchestrator
 from app.dependencies import get_current_user_id
 from app.errors import format_error_for_user
 from app.logutil import log_pipeline_failure, log_pipeline_success, log_step
-from app.models.schemas import SolveRequest, SolveResponse, RenderVideoRequest, RenderVideoResponse
+from app.models.schemas import (
+    OcrPreviewResponse,
+    RenderVideoRequest,
+    RenderVideoResponse,
+    SolveRequest,
+    SolveResponse,
+)
+from app.ocr_text_merge import build_combined_ocr_preview_draft
 from app.session_cache import invalidate_for_user, session_owned_by_user
 from app.supabase_client import get_supabase
 
@@ -22,6 +30,73 @@ ORCHESTRATOR = Orchestrator()
 
 def get_orchestrator() -> Orchestrator:
     return ORCHESTRATOR
+
+
+_OCR_PREVIEW_MAX_BYTES = 10 * 1024 * 1024
+
+
+@router.post("/{session_id}/ocr_preview", response_model=OcrPreviewResponse)
+async def ocr_preview(
+    session_id: str,
+    user_id=Depends(get_current_user_id),
+    file: UploadFile = File(...),
+    user_message: str | None = Form(None),
+):
+    """
+    Run OCR on an uploaded image and merge with optional user_message into combined_draft.
+    Does not insert messages or start a solve job. After user confirms, call POST .../solve
+    with text=combined_draft (edited) and omit image_url to avoid double OCR.
+    """
+    supabase = get_supabase()
+    uid = str(user_id)
+
+    def owns() -> bool:
+        res = (
+            supabase.table("sessions")
+            .select("id")
+            .eq("id", session_id)
+            .eq("user_id", user_id)
+            .execute()
+        )
+        log_step("db_select", table="sessions", op="owner_check_ocr_preview", session_id=session_id)
+        return bool(res.data)
+
+    if not session_owned_by_user(session_id, uid, owns):
+        raise HTTPException(
+            status_code=403, detail="Forbidden: You do not own this session."
+        )
+
+    body = await file.read()
+    if len(body) > _OCR_PREVIEW_MAX_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Image too large (max {_OCR_PREVIEW_MAX_BYTES // (1024 * 1024)} MB).",
+        )
+    if not body:
+        raise HTTPException(status_code=400, detail="Empty file.")
+
+    suffix = os.path.splitext(file.filename or "")[1].lower()
+    if suffix not in (".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ""):
+        suffix = ".png"
+    temp_path = f"temp_ocr_preview_{uuid.uuid4()}{suffix or '.png'}"
+    try:
+        with open(temp_path, "wb") as f:
+            f.write(body)
+        ocr_text = await get_orchestrator().ocr_agent.process_image(temp_path)
+        if ocr_text is None:
+            ocr_text = ""
+    finally:
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+
+    um = (user_message or "").strip()
+    combined = build_combined_ocr_preview_draft(user_message, ocr_text)
+    log_step("ocr_preview_done", session_id=session_id, ocr_len=len(ocr_text), user_len=len(um))
+    return OcrPreviewResponse(
+        ocr_text=ocr_text,
+        user_message=um,
+        combined_draft=combined,
+    )
 
 
 @router.post("/{session_id}/solve", response_model=SolveResponse)
@@ -53,22 +128,6 @@ async def solve_problem(
         log_pipeline_failure("solve_request", error="forbidden", session_id=session_id)
         raise HTTPException(
             status_code=403, detail="Forbidden: You do not own this session."
-        )
-
-    # NEW: Giới hạn 5 queries mỗi session
-    msg_count_res = (
-        supabase.table("messages")
-        .select("id", count="exact")
-        .eq("session_id", session_id)
-        .eq("role", "user")
-        .execute()
-    )
-    current_count = msg_count_res.count if msg_count_res.count is not None else 0
-    import os
-    if current_count >= 5 and os.getenv("ALLOW_TEST_BYPASS") != "true":
-        raise HTTPException(
-            status_code=400, 
-            detail="Bạn đã đạt giới hạn 5 câu hỏi cho phiên này. (Session limit reached: 5/5)"
         )
 
     supabase.table("messages").insert(
@@ -231,7 +290,21 @@ async def process_session_job(
 
     except Exception as e:
         logger.exception("Error processing session job %s", job_id)
-        # Error handling code ... (preserved)
+        error_msg = format_error_for_user(e)
+        supabase = get_supabase()
+        supabase.table("jobs").update(
+            {"status": "error", "result": {"error": str(e)}}
+        ).eq("id", job_id).execute()
+        supabase.table("messages").insert(
+            {
+                "session_id": session_id,
+                "role": "assistant",
+                "type": "error",
+                "content": error_msg,
+                "metadata": {"job_id": job_id},
+            }
+        ).execute()
+        await notify_status(job_id, {"status": "error", "error": error_msg})
 
 async def process_render_job(job_id: str, session_id: str, geometry_data: dict):
     """Tiến trình render video từ metadata có sẵn."""

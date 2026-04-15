@@ -70,3 +70,11 @@ class RenderVideoRequest(BaseModel):
 class RenderVideoResponse(BaseModel):
     job_id: str
     status: str
+
+
+class OcrPreviewResponse(BaseModel):
+    """Stateless OCR preview before POST .../solve (no DB writes, no job)."""
+
+    ocr_text: str
+    user_message: str = ""
+    combined_draft: str
