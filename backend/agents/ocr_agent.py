@@ -19,15 +19,22 @@ class ImprovedOCRAgent:
     1. YOLO for layout analysis (text vs formula).
     2. PaddleOCR for Vietnamese text extraction.
     3. Pix2Tex for LaTeX formula extraction.
-    4. MegaLLM for semantic correction and formatting.
+    4. Optional MegaLLM for semantic correction and formatting (skipped when ``skip_llm_refinement`` is True,
+       e.g. on the dedicated OCR Celery worker; the API Space runs ``refine_with_llm`` on the raw text).
     """
 
-    def __init__(self):
-        logger.info("[ImprovedOCRAgent] Initializing engines and client...")
+    def __init__(self, skip_llm_refinement: bool = False):
+        self._skip_llm_refinement = bool(skip_llm_refinement)
+        logger.info("[ImprovedOCRAgent] Initializing engines (skip_llm_refinement=%s)...", self._skip_llm_refinement)
 
-        from app.llm_client import get_llm_client
-        self.llm = get_llm_client()
-        logger.info("[ImprovedOCRAgent] Multi-Layer LLM Client initialized.")
+        if self._skip_llm_refinement:
+            self.llm = None
+            logger.info("[ImprovedOCRAgent] LLM client skipped (raw OCR only).")
+        else:
+            from app.llm_client import get_llm_client
+
+            self.llm = get_llm_client()
+            logger.info("[ImprovedOCRAgent] Multi-Layer LLM Client initialized.")
 
         try:
             from agents.torch_ultralytics_compat import allow_ultralytics_weights
@@ -219,6 +226,10 @@ class ImprovedOCRAgent:
             logger.warning("[ImprovedOCRAgent] No text detected to refine.")
             return ""
 
+        if self._skip_llm_refinement or self.llm is None:
+            logger.info("[ImprovedOCRAgent] Skipping MegaLLM refinement (raw OCR output).")
+            return combined_text
+
         try:
             logger.info("[ImprovedOCRAgent] Sending to MegaLLM for refinement...")
             refined_text = await asyncio.wait_for(
@@ -235,6 +246,9 @@ class ImprovedOCRAgent:
     async def refine_with_llm(self, text: str) -> str:
         if not text.strip():
             return ""
+        if self.llm is None:
+            logger.warning("[ImprovedOCRAgent] refine_with_llm: no LLM client; returning raw text.")
+            return text
 
         prompt = f"""Bạn là một chuyên gia số hóa tài liệu toán học.
 Dưới đây là kết quả OCR thô từ một trang sách toán Tiếng Việt.

@@ -1,4 +1,4 @@
-# Same runtime as API; runs health endpoint + Celery worker (see worker_health.py)
+# Celery worker: OCR queue only (no Manim / LaTeX / Cairo stack).
 FROM python:3.11-slim-bookworm
 
 ENV PYTHONUNBUFFERED=1 \
@@ -14,33 +14,27 @@ WORKDIR /app
 ENV PYTHONPATH=/app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ffmpeg \
-    pkg-config \
-    cmake \
-    libcairo2 \
-    libcairo2-dev \
-    libpango-1.0-0 \
-    libpango1.0-dev \
-    libpangocairo-1.0-0 \
-    libgdk-pixbuf-2.0-0 \
-    libffi-dev \
-    python3-dev \
-    texlive-latex-base \
-    texlive-fonts-recommended \
-    texlive-latex-extra \
     build-essential \
+    cmake \
+    pkg-config \
+    python3-dev \
+    libglib2.0-0 \
+    libgomp1 \
+    libsm6 \
+    libxext6 \
+    libxrender1 \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
+COPY requirements.worker-ocr.txt .
 RUN pip install --upgrade pip setuptools wheel \
-    && pip install -r requirements.txt
+    && pip install -r requirements.worker-ocr.txt
 
 COPY . .
 
-RUN python scripts/prewarm_models.py
+RUN python scripts/prewarm_ocr_worker.py
 
 ENV PORT=7860 \
-    CELERY_WORKER_QUEUES=render
+    CELERY_WORKER_QUEUES=ocr
 EXPOSE 7860
 
 ENTRYPOINT []

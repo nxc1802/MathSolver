@@ -14,8 +14,13 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile.worker
-    # Consume both queues: render (Manim) and solve (OCR + agents). Split into two services with -Q render / -Q solve if you scale workers separately.
-    command: celery -A worker.celery_app worker --loglevel=info -Q render,solve
+    # Task routes use queues `render` and `ocr`. Image may set CELERY_WORKER_QUEUES=render; override so Celery loads both task modules.
+    environment:
+      CELERY_WORKER_QUEUES: render,ocr
+    # Task routes use queues `render` and `ocr` (no Celery solve queue). Local one container listens to both.
+    command: >
+      celery -A worker.celery_app worker --loglevel=info --concurrency=1
+      -Q render,ocr
     env_file:
       - ./backend/.env
 

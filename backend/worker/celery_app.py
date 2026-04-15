@@ -15,6 +15,30 @@ from app.logging_setup import setup_application_logging
 
 setup_application_logging()
 
+
+def _celery_include_modules() -> list[str]:
+    """
+    Load only task modules for queues this process consumes (see CELERY_WORKER_QUEUES).
+    OCR-only Spaces must not import worker.tasks (Manim / Supabase render path).
+    """
+    raw = (os.getenv("CELERY_WORKER_QUEUES") or "").strip().lower()
+    if not raw:
+        return ["worker.tasks", "worker.ocr_tasks"]
+    parts = [p.strip() for p in raw.split(",") if p.strip()]
+    seen: set[str] = set()
+    out: list[str] = []
+    for p in parts:
+        mod = None
+        if p == "render":
+            mod = "worker.tasks"
+        elif p == "ocr":
+            mod = "worker.ocr_tasks"
+        if mod and mod not in seen:
+            seen.add(mod)
+            out.append(mod)
+    return out if out else ["worker.tasks", "worker.ocr_tasks"]
+
+
 _broker_raw = os.getenv("CELERY_BROKER_URL") or os.getenv("REDIS_URL") or "redis://localhost:6379/0"
 _backend_raw = os.getenv("CELERY_RESULT_BACKEND") or os.getenv("REDIS_URL") or "redis://localhost:6379/1"
 
@@ -25,7 +49,7 @@ celery_app = Celery(
     "math_solver",
     broker=BROKER_URL,
     backend=RESULT_BACKEND,
-    include=["worker.tasks"],
+    include=_celery_include_modules(),
 )
 
 # Fix for SSL if using rediss://
@@ -46,6 +70,6 @@ celery_app.conf.update(
     enable_utc=True,
     task_routes={
         "worker.tasks.render_geometry_video": {"queue": "render"},
-        "worker.tasks.process_solve_session_job": {"queue": "solve"},
+        "worker.ocr_tasks.run_ocr_from_url": {"queue": "ocr"},
     },
 )

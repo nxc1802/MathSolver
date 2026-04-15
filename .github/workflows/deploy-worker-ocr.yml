@@ -1,0 +1,69 @@
+# Optional Hugging Face Space for OCR-only Celery queue (`ocr`).
+# Secrets: HF_TOKEN + HF_OCR_WORKER_REPO = owner/space-name
+# Space variables: CELERY_WORKER_QUEUES=ocr, same Redis/Supabase/OpenRouter as API.
+# API must set OCR_USE_CELERY=true to send OCR tasks to this worker.
+
+name: Deploy OCR Worker to Hugging Face
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'backend/worker/**'
+      - 'backend/worker_health.py'
+      - 'backend/agents/ocr_agent.py'
+      - 'backend/agents/torch_ultralytics_compat.py'
+      - 'backend/app/ocr_celery.py'
+      - 'backend/app/ocr_local_file.py'
+      - 'backend/app/chat_image_upload.py'
+      - 'backend/app/runtime_env.py'
+      - 'backend/app/logging_setup.py'
+      - 'backend/app/url_utils.py'
+      - 'backend/app/supabase_client.py'
+      - 'backend/app/llm_client.py'
+      - 'backend/requirements.worker-ocr.txt'
+      - 'backend/Dockerfile.worker.ocr'
+      - 'backend/scripts/prewarm_ocr_worker.py'
+      - '.github/workflows/deploy-worker-ocr.yml'
+
+jobs:
+  deploy-worker-ocr:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Push to Hugging Face Spaces (OCR worker)
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_OCR_WORKER_REPO: ${{ secrets.HF_OCR_WORKER_REPO }}
+        run: |
+          if [ -z "$HF_OCR_WORKER_REPO" ] || [ -z "$HF_TOKEN" ]; then
+            echo "::notice::Skipping Hugging Face OCR worker deploy: set HF_OCR_WORKER_REPO and HF_TOKEN."
+            exit 0
+          fi
+          git config --global user.email "action@github.com"
+          git config --global user.name "github-actions"
+
+          mkdir hf_worker_ocr_copy
+          cp -r backend/* hf_worker_ocr_copy/
+
+          cd hf_worker_ocr_copy
+
+          if [ -f "Dockerfile.worker.ocr" ]; then
+            mv Dockerfile.worker.ocr Dockerfile
+          fi
+
+          if [ -f "README_HF_WORKER_OCR.md" ]; then
+            mv README_HF_WORKER_OCR.md README.md
+          elif [ -f "README_HF_WORKER.md" ]; then
+            mv README_HF_WORKER.md README.md
+          fi
+
+          git init
+          OWNER="${HF_OCR_WORKER_REPO%%/*}"
+          git remote add origin "https://${OWNER}:${HF_TOKEN}@huggingface.co/spaces/${HF_OCR_WORKER_REPO}"
+          git add .
+          git commit -m "Deploy OCR worker from GitHub Actions"
+          git push --force origin master:main

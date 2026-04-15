@@ -54,10 +54,9 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```bash
 cd backend
 source venv/bin/activate
-# Phải consume cả queue render (video) và solve (OCR + giải toán)
-celery -A worker.celery_app worker --loglevel=debug -Q render,solve
+# Queues render + ocr (không có queue solve trên Celery; solve chạy trong API)
+celery -A worker.celery_app worker --loglevel=debug -Q render,ocr
 ```
-Có thể chạy hai process worker riêng (`-Q render` và `-Q solve`) nếu muốn tách tài nguyên.
 
 ### 3. Frontend (Next.js - Dev/Log Mode)
 ```bash

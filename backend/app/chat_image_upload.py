@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import uuid
 from typing import Any, Dict, Tuple
 
 from fastapi import HTTPException
@@ -168,3 +169,38 @@ def upload_session_chat_image(
         "version": version,
         "session_asset_id": str(asset_id) if asset_id else None,
     }
+
+
+def upload_ephemeral_ocr_blob(
+    file_bytes: bytes,
+    ext_with_dot: str,
+    content_type: str,
+) -> Tuple[str, str]:
+    """
+    Upload bytes to image bucket under _ocr_temp/ for worker-only OCR (no session_assets row).
+    Returns (storage_path, public_url). Caller must delete_storage_object when done.
+    """
+    from app.supabase_client import get_supabase
+
+    bucket_name = os.getenv("SUPABASE_IMAGE_BUCKET", "image")
+    raw_ext = ext_with_dot.lstrip(".").lower() or "png"
+    name = f"_ocr_temp/{uuid.uuid4().hex}.{raw_ext}"
+    supabase = get_supabase()
+    supabase.storage.from_(bucket_name).upload(
+        path=name,
+        file=file_bytes,
+        file_options={"content-type": content_type},
+    )
+    public_url = supabase.storage.from_(bucket_name).get_public_url(name)
+    if isinstance(public_url, dict):
+        public_url = public_url.get("publicUrl") or public_url.get("public_url") or str(public_url)
+    return name, public_url
+
+
+def delete_storage_object(bucket_name: str, storage_path: str) -> None:
+    try:
+        from app.supabase_client import get_supabase
+
+        get_supabase().storage.from_(bucket_name).remove([storage_path])
+    except Exception as e:
+        logger.warning("delete_storage_object failed path=%s: %s", storage_path, e)

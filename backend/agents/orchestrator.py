@@ -9,10 +9,9 @@ from agents.parser_agent import ParserAgent
 from agents.renderer_agent import RendererAgent
 from agents.solver_agent import SolverAgent
 from app.logutil import log_step
+from app.ocr_celery import ocr_from_image_url
 from solver.dsl_parser import DSLParser
 from solver.engine import GeometryEngine
-from worker.celery_app import BROKER_URL
-from worker.tasks import render_geometry_video
 
 logger = logging.getLogger(__name__)
 
@@ -117,7 +116,7 @@ class Orchestrator:
         # 2. Gather input text (OCR or direct)
         input_text = text
         if image_url:
-            input_text = await self.ocr_agent.process_url(image_url)
+            input_text = await ocr_from_image_url(image_url, self.ocr_agent)
             _step_io("step1_ocr", input_val=image_url, output_val=input_text)
         else:
             _step_io("step1_ocr", input_val="(no image)", output_val=text)

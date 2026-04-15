@@ -20,8 +20,8 @@ async def lifespan(app: FastAPI):
     # Start Celery worker in the background
     print("🚀 Starting Celery worker in background...")
     # Using subprocess.Popen to avoid blocking the main thread
-    # Must match task_routes queues (render, solve). Override per Space, e.g. CELERY_WORKER_QUEUES=solve
-    queues = os.environ.get("CELERY_WORKER_QUEUES", "render,solve").strip() or "render,solve"
+    # Must match task_routes in worker/celery_app.py (queues: render, ocr). No Celery "solve" queue — solve runs on the API.
+    queues = os.environ.get("CELERY_WORKER_QUEUES", "render").strip() or "render"
     print(f"🧵 Celery consuming queues: {queues}", flush=True)
     process = subprocess.Popen(
         [

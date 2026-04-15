@@ -1,4 +1,7 @@
-name: Deploy Worker to Hugging Face
+# Hugging Face Space: Manim / Celery queue `render` only (Dockerfile.worker sets CELERY_WORKER_QUEUES=render).
+# OCR uses a separate Space: deploy-worker-ocr.yml + Dockerfile.worker.ocr.
+
+name: Deploy Render Worker to Hugging Face
 
 on:
   push:
@@ -9,8 +12,6 @@ on:
       - 'backend/app/jobs/**'
       - 'backend/app/job_events.py'
       - 'backend/agents/renderer_agent.py'
-      - 'backend/agents/orchestrator.py'
-      - 'backend/solver/**'
       - 'backend/requirements.txt'
       - 'backend/Dockerfile.worker'
       - 'backend/README_HF_WORKER.md'
@@ -26,7 +27,7 @@ jobs:
         with:
           fetch-depth: 0
       
-      - name: Push to Hugging Face Spaces (Worker)
+      - name: Push to Hugging Face Spaces (render worker)
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           HF_WORKER_REPO: ${{ secrets.HF_WORKER_REPO }}
@@ -57,5 +58,5 @@ jobs:
           OWNER="${HF_WORKER_REPO%%/*}"
           git remote add origin "https://${OWNER}:${HF_TOKEN}@huggingface.co/spaces/${HF_WORKER_REPO}"
           git add .
-          git commit -m "Deploy Worker from GitHub Actions"
+          git commit -m "Deploy render worker from GitHub Actions"
           git push --force origin master:main
