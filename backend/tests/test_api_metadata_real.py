@@ -1,56 +1,103 @@
-import pytest
-import asyncio
+"""Verify assistant message metadata after process_session_job (Supabase + LLM)."""
+
+from __future__ import annotations
+
+import os
 import uuid
-import time
-from app.routers.solve import process_session_job
+
+import pytest
+from dotenv import load_dotenv
+
+load_dotenv()
+
 from app.models.schemas import SolveRequest
+from app.routers.solve import process_session_job
 from app.supabase_client import get_supabase
 
+
+@pytest.mark.real_api
 @pytest.mark.asyncio
-async def test_metadata_persistence():
-    session_id = "81f87517-88f2-40bd-96a9-7b34f1d14b6a"
-    user_id = "8cd3adb0-7964-4575-949c-d0cadcd8b679"
+async def test_metadata_persistence_after_solve():
+    if not os.getenv("SUPABASE_SERVICE_ROLE_KEY") and not os.getenv("SUPABASE_KEY"):
+        pytest.skip("Supabase credentials not configured")
+
+    user_id = os.getenv("TEST_SUPABASE_USER_ID") or os.getenv("TEST_USER_ID")
+    if not user_id:
+        pytest.skip("TEST_SUPABASE_USER_ID or TEST_USER_ID required")
+
+    supabase = get_supabase()
+    session_id = str(uuid.uuid4())
     job_id = str(uuid.uuid4())
-    
-    print(f"🚀 Starting sub-pipeline test for job {job_id}...")
-    
+
+    supabase.table("sessions").insert(
+        {
+            "id": session_id,
+            "user_id": user_id,
+            "title": "pytest metadata session",
+        }
+    ).execute()
+
     request = SolveRequest(
         text="Cho hình chữ nhật ABCD có AB=10, AD=20. Vẽ đường thẳng d đi qua A và B.",
-        request_video=False
+        request_video=False,
     )
-    
-    # Trigger the process_session_job directly
-    await process_session_job(job_id, session_id, request, user_id)
-    
-    print("⏳ Waiting for database sync (3s)...")
-    await asyncio.sleep(3)
-    
-    # Verify the results in Supabase
-    supabase = get_supabase()
-    res = supabase.table("messages") \
-        .select("metadata, created_at") \
-        .eq("session_id", session_id) \
-        .eq("role", "assistant") \
-        .order("created_at", desc=True) \
-        .limit(1) \
-        .execute()
-    
-    if not res.data:
-        print("❌ FAIL: No assistant message found in database.")
-        return
-    
-    metadata = res.data[0].get("metadata", {})
-    required_fields = ["job_id", "coordinates", "polygon_order", "drawing_phases", "circles", "lines", "rays"]
-    missing = [f for f in required_fields if f not in metadata]
-    
-    if not missing:
-        print("✅ SUCCESS: All metadata fields (including lines/rays) persisted correctly.")
-        print(f"   job_id: {metadata.get('job_id')}")
-        print(f"   polygon_order: {metadata.get('polygon_order')}")
-        print(f"   lines: {metadata.get('lines')}")
-        print(f"   phases: {len(metadata.get('drawing_phases', []))}")
-    else:
-        print(f"❌ FAIL: Missing fields in metadata: {missing}")
 
-if __name__ == "__main__":
-    asyncio.run(test_metadata_persistence())
+    supabase.table("jobs").insert(
+        {
+            "id": job_id,
+            "user_id": user_id,
+            "session_id": session_id,
+            "status": "processing",
+            "input_text": request.text,
+        }
+    ).execute()
+    supabase.table("messages").insert(
+        {
+            "session_id": session_id,
+            "role": "user",
+            "type": "text",
+            "content": request.text,
+            "metadata": {},
+        }
+    ).execute()
+
+    try:
+        await process_session_job(job_id, session_id, request, user_id)
+
+        res = (
+            supabase.table("messages")
+            .select("metadata")
+            .eq("session_id", session_id)
+            .eq("role", "assistant")
+            .order("created_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+
+        assert res.data, "Expected at least one assistant message"
+        metadata = res.data[0].get("metadata") or {}
+        required = [
+            "job_id",
+            "coordinates",
+            "polygon_order",
+            "drawing_phases",
+            "circles",
+            "lines",
+            "rays",
+        ]
+        missing = [f for f in required if f not in metadata]
+        assert not missing, f"Missing metadata fields: {missing}"
+        assert metadata.get("job_id") == job_id
+    finally:
+        try:
+            supabase.table("messages").delete().eq("session_id", session_id).execute()
+        except Exception:
+            pass
+        try:
+            supabase.table("jobs").delete().eq("session_id", session_id).execute()
+        except Exception:
+            pass
+        try:
+            supabase.table("sessions").delete().eq("id", session_id).execute()
+        except Exception:
+            pass

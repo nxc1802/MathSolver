@@ -1,6 +1,10 @@
 # Target: Python 3.11 (see Dockerfile). Used by: FastAPI API, Celery worker, Manim render, OCR/vision stack.
 # Install: pip install -r requirements.txt
 
+# --- Dev / test ---
+pytest>=8.0
+pytest-asyncio>=0.24
+
 # --- HTTP API ---
 cachetools>=5.3
 fastapi>=0.115,<1

@@ -1,19 +1,26 @@
-import uuid
-import sys
 import os
+import sys
+import uuid
+
+from dotenv import load_dotenv
 
 # Add parent dir to path to import app modules
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+_BACKEND_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(_BACKEND_ROOT)
+load_dotenv(os.path.join(_BACKEND_ROOT, ".env"))
 
 from app.supabase_client import get_supabase
 
+# Default UUID matches historical dev DB; override with TEST_SUPABASE_USER_ID in .env
+_DEFAULT_TEST_USER = "8cd3adb0-7964-4575-949c-d0cadcd8b679"
+
+
 def prepare():
     supabase = get_supabase()
-    # Use existing valid user to avoid foreign key violation on sessions.user_id
-    user_id = "8cd3adb0-7964-4575-949c-d0cadcd8b679"
+    user_id = os.environ.get("TEST_SUPABASE_USER_ID", _DEFAULT_TEST_USER).strip()
     session_id = str(uuid.uuid4())
     
-    print(f"Using existing test user: {user_id}")
+    print(f"Using test user (TEST_SUPABASE_USER_ID or default): {user_id}")
     
     print(f"Creating fresh test session: {session_id}")
     # Insert session

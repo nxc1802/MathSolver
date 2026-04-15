@@ -12,6 +12,8 @@ SESSION_ID = os.getenv("TEST_SESSION_ID")
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+@pytest.mark.smoke
+@pytest.mark.real_api
 @pytest.mark.asyncio
 async def test_api_e2e_flow():
     if not USER_ID or not SESSION_ID:

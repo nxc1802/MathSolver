@@ -40,3 +40,9 @@ Thumbs.db
 *.pth
 diag_manim.py
 celery_worker.log
+
+# Backend integration test outputs
+/backend/temp_suite_results.json
+/backend/integration_report.md
+/backend/full_api_test_report.md
+/backend/pytest_*.xml

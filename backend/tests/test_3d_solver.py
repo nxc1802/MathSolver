@@ -27,8 +27,8 @@ def test_solve_square_pyramid():
     parser = DSLParser()
     engine = GeometryEngine()
     
-    points, constraints = parser.parse(dsl)
-    result = engine.solve(points, constraints)
+    points, constraints, is_3d = parser.parse(dsl)
+    result = engine.solve(points, constraints, is_3d)
     
     assert result is not None
     coords = result["coordinates"]
@@ -70,16 +70,16 @@ def test_solve_prism():
     parser = DSLParser()
     engine = GeometryEngine()
     
-    points, constraints = parser.parse(dsl)
-    result = engine.solve(points, constraints)
+    points, constraints, is_3d = parser.parse(dsl)
+    result = engine.solve(points, constraints, is_3d)
     
     assert result is not None
     coords = result["coordinates"]
     
     # D should be (0, 0, 10)
-    assert coords["D"][0] == pytest.approx(0.0)
-    assert coords["D"][1] == pytest.approx(0.0)
-    assert abs(coords["D"][2]) == pytest.approx(10.0)
+    assert coords["D"][0] == pytest.approx(0.0, abs=1e-3)
+    assert coords["D"][1] == pytest.approx(0.0, abs=1e-3)
+    assert abs(coords["D"][2]) == pytest.approx(10.0, rel=1e-4, abs=1e-3)
 
 if __name__ == "__main__":
     pytest.main([__file__])

@@ -21,8 +21,8 @@ async def test_section_internal():
     parser = DSLParser()
     engine = GeometryEngine()
     
-    pts, constraints = parser.parse(dsl)
-    result = engine.solve(pts, constraints)
+    pts, constraints, is_3d = parser.parse(dsl)
+    result = engine.solve(pts, constraints, is_3d)
     
     if result:
         coords = result['coordinates']
@@ -54,8 +54,8 @@ async def test_section_external():
     parser = DSLParser()
     engine = GeometryEngine()
     
-    pts, constraints = parser.parse(dsl)
-    result = engine.solve(pts, constraints)
+    pts, constraints, is_3d = parser.parse(dsl)
+    result = engine.solve(pts, constraints, is_3d)
     
     if result:
         coords = result['coordinates']
@@ -84,8 +84,8 @@ async def test_line_ray_metadata():
     parser = DSLParser()
     engine = GeometryEngine()
     
-    pts, constraints = parser.parse(dsl)
-    result = engine.solve(pts, constraints)
+    pts, constraints, is_3d = parser.parse(dsl)
+    result = engine.solve(pts, constraints, is_3d)
     
     if result:
         print(f"  Lines: {result.get('lines')}")

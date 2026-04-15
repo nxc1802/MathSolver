@@ -12,6 +12,8 @@ os.environ.setdefault("ALLOW_TEST_BYPASS", "true")
 
 from app.main import app  # noqa: E402
 
+_VALID_SESSION_ID = "00000000-0000-0000-0000-000000000099"
+
 
 @pytest.fixture
 def auth_headers():
@@ -22,7 +24,7 @@ def auth_headers():
 async def test_ocr_preview_requires_auth():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         res = await client.post(
-            "/api/v1/sessions/sess-1/ocr_preview",
+            f"/api/v1/sessions/{_VALID_SESSION_ID}/ocr_preview",
             files={"file": ("t.png", b"\x89PNG\r\n\x1a\n", "image/png")},
             data={"user_message": "hello"},
         )
@@ -34,7 +36,7 @@ async def test_ocr_preview_forbidden_when_not_owner(auth_headers):
     with patch("app.routers.solve.session_owned_by_user", return_value=False):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             res = await client.post(
-                "/api/v1/sessions/sess-1/ocr_preview",
+                f"/api/v1/sessions/{_VALID_SESSION_ID}/ocr_preview",
                 headers=auth_headers,
                 files={"file": ("t.png", b"\x89PNG\r\n\x1a\n", "image/png")},
                 data={"user_message": "note"},
@@ -53,7 +55,7 @@ async def test_ocr_preview_success_merges_draft(auth_headers):
     ):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             res = await client.post(
-                "/api/v1/sessions/sess-1/ocr_preview",
+                f"/api/v1/sessions/{_VALID_SESSION_ID}/ocr_preview",
                 headers=auth_headers,
                 files={"file": ("t.png", b"\x89PNG\r\n\x1a\n", "image/png")},
                 data={"user_message": "  my note  "},
@@ -78,7 +80,7 @@ async def test_ocr_preview_rejects_oversized_file(auth_headers):
     ):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             res = await client.post(
-                "/api/v1/sessions/sess-1/ocr_preview",
+                f"/api/v1/sessions/{_VALID_SESSION_ID}/ocr_preview",
                 headers=auth_headers,
                 files={"file": ("huge.png", big, "image/png")},
             )
@@ -91,7 +93,7 @@ async def test_ocr_preview_rejects_empty_file(auth_headers):
     with patch("app.routers.solve.session_owned_by_user", return_value=True):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             res = await client.post(
-                "/api/v1/sessions/sess-1/ocr_preview",
+                f"/api/v1/sessions/{_VALID_SESSION_ID}/ocr_preview",
                 headers=auth_headers,
                 files={"file": ("empty.png", b"", "image/png")},
             )

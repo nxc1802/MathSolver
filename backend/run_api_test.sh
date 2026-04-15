@@ -7,6 +7,9 @@ echo "=== Starting API E2E Test Suite ($(date)) ===" > $LOG_FILE
 echo "[INFO] Starting Backend Server..." | tee -a $LOG_FILE
 export ALLOW_TEST_BYPASS=true
 export LOG_LEVEL=info
+export CELERY_TASK_ALWAYS_EAGER=true
+export CELERY_RESULT_BACKEND=rpc://
+export MOCK_VIDEO=true
 PYTHONPATH=. venv/bin/python -m uvicorn app.main:app --port 8000 > server_debug.log 2>&1 &
 SERVER_PID=$!
 
@@ -47,7 +50,8 @@ echo "[INFO] Test Data: User=$TEST_USER_ID, Session=$TEST_SESSION_ID" | tee -a $
 
 # 4. Run Pytest
 echo "[INFO] Running API E2E Tests..." | tee -a $LOG_FILE
-PYTHONPATH=. venv/bin/python -m pytest tests/test_api_real_e2e.py -s >> $LOG_FILE 2>&1
+PYTHONPATH=. venv/bin/python -m pytest tests/test_api_real_e2e.py -m "smoke and real_api" -s \
+  --junitxml=pytest_smoke.xml >> $LOG_FILE 2>&1
 TEST_EXIT_CODE=$?
 
 # 5. Cleanup

@@ -3,16 +3,23 @@ from fastapi import HTTPException, Header
 from app.supabase_client import get_supabase, get_supabase_for_user_jwt
 
 
-async def get_current_user_id(authorization: str = Header(...)):
+async def get_current_user_id(authorization: str | None = Header(None)):
     """
     Authenticate user using Supabase JWT.
     Expected Header: Authorization: Bearer <token>
     """
     import os
+
+    if not authorization:
+        raise HTTPException(
+            status_code=401,
+            detail="Authorization header missing or invalid. Use 'Bearer <token>'",
+        )
+
     if os.getenv("ALLOW_TEST_BYPASS") == "true" and authorization.startswith("Test "):
         return authorization.split(" ")[1]
 
-    if not authorization or not authorization.startswith("Bearer "):
+    if not authorization.startswith("Bearer "):
         raise HTTPException(
             status_code=401,
             detail="Authorization header missing or invalid. Use 'Bearer <token>'",
