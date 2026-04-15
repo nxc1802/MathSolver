@@ -17,4 +17,4 @@ This Space runs **Celery** (via `worker_health.py`): video render queue `render`
 
 Copy the same secrets as the API: `REDIS_URL` / `CELERY_BROKER_URL`, Supabase, OpenRouter, etc. The API must share the same Redis broker so tasks reach this worker.
 
-Optional CI: set GitHub secret `HF_SOLVE_WORKER_REPO` to deploy this image to a **second** Space (workflow `deploy-worker-solve.yml`); the main worker workflow still targets `math-solver-worker`.
+**GitHub Actions:** set secrets `HF_TOKEN` plus `HF_WORKER_REPO` (main Space, `owner/space`) for `deploy-worker.yml`. For a second solve-only Space, add `HF_SOLVE_WORKER_REPO` (`owner/space`); workflow `deploy-worker-solve.yml` runs only when that secret is set. Git remote uses the owner before `/` as the HF username for push.

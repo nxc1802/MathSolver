@@ -18,6 +18,8 @@ on:
 
 jobs:
   deploy-worker:
+    # Secret HF_WORKER_REPO = owner/space (e.g. Cuong2004/math-solver-worker). Same pattern as solve worker.
+    if: ${{ secrets.HF_WORKER_REPO != '' && secrets.HF_TOKEN != '' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -27,9 +29,10 @@ jobs:
       - name: Push to Hugging Face Spaces (Worker)
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_WORKER_REPO: ${{ secrets.HF_WORKER_REPO }}
         run: |
-          git config --global user.email "cuong@example.com"
-          git config --global user.name "Cuong2004"
+          git config --global user.email "action@github.com"
+          git config --global user.name "github-actions"
           
           mkdir hf_worker_copy
           cp -r backend/* hf_worker_copy/
@@ -47,7 +50,8 @@ jobs:
           fi
           
           git init
-          git remote add origin https://Cuong2004:$HF_TOKEN@huggingface.co/spaces/Cuong2004/math-solver-worker
+          OWNER="${HF_WORKER_REPO%%/*}"
+          git remote add origin "https://${OWNER}:${HF_TOKEN}@huggingface.co/spaces/${HF_WORKER_REPO}"
           git add .
           git commit -m "Deploy Worker from GitHub Actions"
           git push --force origin master:main
