@@ -18,8 +18,8 @@ on:
 
 jobs:
   deploy-worker:
-    # Secret HF_WORKER_REPO = owner/space (e.g. Cuong2004/math-solver-worker). Same pattern as solve worker.
-    if: ${{ secrets.HF_WORKER_REPO != '' && secrets.HF_TOKEN != '' }}
+    # HF_WORKER_REPO + HF_TOKEN: repository secrets (see README_HF_WORKER.md).
+    # Do not use job-level `if: secrets.*` — some validators reject it; skip inside the step instead.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -31,6 +31,10 @@ jobs:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           HF_WORKER_REPO: ${{ secrets.HF_WORKER_REPO }}
         run: |
+          if [ -z "$HF_WORKER_REPO" ] || [ -z "$HF_TOKEN" ]; then
+            echo "::notice::Skipping Hugging Face worker deploy: set repository secrets HF_WORKER_REPO and HF_TOKEN."
+            exit 0
+          fi
           git config --global user.email "action@github.com"
           git config --global user.name "github-actions"
           

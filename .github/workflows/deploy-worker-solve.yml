@@ -2,7 +2,7 @@
 # Secrets (same style as deploy-worker.yml):
 #   HF_TOKEN + HF_SOLVE_WORKER_REPO = owner/space-name (e.g. YourOrg/math-solver-worker-solve)
 # Space variables: CELERY_WORKER_QUEUES=solve, same Redis/Supabase/OpenRouter as API.
-# If HF_SOLVE_WORKER_REPO or HF_TOKEN is unset, this job is skipped.
+# If HF_SOLVE_WORKER_REPO or HF_TOKEN is unset, the push step exits 0 (no deploy).
 
 name: Deploy Solve Worker to Hugging Face
 
@@ -23,7 +23,6 @@ on:
 
 jobs:
   deploy-worker-solve:
-    if: ${{ secrets.HF_SOLVE_WORKER_REPO != '' && secrets.HF_TOKEN != '' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -35,6 +34,10 @@ jobs:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           HF_SOLVE_WORKER_REPO: ${{ secrets.HF_SOLVE_WORKER_REPO }}
         run: |
+          if [ -z "$HF_SOLVE_WORKER_REPO" ] || [ -z "$HF_TOKEN" ]; then
+            echo "::notice::Skipping Hugging Face solve worker deploy: set HF_SOLVE_WORKER_REPO and HF_TOKEN (optional second Space)."
+            exit 0
+          fi
           git config --global user.email "action@github.com"
           git config --global user.name "github-actions"
 
