@@ -777,9 +777,10 @@ Khi `process.env.NODE_ENV === 'development'` và Supabase không có session:
 | `DELETE` | `/api/v1/sessions/{id}` | Xóa session |
 | `GET` | `/api/v1/sessions/{id}/messages` | Lịch sử chat |
 | `GET` | `/api/v1/sessions/{id}/assets` | Video assets |
-| `POST` | `/api/v1/sessions/{id}/solve` | Gửi bài toán → `{ job_id }` |
-| `GET` | `/api/v1/solve/{job_id}` | Polling status job |
-| `POST` | `/api/v1/ocr` | Upload ảnh → extract text |
+| `POST` | `/api/v1/sessions/{id}/ocr_preview` | OCR + ghép `user_message` → `combined_draft` (không ghi DB); chat có session dùng endpoint này |
+| `POST` | `/api/v1/sessions/{id}/solve` | Gửi bài toán → `{ job_id }` (JSON `text`, `image_url` tùy chọn; sau OCR preview thường chỉ gửi `text`) |
+| `GET` | `/api/v1/solve/{job_id}` | Polling status job (JWT) |
+| `POST` | `/api/v1/ocr` | OCR stateless (legacy); dùng khi session tạm (`temp-*`) không gọi được `ocr_preview` |
 | `WS` | `/ws/{job_id}` | Real-time job updates |
 
 ### WebSocket Protocol

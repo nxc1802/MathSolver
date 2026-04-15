@@ -22,8 +22,7 @@ import {
   buildCombinedMessage,
 } from "@/lib/chat-attachments";
 import { preprocessImageForOcr } from "@/lib/image-prep";
-import { postOcr } from "@/lib/ocr-api";
-import { uploadChatImageForSolve } from "@/lib/upload-chat-image";
+import { postOcr, postOcrPreview } from "@/lib/ocr-api";
 import StaticGeometryCanvas from "../../../components/geometry/StaticGeometryCanvas";
 import Interactive3DCanvas from "../../../components/geometry/Interactive3DCanvas";
 import AnimationPreview from "../../../components/media/AnimationPreview";
@@ -259,13 +258,31 @@ export default function ChatSessionPage() {
     userTextSnapshot: string
   ): Promise<{ ocrParts: string[]; combinedText: string }> => {
     const parts: string[] = [];
+    const token = userSession?.access_token;
+
+    if (!isTempSession && sessionId) {
+      let combinedText = "";
+      for (let i = 0; i < attachments.length; i++) {
+        const prep = await preprocessImageForOcr(attachments[i].file);
+        const userMsg = i === 0 ? userTextSnapshot : null;
+        const r = await postOcrPreview(sessionId, prep, userMsg, token);
+        parts.push((r.ocr_text ?? "").trim());
+        const block = (r.combined_draft ?? "").trim();
+        if (i === 0) combinedText = block;
+        else if (block) combinedText = combinedText ? `${combinedText}\n\n${block}` : block;
+      }
+      return { ocrParts: parts, combinedText };
+    }
+
     for (const d of attachments) {
       const prep = await preprocessImageForOcr(d.file);
-      const t = await postOcr(prep, userSession?.access_token);
+      const t = await postOcr(prep, token);
       parts.push(t);
     }
-    const combinedText = buildCombinedMessage(userTextSnapshot, parts);
-    return { ocrParts: parts, combinedText };
+    return {
+      ocrParts: parts,
+      combinedText: buildCombinedMessage(userTextSnapshot, parts),
+    };
   };
 
   const cancelOcrFlow = () => {
@@ -311,10 +328,6 @@ export default function ChatSessionPage() {
     const text = confirmEditText.trim();
     if (!text) return;
     const attachments = ocrFlow.attachments;
-    let imageUrl: string | null = null;
-    if (!isTempSession && attachments[0]) {
-      imageUrl = await uploadChatImageForSolve(sessionId, attachments[0].file);
-    }
     revokeDraftImages(attachments);
     setOcrFlow({ status: "idle" });
     setConfirmEditText("");
@@ -332,7 +345,8 @@ export default function ChatSessionPage() {
       ],
       { revalidate: false }
     );
-    startSolve(text, false, imageUrl ?? undefined);
+    // API.md: after ocr_preview + user edit, send text only — omit image_url to avoid double OCR.
+    startSolve(text, false, undefined);
   };
 
   const handleComposerSend = async (text?: string) => {
