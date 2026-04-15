@@ -16,7 +16,7 @@ export default function Header() {
             <Calculator className="w-5 h-5 text-white" />
           </div>
           <span className="text-xl font-bold tracking-tight text-white">
-            MATHSOLVER <span className="text-indigo-400 font-light">v4.0</span>
+            MATHSOLVER <span className="text-indigo-400 font-light">v5.1</span>
           </span>
         </motion.div>
         

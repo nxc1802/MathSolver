@@ -202,6 +202,7 @@ class Orchestrator:
 
         final_analysis = self._generate_step_description(semantic_json, engine_result)
 
+        status = "success"
         return {
             "status": status,
             "job_id": job_id,

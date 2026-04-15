@@ -73,7 +73,7 @@ CREATE TABLE public.jobs (
 
 ## 3. Database Schema Mới
 
-### 3.1 File: `docs/supabase_schema_v4.sql`
+### 3.1 File: `backend/migrations/v4_migration.sql`
 
 ```sql
 -- ============================================================

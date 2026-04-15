@@ -6,6 +6,30 @@ import { useRouter, useParams } from "next/navigation";
 import useSWR, { useSWRConfig } from "swr";
 import { useAuth } from "@/lib/auth-context";
 import { getApiBaseUrl } from "@/lib/api-config";
+import { supabase } from "@/lib/supabase";
+
+const FETCH_TIMEOUT_MS = 8000;
+
+async function getAccessToken(): Promise<string | null> {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  return session?.access_token ?? null;
+}
+
+async function fetchWithTimeout(
+  url: string,
+  init: RequestInit,
+  ms: number
+): Promise<Response> {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), ms);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(id);
+  }
+}
 
 interface Session {
   id: string;
@@ -13,7 +37,9 @@ interface Session {
   created_at: string;
 }
 
-async function fetchSessions([, token]: [string, string]): Promise<Session[]> {
+async function fetchSessions(_key: readonly ["sessions", string]): Promise<Session[]> {
+  const token = await getAccessToken();
+  if (!token) throw new Error("Failed to load sessions");
   const res = await fetch(`${getApiBaseUrl()}/api/v1/sessions`, {
     headers: { Authorization: `Bearer ${token}` },
   });
@@ -29,20 +55,22 @@ type SessionListProps = {
 export default function SessionList({ compact = false }: SessionListProps) {
   const [creating, setCreating] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const { session: userSession } = useAuth();
+  const { user } = useAuth();
   const { mutate: globalMutate } = useSWRConfig();
   const router = useRouter();
   const params = useParams();
   const currentSessionId = params?.sessionId as string;
 
   const { data: sessions, mutate, isLoading } = useSWR(
-    userSession?.access_token ? (["sessions", userSession.access_token] as const) : null,
+    user?.id ? (["sessions", user.id] as const) : null,
     fetchSessions,
-    { revalidateIfStale: true }
+    { revalidateOnFocus: false, dedupingInterval: 2000 }
   );
 
   const handleCreateSession = async () => {
-    if (!userSession?.access_token || creating) return;
+    if (creating) return;
+    const token = await getAccessToken();
+    if (!token) return;
     setCreating(true);
 
     // Optimistic UI: Create temporary session
@@ -58,10 +86,14 @@ export default function SessionList({ compact = false }: SessionListProps) {
     router.replace(`/chat/${tempId}`);
 
     try {
-      const res = await fetch(`${getApiBaseUrl()}/api/v1/sessions`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${userSession.access_token}` },
-      });
+      const res = await fetchWithTimeout(
+        `${getApiBaseUrl()}/api/v1/sessions`,
+        {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+        },
+        FETCH_TIMEOUT_MS
+      );
       
       if (res.ok) {
         const realSession = (await res.json()) as Session;
@@ -70,8 +102,8 @@ export default function SessionList({ compact = false }: SessionListProps) {
         const messagesUrl = `${getApiBaseUrl()}/api/v1/sessions/${realSession.id}/messages`;
         const assetsUrl = `${getApiBaseUrl()}/api/v1/sessions/${realSession.id}/assets`;
         
-        await globalMutate([messagesUrl, userSession.access_token], [], { revalidate: false });
-        await globalMutate([assetsUrl, userSession.access_token], [], { revalidate: false });
+        await globalMutate([messagesUrl, token], [], { revalidate: false });
+        await globalMutate([assetsUrl, token], [], { revalidate: false });
 
         // Replace temp session with real one
         await mutate((prev) => (prev ?? []).map(s => s.id === tempId ? realSession : s), { revalidate: false });
@@ -92,7 +124,8 @@ export default function SessionList({ compact = false }: SessionListProps) {
 
   const handleDeleteSession = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
-    if (!userSession?.access_token) return;
+    const token = await getAccessToken();
+    if (!token) return;
     
     // Confirm state check
     if (deletingId !== id) {
@@ -121,17 +154,21 @@ export default function SessionList({ compact = false }: SessionListProps) {
     try {
       const res = await fetch(`${getApiBaseUrl()}/api/v1/sessions/${id}`, {
         method: "DELETE",
-        headers: { Authorization: `Bearer ${userSession.access_token}` },
+        headers: { Authorization: `Bearer ${token}` },
       });
       
       if (!res.ok) throw new Error("delete failed");
       
       // If we deleted the last one and navigated to home, maybe create a new auto-session
       if (wasCurrent && remaining.length === 0) {
-        const createRes = await fetch(`${getApiBaseUrl()}/api/v1/sessions`, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${userSession.access_token}` },
-        });
+        const createRes = await fetchWithTimeout(
+          `${getApiBaseUrl()}/api/v1/sessions`,
+          {
+            method: "POST",
+            headers: { Authorization: `Bearer ${token}` },
+          },
+          FETCH_TIMEOUT_MS
+        );
         if (createRes.ok) {
           const newSession = (await createRes.json()) as Session;
           await mutate([newSession], { revalidate: false });

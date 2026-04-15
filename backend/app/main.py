@@ -7,7 +7,7 @@ import uuid
 import warnings
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.requests import Request
 
@@ -26,6 +26,7 @@ from app.logging_setup import ACCESS_LOGGER_NAME, get_log_level, setup_applicati
 setup_application_logging()
 
 # Routers (after logging)
+from app.dependencies import get_current_user_id
 from app.routers import auth, sessions, solve
 from agents.ocr_agent import OCRAgent
 from app.routers.solve import get_orchestrator
@@ -102,12 +103,15 @@ supabase_client = get_supabase()
 
 @app.get("/")
 def read_root():
-    return {"message": "Visual Math Solver API v4.0 is running"}
+    return {"message": "Visual Math Solver API v5.1 is running", "version": "5.1"}
 
 
 @app.post("/api/v1/ocr")
-async def upload_ocr(file: UploadFile = File(...)):
-    """Legacy OCR endpoint (retained for now as it's stateless)"""
+async def upload_ocr(
+    file: UploadFile = File(...),
+    _user_id=Depends(get_current_user_id),
+):
+    """OCR upload: requires authenticated user."""
     temp_path = f"temp_{uuid.uuid4()}.png"
     with open(temp_path, "wb") as buffer:
         buffer.write(await file.read())
@@ -121,9 +125,15 @@ async def upload_ocr(file: UploadFile = File(...)):
 
 
 @app.get("/api/v1/solve/{job_id}")
-async def get_job_status(job_id: str):
-    """Retrieve job status (can be used for polling if WS fails)"""
+async def get_job_status(
+    job_id: str,
+    user_id=Depends(get_current_user_id),
+):
+    """Retrieve job status (can be used for polling if WS fails). Owner-only."""
     response = supabase_client.table("jobs").select("*").eq("id", job_id).execute()
     if not response.data:
         raise HTTPException(status_code=404, detail="Job not found")
-    return response.data[0]
+    job = response.data[0]
+    if job.get("user_id") is not None and str(job["user_id"]) != str(user_id):
+        raise HTTPException(status_code=403, detail="Forbidden: You do not own this job.")
+    return job

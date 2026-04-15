@@ -49,7 +49,7 @@ async def test_api_e2e_flow():
         max_attempts = 15
         for i in range(max_attempts):
             time.sleep(2) # Simple sleep between polls
-            res = await client.get(f"/api/v1/solve/{job_id}")
+            res = await client.get(f"/api/v1/solve/{job_id}", headers=auth_headers)
             assert res.status_code == 200
             job_data = res.json()
             status = job_data["status"]

@@ -1,5 +1,5 @@
 ---
-title: MathSolver v3.1
+title: MathSolver v5.1
 emoji: 📐
 colorFrom: indigo
 colorTo: purple
@@ -7,7 +7,7 @@ sdk: docker
 pinned: false
 ---
 
-# Visual Math Solver v3.1
+# Visual Math Solver v5.1
 
 Hệ thống giải toán hình học và trực quan hóa bằng AI (Multi-Agent).
 

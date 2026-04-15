@@ -19,7 +19,7 @@ export interface ChatMessage {
   timestamp: number;
   metadata?: {
     coordinates?: Record<string, [number, number] | [number, number, number]>;
-    /** New in API v4.0/5.1 */
+    /** New in API v5.1 */
     semantic_analysis?: string;
     polygon_order?: string[];
     circles?: Array<{ center: string; radius: number }>;
