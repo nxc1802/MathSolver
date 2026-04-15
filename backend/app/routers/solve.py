@@ -7,6 +7,7 @@ import uuid
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
 
 from agents.orchestrator import Orchestrator
+from app.chat_image_upload import upload_session_chat_image, validate_chat_image_bytes
 from app.dependencies import get_current_user_id
 from app.errors import format_error_for_user
 from app.logutil import log_pipeline_failure, log_pipeline_success, log_step
@@ -35,6 +36,71 @@ def get_orchestrator() -> Orchestrator:
 _OCR_PREVIEW_MAX_BYTES = 10 * 1024 * 1024
 
 
+def _assert_session_owner(supabase, session_id: str, user_id, uid: str, op: str) -> None:
+    def owns() -> bool:
+        res = (
+            supabase.table("sessions")
+            .select("id")
+            .eq("id", session_id)
+            .eq("user_id", user_id)
+            .execute()
+        )
+        log_step("db_select", table="sessions", op=op, session_id=session_id)
+        return bool(res.data)
+
+    if not session_owned_by_user(session_id, uid, owns):
+        log_pipeline_failure("solve_request", error="forbidden", session_id=session_id)
+        raise HTTPException(
+            status_code=403, detail="Forbidden: You do not own this session."
+        )
+
+
+def _enqueue_solve_common(
+    supabase,
+    background_tasks: BackgroundTasks,
+    session_id: str,
+    user_id,
+    uid: str,
+    request: SolveRequest,
+    message_metadata: dict,
+    job_id: str,
+) -> SolveResponse:
+    """Insert user message, job row, enqueue pipeline; update title when first message."""
+    supabase.table("messages").insert(
+        {
+            "session_id": session_id,
+            "role": "user",
+            "type": "text",
+            "content": request.text,
+            "metadata": message_metadata,
+        }
+    ).execute()
+    log_step("db_insert", table="messages", op="user_message", session_id=session_id)
+
+    supabase.table("jobs").insert(
+        {
+            "id": job_id,
+            "user_id": user_id,
+            "session_id": session_id,
+            "status": "processing",
+            "input_text": request.text,
+        }
+    ).execute()
+    log_step("db_insert", table="jobs", job_id=job_id)
+
+    background_tasks.add_task(process_session_job, job_id, session_id, request, str(user_id))
+
+    title_check = supabase.table("sessions").select("title").eq("id", session_id).execute()
+    if title_check.data and title_check.data[0]["title"] == "Bài toán mới":
+        new_title = request.text[:50] + ("..." if len(request.text) > 50 else "")
+        supabase.table("sessions").update({"title": new_title}).eq("id", session_id).execute()
+        log_step("db_update", table="sessions", op="title_from_first_message")
+        invalidate_for_user(uid)
+
+    log_pipeline_success("solve_accepted", job_id=job_id, session_id=session_id)
+    return SolveResponse(job_id=job_id, status="processing")
+
+
 @router.post("/{session_id}/ocr_preview", response_model=OcrPreviewResponse)
 async def ocr_preview(
     session_id: str,
@@ -49,22 +115,7 @@ async def ocr_preview(
     """
     supabase = get_supabase()
     uid = str(user_id)
-
-    def owns() -> bool:
-        res = (
-            supabase.table("sessions")
-            .select("id")
-            .eq("id", session_id)
-            .eq("user_id", user_id)
-            .execute()
-        )
-        log_step("db_select", table="sessions", op="owner_check_ocr_preview", session_id=session_id)
-        return bool(res.data)
-
-    if not session_owned_by_user(session_id, uid, owns):
-        raise HTTPException(
-            status_code=403, detail="Forbidden: You do not own this session."
-        )
+    _assert_session_owner(supabase, session_id, user_id, uid, "owner_check_ocr_preview")
 
     body = await file.read()
     if len(body) > _OCR_PREVIEW_MAX_BYTES:
@@ -112,58 +163,72 @@ async def solve_problem(
     """
     supabase = get_supabase()
     uid = str(user_id)
+    _assert_session_owner(supabase, session_id, user_id, uid, "owner_check")
 
-    def owns() -> bool:
-        res = (
-            supabase.table("sessions")
-            .select("id")
-            .eq("id", session_id)
-            .eq("user_id", user_id)
-            .execute()
-        )
-        log_step("db_select", table="sessions", op="owner_check", session_id=session_id)
-        return bool(res.data)
+    message_metadata = {"image_url": request.image_url} if request.image_url else {}
+    job_id = str(uuid.uuid4())
+    return _enqueue_solve_common(
+        supabase,
+        background_tasks,
+        session_id,
+        user_id,
+        uid,
+        request,
+        message_metadata,
+        job_id,
+    )
 
-    if not session_owned_by_user(session_id, uid, owns):
-        log_pipeline_failure("solve_request", error="forbidden", session_id=session_id)
-        raise HTTPException(
-            status_code=403, detail="Forbidden: You do not own this session."
-        )
 
-    supabase.table("messages").insert(
-        {
-            "session_id": session_id,
-            "role": "user",
-            "type": "text",
-            "content": request.text,
-            "metadata": {"image_url": request.image_url} if request.image_url else {},
-        }
-    ).execute()
-    log_step("db_insert", table="messages", op="user_message", session_id=session_id)
+@router.post("/{session_id}/solve_multipart", response_model=SolveResponse)
+async def solve_multipart(
+    session_id: str,
+    background_tasks: BackgroundTasks,
+    user_id=Depends(get_current_user_id),
+    text: str = Form(...),
+    file: UploadFile = File(...),
+):
+    """
+    Gửi text + file ảnh trong một request multipart: validate, upload bucket `image`,
+    ghi session_assets, lưu message kèm metadata (URL, size, type), rồi enqueue solve
+    (image_url trỏ public URL để orchestrator OCR).
+    """
+    supabase = get_supabase()
+    uid = str(user_id)
+    _assert_session_owner(supabase, session_id, user_id, uid, "owner_check_solve_multipart")
+
+    t = (text or "").strip()
+    if not t:
+        raise HTTPException(status_code=400, detail="text must not be empty.")
+
+    body = await file.read()
+    ext, content_type = validate_chat_image_bytes(file.filename, body, file.content_type)
 
     job_id = str(uuid.uuid4())
-    supabase.table("jobs").insert(
-        {
-            "id": job_id,
-            "user_id": user_id,
-            "session_id": session_id,
-            "status": "processing",
-            "input_text": request.text,
-        }
-    ).execute()
-    log_step("db_insert", table="jobs", job_id=job_id)
+    up = upload_session_chat_image(session_id, job_id, body, ext, content_type)
+    public_url = up["public_url"]
 
-    background_tasks.add_task(process_session_job, job_id, session_id, request, user_id)
-
-    title_check = supabase.table("sessions").select("title").eq("id", session_id).execute()
-    if title_check.data and title_check.data[0]["title"] == "Bài toán mới":
-        new_title = request.text[:50] + ("..." if len(request.text) > 50 else "")
-        supabase.table("sessions").update({"title": new_title}).eq("id", session_id).execute()
-        log_step("db_update", table="sessions", op="title_from_first_message")
-        invalidate_for_user(uid)
-
-    log_pipeline_success("solve_accepted", job_id=job_id, session_id=session_id)
-    return SolveResponse(job_id=job_id, status="processing")
+    message_metadata = {
+        "image_url": public_url,
+        "attachment": {
+            "public_url": public_url,
+            "storage_path": up["storage_path"],
+            "size_bytes": len(body),
+            "content_type": content_type,
+            "original_filename": file.filename or "",
+            "session_asset_id": up.get("session_asset_id"),
+        },
+    }
+    request = SolveRequest(text=t, image_url=public_url)
+    return _enqueue_solve_common(
+        supabase,
+        background_tasks,
+        session_id,
+        user_id,
+        uid,
+        request,
+        message_metadata,
+        job_id,
+    )
 
 
 @router.post("/{session_id}/render_video", response_model=RenderVideoResponse)
