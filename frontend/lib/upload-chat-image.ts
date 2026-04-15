@@ -1,17 +1,18 @@
 import { supabase } from "@/lib/supabase";
 
 /**
- * Upload a chat attachment to Supabase Storage for solve(image_url).
- * Returns public URL or null if upload is disabled / fails (caller falls back to text-only).
+ * Optional public URL for solve(image_url).
+ * Bucket defaults to `image` per docs/API.md + migrations/add_image_bucket_storage.sql.
+ * Path uses sessions/{sessionId}/ so storage RLS policies can apply.
  */
 export async function uploadChatImageForSolve(
   sessionId: string,
   file: File
 ): Promise<string | null> {
   const bucket =
+    process.env.NEXT_PUBLIC_SUPABASE_IMAGE_BUCKET?.trim() ||
     process.env.NEXT_PUBLIC_SUPABASE_CHAT_BUCKET?.trim() ||
-    process.env.NEXT_PUBLIC_SUPABASE_BUCKET?.trim() ||
-    "";
+    "image";
   if (!bucket) return null;
 
   const ext = file.type.includes("png")
@@ -19,7 +20,7 @@ export async function uploadChatImageForSolve(
     : file.type.includes("webp")
       ? "webp"
       : "jpg";
-  const path = `chat-input/${sessionId}/${crypto.randomUUID()}.${ext}`;
+  const path = `sessions/${sessionId}/${crypto.randomUUID()}.${ext}`;
 
   const { error } = await supabase.storage.from(bucket).upload(path, file, {
     cacheControl: "3600",

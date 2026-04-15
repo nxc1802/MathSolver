@@ -257,32 +257,40 @@ export default function ChatSessionPage() {
     attachments: DraftImage[],
     userTextSnapshot: string
   ): Promise<{ ocrParts: string[]; combinedText: string }> => {
-    const parts: string[] = [];
     const token = userSession?.access_token;
+    const parts: string[] = [];
+    let combinedText = "";
 
-    if (!isTempSession && sessionId) {
-      let combinedText = "";
-      for (let i = 0; i < attachments.length; i++) {
-        const prep = await preprocessImageForOcr(attachments[i].file);
-        const userMsg = i === 0 ? userTextSnapshot : null;
-        const r = await postOcrPreview(sessionId, prep, userMsg, token);
-        parts.push((r.ocr_text ?? "").trim());
-        const block = (r.combined_draft ?? "").trim();
-        if (i === 0) combinedText = block;
-        else if (block) combinedText = combinedText ? `${combinedText}\n\n${block}` : block;
+    const useLegacyOcr =
+      isTempSession || sessionId.startsWith("temp-");
+
+    if (useLegacyOcr) {
+      for (const d of attachments) {
+        const prep = await preprocessImageForOcr(d.file);
+        const t = await postOcr(prep, token);
+        parts.push(t);
       }
+      combinedText = buildCombinedMessage(userTextSnapshot, parts);
       return { ocrParts: parts, combinedText };
     }
 
-    for (const d of attachments) {
-      const prep = await preprocessImageForOcr(d.file);
-      const t = await postOcr(prep, token);
-      parts.push(t);
+    for (let i = 0; i < attachments.length; i++) {
+      const prep = await preprocessImageForOcr(attachments[i].file);
+      const userMsg = i === 0 ? userTextSnapshot : undefined;
+      const r = await postOcrPreview(sessionId, prep, userMsg, token);
+      parts.push((r.ocr_text ?? "").trim());
+      if (i === 0) {
+        combinedText = (r.combined_draft ?? "").trim();
+      } else {
+        const o = (r.ocr_text ?? "").trim();
+        if (o) {
+          combinedText = combinedText.trim()
+            ? `${combinedText.trim()}\n\n${o}`
+            : o;
+        }
+      }
     }
-    return {
-      ocrParts: parts,
-      combinedText: buildCombinedMessage(userTextSnapshot, parts),
-    };
+    return { ocrParts: parts, combinedText };
   };
 
   const cancelOcrFlow = () => {
@@ -345,8 +353,8 @@ export default function ChatSessionPage() {
       ],
       { revalidate: false }
     );
-    // API.md: after ocr_preview + user edit, send text only — omit image_url to avoid double OCR.
-    startSolve(text, false, undefined);
+    // docs/API.md: after OCR preview + user edit, send JSON solve with text only (no image_url).
+    startSolve(text, false);
   };
 
   const handleComposerSend = async (text?: string) => {

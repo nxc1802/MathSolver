@@ -28,12 +28,13 @@ export function revokeDraftImages(list: DraftImage[]): void {
 }
 
 /**
- * Final message combining user-typed text and OCR output(s).
+ * Merge legacy OCR parts when using POST /api/v1/ocr only (e.g. temp session).
+ * Same paragraph spacing as backend build_combined_ocr_preview_draft for multi-part OCR text.
  */
 export function buildCombinedMessage(userText: string, ocrParts: string[]): string {
   const ocr = ocrParts.map((t) => t.trim()).filter(Boolean).join("\n\n");
   const u = userText.trim();
   if (!ocr) return u;
-  if (!u) return `[Trích từ ảnh]\n${ocr}`;
-  return `[User]\n${u}\n\n[Trích từ ảnh]\n${ocr}`;
+  if (!u) return ocr;
+  return `${u}\n\n${ocr}`;
 }
