@@ -38,6 +38,7 @@ export function useSolverJob(sessionId: string, token?: string | null) {
   const socketRef = useRef<WebSocket | null>(null);
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const pollAttemptsRef = useRef(0);
+  const terminalRef = useRef(false);
   const MAX_POLL_ATTEMPTS = 300;
 
   const cleanup = useCallback(() => {
@@ -72,6 +73,7 @@ export function useSolverJob(sessionId: string, token?: string | null) {
       }));
 
       if (data.status === 'success' || data.status === 'error') {
+        terminalRef.current = true;
         cleanup();
         if (data.job_id || data.jobId) {
             clearActiveJob(sessionId);
@@ -93,7 +95,9 @@ export function useSolverJob(sessionId: string, token?: string | null) {
       }
       
       try {
-        const res = await fetch(`${getApiBaseUrl()}/api/v1/solve/${jobId}`);
+        const headers: Record<string, string> = {};
+        if (token) headers.Authorization = `Bearer ${token}`;
+        const res = await fetch(`${getApiBaseUrl()}/api/v1/solve/${jobId}`, { headers });
         if (!res.ok) return;
         const data = await res.json();
         updateJobState(data);
@@ -101,7 +105,7 @@ export function useSolverJob(sessionId: string, token?: string | null) {
         console.error("Polling error:", err);
       }
     }, 1500);
-  }, [cleanup, sessionId, updateJobState]);
+  }, [cleanup, sessionId, token, updateJobState]);
 
   const connectSocket = useCallback((jobId: string) => {
     try {
@@ -121,34 +125,43 @@ export function useSolverJob(sessionId: string, token?: string | null) {
       };
       
       ws.onclose = () => {
-         // Auto fallback to polling if closed before success/error.
-         // Not strictly necessary if updateJobState clears when success/error.
+        if (terminalRef.current) return;
+        if (socketRef.current !== null && socketRef.current !== ws) return;
+        startPolling(jobId);
       };
-    } catch (err) {
+    } catch {
        startPolling(jobId);
     }
   }, [startPolling, updateJobState]);
 
   const attachToJob = useCallback((jobId: string) => {
     cleanup();
+    terminalRef.current = false;
     setJob({ phase: 'solving', progress: 20, message: 'Đang kết nối...', jobId });
     saveActiveJob(sessionId, jobId);
     connectSocket(jobId);
   }, [cleanup, sessionId, connectSocket]);
 
-  const startSolve = useCallback(async (text: string, requestVideo: boolean = false) => {
+  const startSolve = useCallback(
+    async (
+      text: string,
+      requestVideo: boolean = false,
+      imageUrl?: string | null
+    ) => {
     if (!token) return;
     cleanup();
     setJob({ phase: 'uploading', progress: 10, message: 'Đang gửi yêu cầu...', result: null, error: undefined });
     
     try {
+      const body: Record<string, unknown> = { text, request_video: requestVideo };
+      if (imageUrl) body.image_url = imageUrl;
       const response = await fetch(`${getApiBaseUrl()}/api/v1/sessions/${sessionId}/solve`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ text, request_video: requestVideo }),
+        body: JSON.stringify(body),
       });
 
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -175,6 +188,7 @@ export function useSolverJob(sessionId: string, token?: string | null) {
 
   const resetJob = useCallback(() => {
     cleanup();
+    terminalRef.current = false;
     setJob({ phase: 'idle', progress: 0, message: '' });
   }, [cleanup]);
 

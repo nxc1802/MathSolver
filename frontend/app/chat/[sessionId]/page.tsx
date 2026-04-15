@@ -14,6 +14,16 @@ import ChatSidebar from "../../../components/layout/ChatSidebar";
 import ChatInput from "../../../components/chat/ChatInput";
 import ChatMessageList from "../../../components/chat/ChatMessageList";
 import HeroWelcome from "../../../components/chat/HeroWelcome";
+import OcrConfirmCard from "../../../components/chat/OcrConfirmCard";
+import {
+  type DraftImage,
+  createDraftImage,
+  revokeDraftImages,
+  buildCombinedMessage,
+} from "@/lib/chat-attachments";
+import { preprocessImageForOcr } from "@/lib/image-prep";
+import { postOcr } from "@/lib/ocr-api";
+import { uploadChatImageForSolve } from "@/lib/upload-chat-image";
 import StaticGeometryCanvas from "../../../components/geometry/StaticGeometryCanvas";
 import Interactive3DCanvas from "../../../components/geometry/Interactive3DCanvas";
 import AnimationPreview from "../../../components/media/AnimationPreview";
@@ -42,6 +52,21 @@ async function fetchSessionAssets([url, token]: [string, string]): Promise<any[]
   return res.json();
 }
 
+type OcrFlowState =
+  | { status: "idle" }
+  | {
+      status: "ocr_loading";
+      attachments: DraftImage[];
+      userTextSnapshot: string;
+    }
+  | {
+      status: "confirm";
+      attachments: DraftImage[];
+      userTextSnapshot: string;
+      ocrParts: string[];
+      combinedText: string;
+    };
+
 export default function ChatSessionPage() {
   const params = useParams();
   const sessionId = params?.sessionId as string;
@@ -60,8 +85,12 @@ export default function ChatSessionPage() {
   const { data: sessionAssets = [], mutate: mutateAssets } = useSWR(assetsKey, fetchSessionAssets, { revalidateOnFocus: false });
 
   const [inputText, setInputText] = useState("");
-  const [ocrLoading, setOcrLoading] = useState(false);
+  const [pendingDraftImages, setPendingDraftImages] = useState<DraftImage[]>([]);
+  const [ocrFlow, setOcrFlow] = useState<OcrFlowState>({ status: "idle" });
+  const [confirmEditText, setConfirmEditText] = useState("");
+  const [ocrFlowError, setOcrFlowError] = useState<string | null>(null);
   const [pendingQueue, setPendingQueue] = useState<{ id: string; text: string }[]>([]);
+  const [queueNotice, setQueueNotice] = useState<string | null>(null);
 
   // UI States
   const [splitPercent, setSplitPercent] = useState(14.3);
@@ -89,10 +118,9 @@ export default function ChatSessionPage() {
     return messages?.filter((m) => m.role === "assistant" && m.type !== "error" && m.metadata?.coordinates) || [];
   }, [messages]);
 
-  const userQueryCount = useMemo(() => {
-    return messages.filter((m) => m.role === "user").length + pendingQueue.length;
-  }, [messages, pendingQueue]);
-  const isLimitReached = userQueryCount >= 5;
+  const isQueueFull = pendingQueue.length >= 5;
+  const queueFullBlock = job.phase !== "idle" && isQueueFull;
+  const ocrPreviewBlocking = ocrFlow.status !== "idle";
 
   const applyGeometryFromSnapshot = (meta: any) => {
     if (!meta) return;
@@ -112,8 +140,19 @@ export default function ChatSessionPage() {
     setActiveSnapshotJobId(meta.job_id || meta.jobId || null);
   };
 
-  // Restore cache on session change
+  // Restore cache on session change; reset composer attachments
   useEffect(() => {
+    setPendingDraftImages((prev) => {
+      revokeDraftImages(prev);
+      return [];
+    });
+    setOcrFlow((f) => {
+      if (f.status !== "idle") revokeDraftImages(f.attachments);
+      return { status: "idle" };
+    });
+    setConfirmEditText("");
+    setOcrFlowError(null);
+
     if (isTempSession) return;
     const cached = loadGeometryState(sessionId);
     if (cached) {
@@ -153,12 +192,16 @@ export default function ChatSessionPage() {
 
   // Queue Processing
   useEffect(() => {
-    if (job.phase === 'idle' && pendingQueue.length > 0) {
+    if (job.phase === "idle" && pendingQueue.length > 0) {
       const next = pendingQueue[0];
-      setPendingQueue(prev => prev.slice(1));
+      setPendingQueue((prev) => {
+        const n = prev.slice(1);
+        if (!isTempSession) savePendingQueue(sessionId, n);
+        return n;
+      });
       startSolve(next.text);
     }
-  }, [job.phase, pendingQueue, startSolve]);
+  }, [job.phase, pendingQueue, startSolve, sessionId, isTempSession]);
 
   // Layout dragging
   useEffect(() => {
@@ -196,43 +239,192 @@ export default function ChatSessionPage() {
     if (messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
     }
-  }, [messages, job.phase, pendingQueue]);
+  }, [messages, job.phase, pendingQueue, ocrFlow.status]);
 
-  const handleSolve = async (text?: string) => {
-    const payload = text || inputText;
-    if (!payload.trim() || isLimitReached) return;
-    
-    if (job.phase !== 'idle' && !text) {
-      setPendingQueue(prev => {
-        const newQ = [...prev, { id: "q-" + Date.now(), text: payload }];
+  const addDraftImages = (files: File[]) => {
+    if (!files.length) return;
+    setPendingDraftImages((prev) => [...prev, ...files.map(createDraftImage)]);
+  };
+
+  const removeDraftImage = (id: string) => {
+    setPendingDraftImages((prev) => {
+      const t = prev.find((d) => d.id === id);
+      if (t) revokeDraftImages([t]);
+      return prev.filter((d) => d.id !== id);
+    });
+  };
+
+  const runOcrChain = async (
+    attachments: DraftImage[],
+    userTextSnapshot: string
+  ): Promise<{ ocrParts: string[]; combinedText: string }> => {
+    const parts: string[] = [];
+    for (const d of attachments) {
+      const prep = await preprocessImageForOcr(d.file);
+      const t = await postOcr(prep, userSession?.access_token);
+      parts.push(t);
+    }
+    const combinedText = buildCombinedMessage(userTextSnapshot, parts);
+    return { ocrParts: parts, combinedText };
+  };
+
+  const cancelOcrFlow = () => {
+    if (ocrFlow.status === "ocr_loading" || ocrFlow.status === "confirm") {
+      setPendingDraftImages(ocrFlow.attachments);
+      setInputText(ocrFlow.userTextSnapshot);
+    }
+    setOcrFlow({ status: "idle" });
+    setConfirmEditText("");
+    setOcrFlowError(null);
+  };
+
+  const handleRetryOcr = async () => {
+    if (ocrFlow.status !== "confirm") return;
+    const snapshot = ocrFlow;
+    const { attachments, userTextSnapshot } = snapshot;
+    setOcrFlowError(null);
+    setOcrFlow({ status: "ocr_loading", attachments, userTextSnapshot });
+    try {
+      const { ocrParts, combinedText } = await runOcrChain(attachments, userTextSnapshot);
+      setOcrFlow({
+        status: "confirm",
+        attachments,
+        userTextSnapshot,
+        ocrParts,
+        combinedText,
+      });
+      setConfirmEditText(combinedText);
+    } catch (e) {
+      setOcrFlowError(e instanceof Error ? e.message : "OCR thất bại");
+      setOcrFlow({
+        status: "confirm",
+        attachments: snapshot.attachments,
+        userTextSnapshot: snapshot.userTextSnapshot,
+        ocrParts: snapshot.ocrParts,
+        combinedText: snapshot.combinedText,
+      });
+    }
+  };
+
+  const confirmOcrAndSolve = async () => {
+    if (ocrFlow.status !== "confirm") return;
+    const text = confirmEditText.trim();
+    if (!text) return;
+    const attachments = ocrFlow.attachments;
+    let imageUrl: string | null = null;
+    if (!isTempSession && attachments[0]) {
+      imageUrl = await uploadChatImageForSolve(sessionId, attachments[0].file);
+    }
+    revokeDraftImages(attachments);
+    setOcrFlow({ status: "idle" });
+    setConfirmEditText("");
+    setOcrFlowError(null);
+    await mutateMessages(
+      (prev) => [
+        ...(prev || []),
+        {
+          id: "temp",
+          role: "user",
+          type: "text",
+          content: text,
+          timestamp: Date.now(),
+        },
+      ],
+      { revalidate: false }
+    );
+    startSolve(text, false, imageUrl ?? undefined);
+  };
+
+  const handleComposerSend = async (text?: string) => {
+    if (ocrFlow.status !== "idle") return;
+
+    const userSnap = text !== undefined ? text : inputText;
+    const payloadTrim = userSnap.trim();
+    const drafts = [...pendingDraftImages];
+    const hasImages = drafts.length > 0;
+    if (!payloadTrim && !hasImages) return;
+
+    if (job.phase !== "idle" && text === undefined) {
+      if (hasImages) {
+        setQueueNotice(
+          "Không thể xếp hàng kèm ảnh. Đợi xử lý xong hoặc chỉ gửi nội dung chữ."
+        );
+        window.setTimeout(() => setQueueNotice(null), 4500);
+        return;
+      }
+      if (pendingQueue.length >= 5) {
+        setQueueNotice("Hàng đợi tối đa 5 câu khi đang xử lý. Đợi xong rồi gửi thêm.");
+        window.setTimeout(() => setQueueNotice(null), 4500);
+        return;
+      }
+      setPendingQueue((prev) => {
+        const newQ = [...prev, { id: "q-" + Date.now(), text: payloadTrim }];
         if (!isTempSession) savePendingQueue(sessionId, newQ);
         return newQ;
       });
       setInputText("");
       return;
     }
-    
-    if (!text) setInputText("");
-    await mutateMessages((prev) => [...(prev || []), { id: "temp", role: "user", type: "text", content: payload, timestamp: Date.now() }], { revalidate: false });
-    startSolve(payload);
-  };
 
-  const handleOcr = async (file: File) => {
-    setOcrLoading(true);
-    const formData = new FormData(); formData.append("file", file);
-    try {
-      const res = await fetch(`${getApiBaseUrl()}/api/v1/ocr`, { method: "POST", body: formData });
-      const data = await res.json();
-      if (data.text) setInputText(prev => prev ? `${prev}\n${data.text}` : data.text);
-    } catch { /* ignore */ } finally { setOcrLoading(false); }
+    if (hasImages) {
+      setOcrFlowError(null);
+      setOcrFlow({
+        status: "ocr_loading",
+        attachments: drafts,
+        userTextSnapshot: userSnap,
+      });
+      setPendingDraftImages([]);
+      if (text === undefined) setInputText("");
+      try {
+        const { ocrParts, combinedText } = await runOcrChain(drafts, userSnap);
+        setOcrFlow({
+          status: "confirm",
+          attachments: drafts,
+          userTextSnapshot: userSnap,
+          ocrParts,
+          combinedText,
+        });
+        setConfirmEditText(combinedText);
+      } catch (e) {
+        setOcrFlowError(e instanceof Error ? e.message : "OCR thất bại");
+        setPendingDraftImages(drafts);
+        setInputText(userSnap);
+        setOcrFlow({ status: "idle" });
+      }
+      return;
+    }
+
+    if (text === undefined) setInputText("");
+    await mutateMessages(
+      (prev) => [
+        ...(prev || []),
+        {
+          id: "temp",
+          role: "user",
+          type: "text",
+          content: payloadTrim,
+          timestamp: Date.now(),
+        },
+      ],
+      { revalidate: false }
+    );
+    startSolve(payloadTrim);
   };
 
   const editQueued = (id: string, text: string) => {
-    setPendingQueue(prev => prev.filter(q => q.id !== id));
+    setPendingQueue((prev) => {
+      const n = prev.filter((q) => q.id !== id);
+      if (!isTempSession) savePendingQueue(sessionId, n);
+      return n;
+    });
     setInputText(text);
   };
   const removeQueued = (id: string) => {
-    setPendingQueue(prev => prev.filter(q => q.id !== id));
+    setPendingQueue((prev) => {
+      const n = prev.filter((q) => q.id !== id);
+      if (!isTempSession) savePendingQueue(sessionId, n);
+      return n;
+    });
   };
 
   return (
@@ -245,10 +437,12 @@ export default function ChatSessionPage() {
       <div className="flex-1 flex flex-col min-w-0 bg-[var(--bg-secondary)]">
         <div className="flex-1 flex overflow-hidden">
           <div className="flex flex-col border-r border-white/5 min-w-0 bg-[var(--panel-bg)]" style={{ width: `${mainSplitPercent}%` }}>
-            {messages.length === 0 && pendingQueue.length === 0 && !historyLoadingRaw ? (
+            {messages.length === 0 &&
+            pendingQueue.length === 0 &&
+            !historyLoadingRaw &&
+            ocrFlow.status === "idle" ? (
               <HeroWelcome onSuggestionClick={(text) => {
                 setInputText(text);
-                // Optionally auto-solve: handleSolve(text);
               }} />
             ) : (
               <ChatMessageList
@@ -262,14 +456,40 @@ export default function ChatSessionPage() {
                 messagesEndRef={messagesEndRef}
               />
             )}
+            {queueNotice && (
+              <div className="px-4 pt-2 max-w-3xl mx-auto">
+                <p className="text-xs text-amber-400/90 bg-amber-500/10 border border-amber-500/20 rounded-xl px-3 py-2">
+                  {queueNotice}
+                </p>
+              </div>
+            )}
+            {ocrFlow.status !== "idle" && (
+              <div className="px-4 pb-2 shrink-0">
+                <OcrConfirmCard
+                  previewUrls={ocrFlow.attachments.map((a) => a.previewUrl)}
+                  combinedText={
+                    ocrFlow.status === "confirm" ? confirmEditText : ""
+                  }
+                  onChangeCombined={setConfirmEditText}
+                  ocrLoading={ocrFlow.status === "ocr_loading"}
+                  error={ocrFlowError}
+                  onConfirm={confirmOcrAndSolve}
+                  onCancel={cancelOcrFlow}
+                  onRetryOcr={handleRetryOcr}
+                />
+              </div>
+            )}
             <ChatInput
               inputText={inputText}
               setInputText={setInputText}
-              isLimitReached={isLimitReached}
-              solveLoading={job.phase !== 'idle'}
-              ocrLoading={ocrLoading}
-              onSolve={handleSolve}
-              onRunOcr={handleOcr}
+              queueFullBlock={queueFullBlock}
+              solveLoading={job.phase !== "idle"}
+              ocrLoading={ocrFlow.status === "ocr_loading"}
+              ocrPreviewBlocking={ocrPreviewBlocking}
+              pendingImages={pendingDraftImages}
+              onRemoveImage={removeDraftImage}
+              onAddImageFiles={addDraftImages}
+              onSolve={handleComposerSend}
             />
           </div>
           <div role="separator" onMouseDown={() => { draggingType.current = 'main'; document.body.style.cursor = "col-resize"; }} className="w-1 cursor-col-resize hover:bg-indigo-500/30 z-10 shrink-0" />
