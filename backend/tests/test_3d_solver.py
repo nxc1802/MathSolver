@@ -81,5 +81,19 @@ def test_solve_prism():
     assert coords["D"][1] == pytest.approx(0.0, abs=1e-3)
     assert abs(coords["D"][2]) == pytest.approx(10.0, rel=1e-4, abs=1e-3)
 
+def test_explicit_z_zero_on_xy_plane_does_not_force_is_3d():
+    """POINT with z=0 must not flip is_3d; 2D triangle stays 2D (regression vs POINT(A,x,y,0) bug)."""
+    dsl = """
+    POINT(A, 0, 0, 0)
+    POINT(B, 3, 0, 0)
+    POINT(C, 0, 4, 0)
+    TRIANGLE(ABC)
+    """
+    parser = DSLParser()
+    points, constraints, is_3d = parser.parse(dsl)
+    assert is_3d is False
+    assert len(points) >= 3
+
+
 if __name__ == "__main__":
     pytest.main([__file__])

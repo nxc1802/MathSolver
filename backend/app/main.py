@@ -31,6 +31,7 @@ from app.ocr_local_file import ocr_from_local_image_path
 from app.routers import auth, sessions, solve
 from agents.ocr_agent import OCRAgent
 from app.routers.solve import get_orchestrator
+from app.job_poll import normalize_job_row_for_client
 from app.supabase_client import get_supabase
 from app.websocket_manager import register_websocket_routes
 
@@ -137,4 +138,5 @@ async def get_job_status(
     job = response.data[0]
     if job.get("user_id") is not None and str(job["user_id"]) != str(user_id):
         raise HTTPException(status_code=403, detail="Forbidden: You do not own this job.")
-    return job
+    # Stable contract for FE poll (job_id alias, parsed result JSON, string UUIDs)
+    return normalize_job_row_for_client(job)

@@ -34,9 +34,10 @@ export default function StaticGeometryCanvas({ coordinates, polygonOrder, circle
     const entries = Object.entries(coordinates);
     let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
 
-    const parsedPoints = entries.map(([label, [x, y]]) => {
-      const px = Number(x);
-      const py = Number(y) * -1; // Invert Y for SVG coordinates
+    const parsedPoints = entries.map(([label, raw]) => {
+      const arr = Array.isArray(raw) ? raw : [];
+      const px = Number(arr[0]);
+      const py = Number(arr[1]) * -1; // Invert Y for SVG coordinates
       minX = Math.min(minX, px);
       maxX = Math.max(maxX, px);
       minY = Math.min(minY, py);
@@ -49,7 +50,7 @@ export default function StaticGeometryCanvas({ coordinates, polygonOrder, circle
       if (!centerCoords) return null;
       const r = Number(c.radius);
       const cx = Number(centerCoords[0]);
-      const cy = Number(centerCoords[1]) * -1;
+      const cy = Number(centerCoords[1] ?? 0) * -1;
       minX = Math.min(minX, cx - r);
       maxX = Math.max(maxX, cx + r);
       minY = Math.min(minY, cy - r);

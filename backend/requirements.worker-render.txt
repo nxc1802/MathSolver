@@ -1,0 +1,21 @@
+# Celery render worker: Manim + Supabase (no OpenAI / SymPy / OCR vision stack).
+# Install: pip install -r requirements.worker-render.txt
+# Includes FastAPI/uvicorn for worker_health.py (HF Spaces).
+
+cachetools>=5.3
+fastapi>=0.115,<1
+uvicorn[standard]>=0.30
+python-multipart>=0.0.9
+python-dotenv>=1.0
+pydantic[email]>=2.4
+email-validator>=2
+
+celery>=5.3
+redis>=5
+httpx>=0.27
+websockets>=12
+
+supabase>=2.0
+
+numpy>=1.26,<2
+manim>=0.18,<0.20

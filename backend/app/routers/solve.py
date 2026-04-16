@@ -305,7 +305,7 @@ async def process_session_job(
     from app.websocket_manager import notify_status
 
     async def status_update(status: str):
-        await notify_status(job_id, {"status": status})
+        await notify_status(job_id, {"status": status, "job_id": job_id})
 
     supabase = get_supabase()
     try:
@@ -358,7 +358,7 @@ async def process_session_job(
             }
         ).execute()
 
-        await notify_status(job_id, {"status": status, "result": result})
+        await notify_status(job_id, {"status": status, "job_id": job_id, "result": result})
 
     except Exception as e:
         logger.exception("Error processing session job %s", job_id)
@@ -376,14 +376,14 @@ async def process_session_job(
                 "metadata": {"job_id": job_id},
             }
         ).execute()
-        await notify_status(job_id, {"status": "error", "error": error_msg})
+        await notify_status(job_id, {"status": "error", "job_id": job_id, "error": error_msg})
 
 async def process_render_job(job_id: str, session_id: str, geometry_data: dict):
     """Tiến trình render video từ metadata có sẵn."""
     from app.websocket_manager import notify_status
     from worker.tasks import render_geometry_video
     
-    await notify_status(job_id, {"status": "rendering_queued"})
+    await notify_status(job_id, {"status": "rendering_queued", "job_id": job_id})
     
     # Prepare payload for Celery (similar to what orchestrator used to do)
     result_payload = {
@@ -407,4 +407,4 @@ async def process_render_job(job_id: str, session_id: str, geometry_data: dict):
         logger.exception(f"[RenderJob] FAILED to dispatch Celery task: {e}")
         supabase = get_supabase()
         supabase.table("jobs").update({"status": "error", "result": {"error": f"Task dispatch failed: {str(e)}"}}).eq("id", job_id).execute()
-        await notify_status(job_id, {"status": "error", "error": str(e)})
+        await notify_status(job_id, {"status": "error", "job_id": job_id, "error": str(e)})

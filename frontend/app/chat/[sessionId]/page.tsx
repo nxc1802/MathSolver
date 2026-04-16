@@ -30,6 +30,14 @@ import VersionSwitcher from "../../../components/geometry/VersionSwitcher";
 
 import { useSolverJob } from "@/hooks/useSolverJob";
 import { loadGeometryState, saveGeometryState, type GeometryState } from "@/lib/session-geometry-cache";
+import {
+  pickCanvasMode,
+  projectCoordinates2D,
+  normalizeCoordinates3D,
+  logGeometryDebug,
+  logGeometryBeHandoff,
+  detectGeometryInconsistency,
+} from "@/lib/geometry-display";
 import { getPendingQueue, savePendingQueue } from "@/lib/job-tracker";
 import {
   readSplitPercent, writeSplitPercent,
@@ -109,6 +117,7 @@ export default function ChatSessionPage() {
   const [videoVersion, setVideoVersion] = useState(1);
   const [activeSnapshotJobId, setActiveSnapshotJobId] = useState<string | null>(null);
   const prevSnapshotsCountRef = useRef(0);
+  const prevRouteSessionIdRef = useRef<string | undefined>(undefined);
 
   // Job Hooks
   const { job, startSolve, startRenderVideo, resetJob } = useSolverJob(sessionId, userSession?.access_token);
@@ -123,24 +132,56 @@ export default function ChatSessionPage() {
 
   const applyGeometryFromSnapshot = (meta: any) => {
     if (!meta) return;
-    setCoordinates(meta.coordinates || null);
-    
-    // 3D detection: trust backend flag, fallback to coordinates check
-    const backendIs3d = meta.is_3d !== undefined ? meta.is_3d : meta.is3d;
-    const coords = meta.coordinates || {};
-    const hasZ = Object.values(coords).some(
-      (c: any) => Array.isArray(c) && c.length === 3 && c[2] !== 0
-    );
-    
-    setIs3d(backendIs3d ?? hasZ);
+    logGeometryDebug("applyGeometryFromSnapshot", meta);
+    const rawCoords = (meta.coordinates || {}) as Record<string, unknown>;
+    const mode = pickCanvasMode({
+      is_3d: meta.is_3d,
+      is3d: meta.is3d,
+      coordinates: rawCoords,
+    });
+    const inconsistency = detectGeometryInconsistency({
+      is_3d: meta.is_3d,
+      is3d: meta.is3d,
+      coordinates: rawCoords,
+    });
+    if (inconsistency) logGeometryBeHandoff(inconsistency, meta);
+
+    if (mode === "3d") {
+      setCoordinates(normalizeCoordinates3D(rawCoords));
+      setIs3d(true);
+    } else {
+      setCoordinates(projectCoordinates2D(rawCoords));
+      setIs3d(false);
+    }
     setPolygonOrder(meta.polygon_order || meta.polygonOrder || null);
     setDrawingPhases(meta.drawing_phases || meta.drawingPhases || null);
     setVideoUrl(meta.video_url || meta.videoUrl || null);
     setActiveSnapshotJobId(meta.job_id || meta.jobId || null);
   };
 
-  // Restore cache on session change; reset composer attachments
+  // Restore cache on session change; reset composer attachments (light path temp-* → real id to avoid full remount feel).
   useEffect(() => {
+    const prev = prevRouteSessionIdRef.current;
+    prevRouteSessionIdRef.current = sessionId;
+    const tempToReal =
+      Boolean(prev?.startsWith("temp-")) &&
+      Boolean(sessionId && !sessionId.startsWith("temp-"));
+
+    if (tempToReal) {
+      const cached = loadGeometryState(sessionId);
+      if (cached) applyGeometryFromSnapshot(cached);
+      else {
+        setCoordinates(null);
+        setIs3d(false);
+        setPolygonOrder(null);
+        setDrawingPhases(null);
+        setVideoUrl(null);
+        setActiveSnapshotJobId(null);
+      }
+      setPendingQueue(getPendingQueue(sessionId));
+      return;
+    }
+
     setPendingDraftImages((prev) => {
       revokeDraftImages(prev);
       return [];
@@ -170,23 +211,38 @@ export default function ChatSessionPage() {
   }, [geometrySnapshots]);
 
   useEffect(() => {
-    if (job.phase === 'success' || job.phase === 'error') {
-      void mutateMessages();
-      void mutateAssets();
-      if (job.result) {
-        applyGeometryFromSnapshot(job.result);
-        if (!isTempSession) {
-          saveGeometryState(sessionId, { 
-            coordinates: job.result.coordinates, 
-            polygonOrder: job.result.polygon_order, 
-            drawingPhases: job.result.drawing_phases, 
-            is_3d: job.result.is_3d, 
-            videoUrl: job.result.video_url 
-          } as GeometryState);
+    if (job.phase !== "success" && job.phase !== "error") return;
+    const resultSnap = job.result;
+    let cancelled = false;
+    const run = async () => {
+      try {
+        await Promise.all([
+          mutateMessages(undefined, { revalidate: true }),
+          mutateAssets(undefined, { revalidate: true }),
+        ]);
+      } catch (e) {
+        console.error("Revalidate messages/assets after job:", e);
+      } finally {
+        if (cancelled) return;
+        if (resultSnap) {
+          applyGeometryFromSnapshot(resultSnap);
+          if (!isTempSession) {
+            saveGeometryState(sessionId, {
+              coordinates: resultSnap.coordinates,
+              polygonOrder: resultSnap.polygon_order,
+              drawingPhases: resultSnap.drawing_phases,
+              is_3d: resultSnap.is_3d,
+              videoUrl: resultSnap.video_url,
+            } as GeometryState);
+          }
         }
+        setTimeout(resetJob, 1000);
       }
-      setTimeout(resetJob, 1000);
-    }
+    };
+    void run();
+    return () => {
+      cancelled = true;
+    };
   }, [job.phase, job.result, mutateMessages, mutateAssets, resetJob, sessionId, isTempSession]);
 
   // Queue Processing

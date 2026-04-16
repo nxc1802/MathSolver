@@ -10,17 +10,28 @@ services:
     env_file:
       - ./backend/.env
 
-  worker:
+  # Render (Manim) and OCR use separate images/deps; run two workers each consuming one queue.
+  worker-render:
     build:
       context: ./backend
       dockerfile: Dockerfile.worker
-    # Task routes use queues `render` and `ocr`. Image may set CELERY_WORKER_QUEUES=render; override so Celery loads both task modules.
     environment:
-      CELERY_WORKER_QUEUES: render,ocr
-    # Task routes use queues `render` and `ocr` (no Celery solve queue). Local one container listens to both.
+      CELERY_WORKER_QUEUES: render
     command: >
       celery -A worker.celery_app worker --loglevel=info --concurrency=1
-      -Q render,ocr
+      -Q render
+    env_file:
+      - ./backend/.env
+
+  worker-ocr:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.worker.ocr
+    environment:
+      CELERY_WORKER_QUEUES: ocr
+    command: >
+      celery -A worker.celery_app worker --loglevel=info --concurrency=1
+      -Q ocr
     env_file:
       - ./backend/.env
 

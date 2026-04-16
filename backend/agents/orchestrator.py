@@ -6,7 +6,6 @@ from agents.geometry_agent import GeometryAgent
 from agents.knowledge_agent import KnowledgeAgent
 from agents.ocr_agent import OCRAgent
 from agents.parser_agent import ParserAgent
-from agents.renderer_agent import RendererAgent
 from agents.solver_agent import SolverAgent
 from app.logutil import log_step
 from app.ocr_celery import ocr_from_image_url
@@ -39,7 +38,6 @@ class Orchestrator:
         self.geometry_agent = GeometryAgent()
         self.ocr_agent = OCRAgent()
         self.knowledge_agent = KnowledgeAgent()
-        self.renderer_agent = RendererAgent()
         self.solver_agent = SolverAgent()
         self.solver_engine = GeometryEngine()
         self.dsl_parser = DSLParser()
@@ -171,6 +169,12 @@ class Orchestrator:
             if engine_result:
                 coordinates = engine_result.get("coordinates")
                 _step_io("step6_solve", input_val=None, output_val=coordinates)
+                logger.info(
+                    "[Orchestrator] geometry solved job_id=%s is_3d=%s n_coords=%d",
+                    job_id,
+                    is_3d,
+                    len(coordinates) if isinstance(coordinates, dict) else 0,
+                )
                 break
 
             feedback = "Geometry solver failed to find a valid solution for the given constraints. Parallelism or lengths might be inconsistent."

@@ -11,6 +11,7 @@ on:
     paths:
       - 'backend/worker/**'
       - 'backend/worker_health.py'
+      - 'backend/vision_ocr/**'
       - 'backend/agents/ocr_agent.py'
       - 'backend/agents/torch_ultralytics_compat.py'
       - 'backend/app/ocr_celery.py'

@@ -35,7 +35,9 @@ class DSLParser:
                 x = float(m.group(2)) if m.group(2) else None
                 y = float(m.group(3)) if m.group(3) else None
                 z = float(m.group(4)) if m.group(4) else None
-                if z is not None:
+                # z=0 with x,y is still the xy-plane; only treat as 3D when z is meaningfully non-zero.
+                # Otherwise POINT(A,0,0,0) incorrectly forced is_3d and broke 2D engine paths.
+                if z is not None and abs(z) > 1e-9:
                     is_3d = True
                 points[name] = Point(id=name, x=x, y=y, z=z)
                 if name not in explicit_point_ids:
@@ -183,7 +185,12 @@ class DSLParser:
 
             logger.warning(f"[DSLParser]   ? Unrecognized DSL line: '{line}'")
 
-        logger.info(f"[DSLParser] Parsed {len(points)} points, {len(constraints)} constraints.")
+        logger.info(
+            "[DSLParser] Parsed %d points, %d constraints, is_3d=%s.",
+            len(points),
+            len(constraints),
+            is_3d,
+        )
 
         # Safety sweep: Ensure all points referenced in constraints actually exist in the points dictionary
         for c in constraints:

@@ -26,10 +26,10 @@ logger = logging.getLogger("prewarm_ocr_worker")
 
 
 def main() -> None:
-    from agents.ocr_agent import OCRAgent
+    from vision_ocr.pipeline import OcrVisionPipeline
 
-    logger.info("Loading OCRAgent(skip_llm_refinement=True)...")
-    OCRAgent(skip_llm_refinement=True)
+    logger.info("Loading OcrVisionPipeline...")
+    OcrVisionPipeline()
     logger.info("OCR worker prewarm finished successfully.")
 
 

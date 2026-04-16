@@ -73,18 +73,6 @@ export default function SessionList({ compact = false }: SessionListProps) {
     if (!token) return;
     setCreating(true);
 
-    // Optimistic UI: Create temporary session
-    const tempId = `temp-${Date.now()}`;
-    const tempSession: Session = {
-      id: tempId,
-      title: "Bài toán mới",
-      created_at: new Date().toISOString(),
-    };
-
-    // Update cache and navigate instantly
-    mutate((prev) => [tempSession, ...(prev ?? [])], { revalidate: false });
-    router.replace(`/chat/${tempId}`);
-
     try {
       const res = await fetchWithTimeout(
         `${getApiBaseUrl()}/api/v1/sessions`,
@@ -94,29 +82,27 @@ export default function SessionList({ compact = false }: SessionListProps) {
         },
         FETCH_TIMEOUT_MS
       );
-      
+
       if (res.ok) {
         const realSession = (await res.json()) as Session;
-        
-        // Flicker-free: Prime cache for the real session before navigating
+
         const messagesUrl = `${getApiBaseUrl()}/api/v1/sessions/${realSession.id}/messages`;
         const assetsUrl = `${getApiBaseUrl()}/api/v1/sessions/${realSession.id}/assets`;
-        
+
         await globalMutate([messagesUrl, token], [], { revalidate: false });
         await globalMutate([assetsUrl, token], [], { revalidate: false });
 
-        // Replace temp session with real one
-        await mutate((prev) => (prev ?? []).map(s => s.id === tempId ? realSession : s), { revalidate: false });
-        // Replace URL to use the real ID
+        await mutate((prev) => {
+          const list = prev ?? [];
+          if (list.some((s) => s.id === realSession.id)) return list;
+          return [realSession, ...list];
+        }, { revalidate: false });
         router.replace(`/chat/${realSession.id}`);
       } else {
         throw new Error("Failed to create session on backend");
       }
     } catch (err) {
       console.error("Create session error:", err);
-      // Rollback on error
-      await mutate((prev) => (prev ?? []).filter(s => s.id !== tempId), { revalidate: false });
-      router.replace("/");
     } finally {
       setCreating(false);
     }

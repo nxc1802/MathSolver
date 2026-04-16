@@ -31,13 +31,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
+COPY requirements.worker-render.txt .
 RUN pip install --upgrade pip setuptools wheel \
-    && pip install -r requirements.txt
+    && pip install -r requirements.worker-render.txt
 
 COPY . .
 
-RUN python scripts/prewarm_models.py
+RUN python scripts/prewarm_render_worker.py
 
 ENV PORT=7860 \
     CELERY_WORKER_QUEUES=render

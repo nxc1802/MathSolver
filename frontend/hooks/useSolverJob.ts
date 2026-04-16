@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useLayoutEffect } from 'react';
 import { getApiBaseUrl, getWsBaseUrl } from '@/lib/api-config';
 import { saveActiveJob, getActiveJob, clearActiveJob } from '@/lib/job-tracker';
 import { validateJobResult } from '@/lib/validators';
@@ -33,6 +33,16 @@ const statusToPhase: Record<string, SolverPhase> = {
   error: 'error'
 };
 
+/** Normalize poll row (Supabase) or WS payload to { status, result }. */
+export function normalizeJobPayload(raw: unknown): { status?: string; result?: unknown } | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  const status = typeof o.status === "string" ? o.status : undefined;
+  const result = "result" in o ? o.result : undefined;
+  if (!status) return null;
+  return { status, result };
+}
+
 export function useSolverJob(sessionId: string, token?: string | null) {
   const [job, setJob] = useState<JobState>({ phase: 'idle', progress: 0, message: '' });
   const socketRef = useRef<WebSocket | null>(null);
@@ -53,34 +63,41 @@ export function useSolverJob(sessionId: string, token?: string | null) {
     pollAttemptsRef.current = 0;
   }, []);
 
-  const updateJobState = useCallback((data: any) => {
-    if (data.status) {
-      const phase = statusToPhase[data.status] || 'solving';
-      let progress = job.progress;
-      if (phase === 'ocr') progress = 30;
-      else if (phase === 'parsing') progress = 50;
-      else if (phase === 'solving') progress = 70;
-      else if (phase === 'rendering_queued') progress = 80;
-      else if (phase === 'rendering') progress = 90;
-      else if (phase === 'success') progress = 100;
+  const updateJobState = useCallback(
+    (raw: unknown) => {
+      const data = normalizeJobPayload(raw);
+      if (!data?.status) return;
 
-      setJob(prev => ({ 
-        ...prev, 
-        phase, 
-        progress,
-        message: statusMessages[data.status] || prev.message,
-        result: data.result ? validateJobResult(data.result) : prev.result
-      }));
+      setJob((prev) => {
+        const phase = statusToPhase[data.status!] || "solving";
+        let progress = prev.progress;
+        if (phase === "ocr") progress = 30;
+        else if (phase === "parsing") progress = 50;
+        else if (phase === "solving") progress = 70;
+        else if (phase === "rendering_queued") progress = 80;
+        else if (phase === "rendering") progress = 90;
+        else if (phase === "success") progress = 100;
 
-      if (data.status === 'success' || data.status === 'error') {
+        return {
+          ...prev,
+          phase,
+          progress,
+          message: statusMessages[data.status!] || prev.message,
+          result:
+            data.result !== undefined && data.result !== null
+              ? validateJobResult(data.result)
+              : prev.result,
+        };
+      });
+
+      if (data.status === "success" || data.status === "error") {
         terminalRef.current = true;
         cleanup();
-        if (data.job_id || data.jobId) {
-            clearActiveJob(sessionId);
-        }
+        clearActiveJob(sessionId);
       }
-    }
-  }, [job.progress, cleanup, sessionId]);
+    },
+    [cleanup, sessionId]
+  );
 
   const startPolling = useCallback((jobId: string) => {
     if (pollIntervalRef.current) return;
@@ -142,6 +159,11 @@ export function useSolverJob(sessionId: string, token?: string | null) {
     connectSocket(jobId);
   }, [cleanup, sessionId, connectSocket]);
 
+  const attachToJobRef = useRef(attachToJob);
+  useLayoutEffect(() => {
+    attachToJobRef.current = attachToJob;
+  }, [attachToJob]);
+
   const startSolve = useCallback(
     async (
       text: string,
@@ -175,16 +197,13 @@ export function useSolverJob(sessionId: string, token?: string | null) {
     }
   }, [sessionId, token, attachToJob, cleanup]);
 
-  // Re-attach if there is an active job when component mounts/switches
+  // Re-attach when session route changes only (avoid re-running when attachToJob identity changes, e.g. token hydration).
   useEffect(() => {
-    if (sessionId && !sessionId.startsWith("temp-")) {
-      const activeJobId = getActiveJob(sessionId);
-      if (activeJobId && job.phase === 'idle') {
-        attachToJob(activeJobId);
-      }
-    }
+    if (!sessionId || sessionId.startsWith("temp-")) return;
+    const activeJobId = getActiveJob(sessionId);
+    if (activeJobId) attachToJobRef.current(activeJobId);
     return cleanup;
-  }, [sessionId, attachToJob, cleanup, job.phase]);
+  }, [sessionId, cleanup]);
 
   const resetJob = useCallback(() => {
     cleanup();

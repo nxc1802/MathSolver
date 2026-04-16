@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+import time
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -15,17 +17,19 @@ from app.session_cache import (
 from app.supabase_client import get_supabase
 
 router = APIRouter(prefix="/api/v1/sessions", tags=["Sessions"])
+logger = logging.getLogger(__name__)
 
 
 @router.get("", response_model=List[dict])
 async def list_sessions(user_id=Depends(get_current_user_id)):
     """Danh sách các phiên chat của người dùng (List user's chat sessions)"""
     supabase = get_supabase()
+    t0 = time.perf_counter()
 
     def fetch() -> list:
         res = (
             supabase.table("sessions")
-            .select("*")
+            .select("id, user_id, title, created_at, updated_at")
             .eq("user_id", user_id)
             .order("updated_at", desc=True)
             .execute()
@@ -33,19 +37,34 @@ async def list_sessions(user_id=Depends(get_current_user_id)):
         log_step("db_select", table="sessions", op="list", user_id=str(user_id))
         return res.data
 
-    return get_sessions_list_cached(str(user_id), fetch)
+    out = get_sessions_list_cached(str(user_id), fetch)
+    logger.info(
+        "sessions.list user=%s count=%d %.1fms",
+        user_id,
+        len(out),
+        (time.perf_counter() - t0) * 1000,
+    )
+    return out
 
 
 @router.post("", response_model=dict)
 async def create_session(user_id=Depends(get_current_user_id)):
     """Tạo một phiên chat mới (Create a new chat session)"""
     supabase = get_supabase()
+    t0 = time.perf_counter()
     res = supabase.table("sessions").insert(
         {"user_id": user_id, "title": "Bài toán mới"}
     ).execute()
     log_step("db_insert", table="sessions", op="create")
     invalidate_for_user(str(user_id))
-    return res.data[0]
+    row = res.data[0]
+    logger.info(
+        "sessions.create user=%s id=%s %.1fms",
+        user_id,
+        row.get("id"),
+        (time.perf_counter() - t0) * 1000,
+    )
+    return row
 
 
 @router.get("/{session_id}/messages", response_model=List[dict])
