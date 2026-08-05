@@ -31,10 +31,8 @@ An advanced multi-agent system for automated geometry problem solving, exact sym
 ## 📽️ Media Demo
 
 <div align="center">
-  <video src="https://github.com/user-attachments/assets/3c960fac-b2c2-4c39-9613-d500c84451cf" width="100%" controls autoplay muted loop>
-    Your browser does not support the HTML5 video tag.
-  </video>
-  <p><i>Figure 1: Visual Math Solver v5.1 Multi-Agent Engine & Interactive Animation Showcase</i></p>
+  <img src="https://github.com/user-attachments/assets/3c960fac-b2c2-4c39-9613-d500c84451cf" width="100%" alt="Visual Math Solver v5.1 Showcase" />
+  <p><i>Figure 1: Visual Math Solver v5.1 Multi-Agent Engine & Interactive Showcase</i></p>
 </div>
 
 ---
