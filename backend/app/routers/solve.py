@@ -382,34 +382,57 @@ async def process_session_job(
         await notify_status(job_id, {"status": "error", "job_id": job_id, "error": error_msg})
 
 async def process_render_job(job_id: str, session_id: str, geometry_data: dict):
-    """Tiến trình render video từ metadata có sẵn."""
+    """Tiến trình render video qua External Manim API."""
     from app.websocket_manager import notify_status
-    from worker.tasks import render_geometry_video
+    from manim_client import ManimClient, build_visualization_spec
     
     await notify_status(job_id, {"status": "rendering_queued", "job_id": job_id})
-    
-    # Prepare payload for Celery (similar to what orchestrator used to do)
-    result_payload = {
-        "geometry_dsl": geometry_data.get("geometry_dsl"),
-        "coordinates": geometry_data.get("coordinates"),
-        "polygon_order": geometry_data.get("polygon_order", []),
-        "drawing_phases": geometry_data.get("drawing_phases", []),
-        "circles": geometry_data.get("circles", []),
-        "solids": geometry_data.get("solids", []),
-        "faces": geometry_data.get("faces", []),
-        "lines": geometry_data.get("lines", []),
-        "rays": geometry_data.get("rays", []),
-        "semantic": geometry_data.get("semantic", {}),
-        "semantic_analysis": geometry_data.get("semantic_analysis", "🎬 Video minh họa dựng từ trạng thái gần nhất."),
-        "session_id": session_id,
-    }
+    supabase = get_supabase()
     
     try:
-        logger.info(f"[RenderJob] Attempting to dispatch Celery task for job {job_id}...")
-        render_geometry_video.delay(job_id, result_payload)
-        logger.info(f"[RenderJob] SUCCESS: Dispatched Celery task for job {job_id}")
+        manim_url = os.getenv("MANIM_SERVICE_URL", "https://cuong2004-manim-agent.hf.space")
+        manim_token = os.getenv("MANIM_INTERNAL_TOKEN")
+        client = ManimClient(base_url=manim_url, internal_token=manim_token)
+        
+        vis_spec = build_visualization_spec(geometry_data)
+        logger.info(f"[RenderJob] Submitting job {job_id} to External Manim API ({manim_url})...")
+        
+        resp = await client.submit_render_job(vis_spec)
+        manim_job_id = resp.get("job_id")
+        
+        if not manim_job_id:
+            raise Exception(f"External Manim API did not return job_id: {resp}")
+            
+        await notify_status(job_id, {"status": "rendering", "job_id": job_id, "manim_job_id": manim_job_id})
+        
+        # Poll for completion
+        status_resp = await client.wait_for_completion(manim_job_id, poll_interval=3.0, max_wait=300.0)
+        video_url = status_resp.get("video_url")
+        
+        if not video_url:
+            raise Exception(f"Manim rendering failed or returned empty video_url: {status_resp.get('error')}")
+            
+        final_result = geometry_data.copy()
+        final_result["video_url"] = video_url
+        final_result["manim_job_id"] = manim_job_id
+        
+        if supabase:
+            supabase.table("jobs").update({
+                "status": "success",
+                "result": final_result
+            }).eq("id", job_id).execute()
+            
+        await notify_status(job_id, {
+            "status": "success",
+            "job_id": job_id,
+            "result": final_result,
+            "video_url": video_url
+        })
+        logger.info(f"[RenderJob] SUCCESS for job {job_id}: video_url={video_url}")
+        
     except Exception as e:
-        logger.exception(f"[RenderJob] FAILED to dispatch Celery task: {e}")
-        supabase = get_supabase()
-        supabase.table("jobs").update({"status": "error", "result": {"error": f"Task dispatch failed: {str(e)}"}}).eq("id", job_id).execute()
+        logger.exception(f"[RenderJob] FAILED to render video via External Manim API: {e}")
+        if supabase:
+            supabase.table("jobs").update({"status": "error", "result": {"error": f"Render failed: {str(e)}"}}).eq("id", job_id).execute()
         await notify_status(job_id, {"status": "error", "job_id": job_id, "error": str(e)})
+
