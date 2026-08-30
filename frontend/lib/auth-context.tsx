@@ -50,8 +50,19 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         if (!session && process.env.NODE_ENV === 'development') {
            const mockSession = { 
              access_token: 'Test user-123', 
-             user: { id: 'user-123', email: 'dev@local.test', user_metadata: { full_name: 'Dev User' } } 
-           } as any as Session;
+             token_type: 'bearer',
+             expires_in: 3600,
+             expires_at: Math.floor(Date.now() / 1000) + 3600,
+             refresh_token: 'refresh-123',
+             user: { 
+               id: 'user-123', 
+               app_metadata: {},
+               user_metadata: { full_name: 'Dev User' },
+               aud: 'authenticated',
+               created_at: new Date().toISOString(),
+               email: 'dev@local.test' 
+             } as User 
+           } as Session;
            setSession(mockSession);
            setUser(mockSession.user);
            setLoading(false);
@@ -72,7 +83,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       }
     };
 
-    checkSession();
+    void checkSession();
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {

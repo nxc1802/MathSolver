@@ -23,6 +23,20 @@ export interface ChatMessage {
     semantic_analysis?: string;
     polygon_order?: string[];
     circles?: Array<{ center: string; radius: number }>;
+    solids?: Array<{
+      type: string;
+      center?: string;
+      center1?: string;
+      center2?: string;
+      apex?: string;
+      radius?: number;
+      height?: number;
+      base?: string[];
+      base1?: string[];
+      base2?: string[];
+      points?: string[];
+    }>;
+    faces?: string[][];
     drawing_phases?: Array<{
       phase: number;
       label: string;

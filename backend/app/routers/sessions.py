@@ -47,16 +47,22 @@ async def list_sessions(user_id=Depends(get_current_user_id)):
     return out
 
 
+from app.chat_image_upload import cleanup_session_storage
+
 @router.post("", response_model=dict)
 async def create_session(user_id=Depends(get_current_user_id)):
     """Tạo một phiên chat mới (Create a new chat session)"""
     supabase = get_supabase()
+    if not supabase:
+        raise HTTPException(status_code=503, detail="Database service currently unavailable.")
     t0 = time.perf_counter()
     res = supabase.table("sessions").insert(
         {"user_id": user_id, "title": "Bài toán mới"}
     ).execute()
     log_step("db_insert", table="sessions", op="create")
     invalidate_for_user(str(user_id))
+    if not res.data:
+        raise HTTPException(status_code=500, detail="Failed to create session.")
     row = res.data[0]
     logger.info(
         "sessions.create user=%s id=%s %.1fms",
@@ -71,6 +77,8 @@ async def create_session(user_id=Depends(get_current_user_id)):
 async def get_session_messages(session_id: str, user_id=Depends(get_current_user_id)):
     """Lấy toàn bộ lịch sử tin nhắn của một phiên (Get chat history for a session)"""
     supabase = get_supabase()
+    if not supabase:
+        raise HTTPException(status_code=503, detail="Database service currently unavailable.")
 
     def owns() -> bool:
         res = (
@@ -96,13 +104,15 @@ async def get_session_messages(session_id: str, user_id=Depends(get_current_user
         .execute()
     )
     log_step("db_select", table="messages", op="list", session_id=session_id)
-    return res.data
+    return res.data or []
 
 
 @router.delete("/{session_id}")
 async def delete_session(session_id: str, user_id=Depends(get_current_user_id)):
-    """Xóa một phiên chat (Delete a chat session)"""
+    """Xóa một phiên chat và toàn bộ tài nguyên liên quan (Delete a chat session & associated assets)"""
     supabase = get_supabase()
+    if not supabase:
+        raise HTTPException(status_code=503, detail="Database service currently unavailable.")
 
     def owns() -> bool:
         res = (
@@ -119,11 +129,24 @@ async def delete_session(session_id: str, user_id=Depends(get_current_user_id)):
             status_code=403, detail="Forbidden: You do not own this session."
         )
 
-    # jobs.session_id FK must be cleared before sessions row
+    # 1. Clean up physical storage files in both image & video buckets
+    try:
+        cleanup_session_storage(session_id)
+    except Exception as e:
+        logger.warning("Error cleaning up storage for session %s: %s", session_id, e)
+
+    # 2. Clear dependent rows (jobs, session_assets, messages) before session
+    try:
+        supabase.table("session_assets").delete().eq("session_id", session_id).execute()
+        log_step("db_delete", table="session_assets", op="by_session", session_id=session_id)
+    except Exception as e:
+        logger.warning("Error deleting session_assets for session %s: %s", session_id, e)
+
     supabase.table("jobs").delete().eq("session_id", session_id).eq("user_id", user_id).execute()
     log_step("db_delete", table="jobs", op="by_session", session_id=session_id)
     supabase.table("messages").delete().eq("session_id", session_id).execute()
     log_step("db_delete", table="messages", op="by_session", session_id=session_id)
+    
     res = (
         supabase.table("sessions")
         .delete()
@@ -141,6 +164,9 @@ async def delete_session(session_id: str, user_id=Depends(get_current_user_id)):
 async def update_session_title(title: str, session_id: str, user_id=Depends(get_current_user_id)):
     """Cập nhật tiêu đề phiên chat (Rename a chat session)"""
     supabase = get_supabase()
+    if not supabase:
+        raise HTTPException(status_code=503, detail="Database service currently unavailable.")
+    
     res = (
         supabase.table("sessions")
         .update({"title": title})
@@ -148,6 +174,8 @@ async def update_session_title(title: str, session_id: str, user_id=Depends(get_
         .eq("user_id", user_id)
         .execute()
     )
+    if not res.data:
+        raise HTTPException(status_code=404, detail="Session not found or not owned by user.")
     log_step("db_update", table="sessions", op="title", session_id=session_id)
     invalidate_for_user(str(user_id))
     return res.data[0]

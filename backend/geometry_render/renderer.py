@@ -1,4 +1,5 @@
 import os
+import re
 import subprocess
 import glob
 import string
@@ -8,20 +9,30 @@ from typing import Dict, Any, List
 logger = logging.getLogger(__name__)
 
 
+def _sanitize_var(pid: str) -> str:
+    """Convert point ID like A' or A_1 to valid Python identifier."""
+    sanitized = re.sub(r'[^a-zA-Z0-9_]', '_', str(pid))
+    if not sanitized or sanitized[0].isdigit():
+        sanitized = f"pt_{sanitized}"
+    return sanitized
+
+
 class RendererAgent:
     """
     Renderer — generates Manim scripts from geometry data.
 
     Drawing happens in phases:
-      Phase 1: Main polygon (base shape with correct vertex order)
-      Phase 2: Auxiliary points and segments (midpoints, derived segments)
-      Phase 3: Labels for all points
+      Phase 1: Main polygon / 3D base shape
+      Phase 2: Auxiliary points, 3D faces and segments
+      Phase 3: Labels and 3D solids
     """
 
     def generate_manim_script(self, data: Dict[str, Any]) -> str:
         coords: Dict[str, List[float]] = data.get("coordinates", {})
         polygon_order: List[str] = data.get("polygon_order", [])
         circles_meta: List[Dict] = data.get("circles", [])
+        solids_meta: List[Dict] = data.get("solids", [])
+        faces_meta: List[List[str]] = data.get("faces", [])
         lines_meta: List[List[str]] = data.get("lines", [])
         rays_meta: List[List[str]] = data.get("rays", [])
         drawing_phases: List[Dict] = data.get("drawing_phases", [])
@@ -34,18 +45,17 @@ class RendererAgent:
             if len(pos) >= 3 and abs(pos[2]) > 0.001:
                 is_3d = True
                 break
-        if shape_type in ["pyramid", "prism", "sphere"]:
+        if shape_type in ["pyramid", "prism", "sphere", "cube", "cuboid", "tetrahedron", "cone", "cylinder", "frustum", "regular_pyramid", "regular_tetrahedron", "right_prism"] or solids_meta or data.get("is_3d"):
             is_3d = True
 
-        # ── Fallback: infer polygon_order from coords keys (alphabetical uppercase) ──
+        # Fallback: infer polygon_order from coords keys
         if not polygon_order:
             base = sorted(
                 [pid for pid in coords if pid in string.ascii_uppercase],
                 key=lambda p: string.ascii_uppercase.index(p)
             )
-            polygon_order = base
+            polygon_order = base if base else list(coords.keys())[:4]
 
-        # Separate base points from derived (multi-char or lowercase)
         base_ids = [pid for pid in polygon_order if pid in coords]
         derived_ids = [pid for pid in coords if pid not in polygon_order]
 
@@ -73,41 +83,31 @@ class RendererAgent:
             if len(pos) >= 2: y = round(pos[1], 4)
             if len(pos) >= 3: z = round(pos[2], 4)
 
+            v_name = _sanitize_var(pid)
             dot_class = "Dot3D" if is_3d else "Dot"
-            lines.append(f"        p_{pid} = {dot_class}(point=[{x}, {y}, {z}], color=WHITE, radius=0.08)")
+            lines.append(f"        p_{v_name} = {dot_class}(point=[{x}, {y}, {z}], color=WHITE, radius=0.08)")
 
             if is_3d:
                 lines.append(
-                    f"        l_{pid} = Text('{pid}', font_size=20, color=WHITE)"
-                    f".move_to(p_{pid}.get_center() + [0.2, 0.2, 0.2])"
+                    f"        l_{v_name} = Text('{pid}', font_size=20, color=WHITE)"
+                    f".move_to(p_{v_name}.get_center() + [0.2, 0.2, 0.2])"
                 )
-                # Ensure labels follow camera in 3D (fixed orientation)
-                lines.append(f"        self.add_fixed_orientation_mobjects(l_{pid})")
+                lines.append(f"        self.add_fixed_orientation_mobjects(l_{v_name})")
             else:
                 lines.append(
-                    f"        l_{pid} = Text('{pid}', font_size=22, color=WHITE)"
-                    f".next_to(p_{pid}, UR, buff=0.15)"
+                    f"        l_{v_name} = Text('{pid}', font_size=22, color=WHITE)"
+                    f".next_to(p_{v_name}, UR, buff=0.15)"
                 )
 
-        # ── 3D Shape Special: Pyramid/Prism Faces ────────────────────────────
-        if is_3d and shape_type == "pyramid" and len(base_ids) >= 3:
-            # Find apex (usually 'S')
-            apex_id = "S" if "S" in coords else derived_ids[0] if derived_ids else None
-            if apex_id:
-                # Draw base face
-                base_pts = ", ".join([f"p_{pid}.get_center()" for pid in base_ids])
-                lines.append(f"        base_face = Polygon({base_pts}, color=BLUE, fill_opacity=0.1)")
-                lines.append("        self.play(Create(base_face), run_time=1.0)")
-
-                # Draw side faces
-                for i in range(len(base_ids)):
-                    p1 = base_ids[i]
-                    p2 = base_ids[(i + 1) % len(base_ids)]
-                    face_pts = f"p_{apex_id}.get_center(), p_{p1}.get_center(), p_{p2}.get_center()"
-                    lines.append(
-                        f"        side_{i} = Polygon({face_pts}, color=BLUE, stroke_width=1, fill_opacity=0.05)"
-                    )
-                    lines.append(f"        self.play(Create(side_{i}), run_time=0.5)")
+        # ── 3D Shape Special: Translucent Faces ───────────────────────────────
+        if is_3d and faces_meta:
+            lines.append("        # 3D Faces")
+            for idx, face in enumerate(faces_meta):
+                if len(face) >= 3 and all(p in coords for p in face):
+                    face_pts = ", ".join([f"p_{_sanitize_var(p)}.get_center()" for p in face])
+                    f_var = f"face_{idx}"
+                    lines.append(f"        {f_var} = Polygon({face_pts}, color=BLUE, stroke_width=1, fill_color=BLUE, fill_opacity=0.08)")
+                    lines.append(f"        self.play(Create({f_var}), run_time=0.4)")
 
         # ── Circles ──────────────────────────────────────────────────────────
         for i, c in enumerate(circles_meta):
@@ -125,24 +125,25 @@ class RendererAgent:
                 )
 
         # ── Infinite Lines & Rays ────────────────────────────────────────────
-        # (Standard Line works for 3D coordinates in Manim)
         for i, (p1, p2) in enumerate(lines_meta):
             if p1 in coords and p2 in coords:
+                v1, v2 = _sanitize_var(p1), _sanitize_var(p2)
                 lines.append(
-                    f"        line_ext_{i} = Line(p_{p1}.get_center(), p_{p2}.get_center(), color=GRAY_D, stroke_width=2)"
+                    f"        line_ext_{i} = Line(p_{v1}.get_center(), p_{v2}.get_center(), color=GRAY_D, stroke_width=2)"
                     f".scale(20)"
                 )
 
         for i, (p1, p2) in enumerate(rays_meta):
             if p1 in coords and p2 in coords:
+                v1, v2 = _sanitize_var(p1), _sanitize_var(p2)
                 lines.append(
-                    f"        ray_{i} = Line(p_{p1}.get_center(), p_{p1}.get_center() + 15 * (p_{p2}.get_center() - p_{p1}.get_center()),"
+                    f"        ray_{i} = Line(p_{v1}.get_center(), p_{v1}.get_center() + 15 * (p_{v2}.get_center() - p_{v1}.get_center()),"
                     f" color=GRAY_C, stroke_width=2)"
                 )
 
         # ── Camera auto-fit group (Only for 2D) ──────────────────────────────
         if not is_3d:
-            all_dot_names = [f"p_{pid}" for pid in coords]
+            all_dot_names = [f"p_{_sanitize_var(pid)}" for pid in coords]
             all_names_str = ", ".join(all_dot_names)
             lines.append(f"        _all = VGroup({all_names_str})")
             lines.append("        self.camera.frame.set_width(max(_all.width * 2.0, 8))")
@@ -150,49 +151,54 @@ class RendererAgent:
         lines.append("")
 
         # ── Phase 1: Base polygon ─────────────────────────────────────────────
-        if len(base_ids) >= 3:
-            pts_str = ", ".join([f"p_{pid}.get_center()" for pid in base_ids])
+        if len(base_ids) >= 3 and not faces_meta:
+            pts_str = ", ".join([f"p_{_sanitize_var(pid)}.get_center()" for pid in base_ids])
             lines.append(f"        poly = Polygon({pts_str}, color=BLUE, fill_color=BLUE, fill_opacity=0.15)")
             lines.append("        self.play(Create(poly), run_time=1.5)")
         elif len(base_ids) == 2:
             p1, p2 = base_ids
-            lines.append(f"        base_line = Line(p_{p1}.get_center(), p_{p2}.get_center(), color=BLUE)")
+            v1, v2 = _sanitize_var(p1), _sanitize_var(p2)
+            lines.append(f"        base_line = Line(p_{v1}.get_center(), p_{v2}.get_center(), color=BLUE)")
             lines.append("        self.play(Create(base_line), run_time=1.0)")
 
         # Draw base points
         if base_ids:
-            base_dots_str = ", ".join([f"p_{pid}" for pid in base_ids])
+            base_dots_str = ", ".join([f"p_{_sanitize_var(pid)}" for pid in base_ids])
             lines.append(f"        self.play(FadeIn(VGroup({base_dots_str})), run_time=0.5)")
         lines.append("        self.wait(0.5)")
 
         # ── Phase 2: Auxiliary points and segments ────────────────────────────
         if derived_ids:
-            derived_dots_str = ", ".join([f"p_{pid}" for pid in derived_ids])
+            derived_dots_str = ", ".join([f"p_{_sanitize_var(pid)}" for pid in derived_ids])
             lines.append(f"        self.play(FadeIn(VGroup({derived_dots_str})), run_time=0.8)")
 
         # Segments from drawing_phases
         segment_lines = []
         for phase in drawing_phases:
-            if phase.get("phase") == 2:
-                for seg in phase.get("segments", []):
-                    if len(seg) == 2 and seg[0] in coords and seg[1] in coords:
-                        p1, p2 = seg[0], seg[1]
-                        seg_var = f"seg_{p1}_{p2}"
+            for seg in phase.get("segments", []):
+                if len(seg) == 2 and seg[0] in coords and seg[1] in coords:
+                    p1, p2 = seg[0], seg[1]
+                    v1, v2 = _sanitize_var(p1), _sanitize_var(p2)
+                    seg_var = f"seg_{v1}_{v2}"
+                    if seg_var not in segment_lines:
                         lines.append(
-                            f"        {seg_var} = Line(p_{p1}.get_center(), p_{p2}.get_center(),"
-                            f" color=YELLOW)"
+                            f"        {seg_var} = Line(p_{v1}.get_center(), p_{v2}.get_center(),"
+                            f" color={'BLUE' if phase.get('phase') == 1 else 'YELLOW'})"
                         )
                         segment_lines.append(seg_var)
 
         if segment_lines:
-            segs_str = ", ".join([f"Create({sv})" for sv in segment_lines])
-            lines.append(f"        self.play({segs_str}, run_time=1.2)")
+            segs_str = ", ".join([f"Create({sv})" for sv in segment_lines[:15]]) # limit batch for smooth animation
+            lines.append(f"        self.play({segs_str}, run_time=1.5)")
+            if len(segment_lines) > 15:
+                segs_str_2 = ", ".join([f"Create({sv})" for sv in segment_lines[15:]])
+                lines.append(f"        self.play({segs_str_2}, run_time=1.0)")
 
         if derived_ids or segment_lines:
             lines.append("        self.wait(0.5)")
 
         # ── Phase 3: All labels ───────────────────────────────────────────────
-        all_labels_str = ", ".join([f"l_{pid}" for pid in coords])
+        all_labels_str = ", ".join([f"l_{_sanitize_var(pid)}" for pid in coords])
         lines.append(f"        self.play(FadeIn(VGroup({all_labels_str})), run_time=0.8)")
 
         # ── Circles phase ─────────────────────────────────────────────────────
@@ -220,20 +226,17 @@ class RendererAgent:
         try:
             if os.getenv("MOCK_VIDEO") == "true":
                 logger.info(f"MOCK_VIDEO is true. Skipping Manim for job {job_id}")
-                # Create a dummy file if needed, or just return a path that exists
                 dummy_path = f"videos/{job_id}.mp4"
                 os.makedirs("videos", exist_ok=True)
                 with open(dummy_path, "wb") as f:
                     f.write(b"dummy video content")
                 return dummy_path
 
-            # Determine manim executable path
             manim_exe = "manim"
             venv_manim = os.path.join(os.getcwd(), "venv", "bin", "manim")
             if os.path.exists(venv_manim):
                 manim_exe = venv_manim
 
-            # Prepare environment with homebrew paths
             custom_env = os.environ.copy()
             brew_path = "/opt/homebrew/bin:/usr/local/bin"
             custom_env["PATH"] = f"{brew_path}:{custom_env.get('PATH', '')}"

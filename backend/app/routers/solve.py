@@ -249,11 +249,12 @@ async def render_video(
     Yêu cầu tạo video Manim từ trạng thái hình ảnh mới nhất của session.
     """
     supabase = get_supabase()
+    if not supabase:
+        raise HTTPException(status_code=503, detail="Database service currently unavailable.")
     
+    uid = str(user_id)
     # 1. Kiểm tra quyền sở hữu
-    res = supabase.table("sessions").select("id").eq("id", session_id).eq("user_id", user_id).execute()
-    if not res.data:
-        raise HTTPException(status_code=403, detail="Forbidden: You do not own this session.")
+    _assert_session_owner(supabase, session_id, user_id, uid, "owner_check_render_video")
 
     # 2. Tìm tin nhắn assistant có metadata hình học (cụ thể job_id hoặc mới nhất trong 10 tin nhắn gần nhất)
     msg_res = (
@@ -350,6 +351,8 @@ async def process_session_job(
                     "polygon_order": result.get("polygon_order", []),
                     "drawing_phases": result.get("drawing_phases", []),
                     "circles": result.get("circles", []),
+                    "solids": result.get("solids", []),
+                    "faces": result.get("faces", []),
                     "lines": result.get("lines", []),
                     "rays": result.get("rays", []),
                     "solution": result.get("solution"),
@@ -392,6 +395,8 @@ async def process_render_job(job_id: str, session_id: str, geometry_data: dict):
         "polygon_order": geometry_data.get("polygon_order", []),
         "drawing_phases": geometry_data.get("drawing_phases", []),
         "circles": geometry_data.get("circles", []),
+        "solids": geometry_data.get("solids", []),
+        "faces": geometry_data.get("faces", []),
         "lines": geometry_data.get("lines", []),
         "rays": geometry_data.get("rays", []),
         "semantic": geometry_data.get("semantic", {}),

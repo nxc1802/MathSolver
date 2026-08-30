@@ -4,7 +4,7 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { getApiBaseUrl } from "@/lib/api-config";
-import { Loader2 } from "lucide-react";
+import { Compass, AlertCircle, RotateCcw, LogOut } from "lucide-react";
 
 const FETCH_TIMEOUT_MS = 8000;
 
@@ -26,7 +26,7 @@ async function fetchWithTimeout(
  * Root page redirects to the most recent session or creates a new one.
  */
 export default function IndexPage() {
-  const { user, session: userSession, loading } = useAuth();
+  const { user, session: userSession, loading, signOut } = useAuth();
   const router = useRouter();
 
   const [error, setError] = useState<string | null>(null);
@@ -97,7 +97,7 @@ export default function IndexPage() {
         if (cancelled) return;
         console.error("Failed to initialize session:", err);
         setError(
-          "Không thể kết nối tới máy chủ giải toán. Vui lòng kiểm tra lại URL API (phải dùng https:// trên Vercel)."
+          "Không thể kết nối tới máy chủ giải toán. Vui lòng kiểm tra lại kết nối mạng hoặc máy chủ."
         );
       }
     };
@@ -106,32 +106,34 @@ export default function IndexPage() {
     return () => {
       cancelled = true;
     };
-  }, [user?.id, loading, router, retryKey]);
-
-  const { signOut } = useAuth();
+  }, [user, loading, router, retryKey]);
 
   if (error) {
     return (
-      <div className="h-screen w-screen flex flex-col items-center justify-center bg-[#0a0a0f] text-center px-4">
-        <div className="bg-red-500/10 border border-red-500/20 p-8 rounded-3xl max-w-md">
-          <div className="w-12 h-12 bg-red-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Loader2 className="w-6 h-6 text-red-500" />
+      <div className="h-screen w-screen flex flex-col items-center justify-center bg-[var(--background)] text-center px-4 select-none">
+        <div className="bg-[var(--card-bg)] border border-red-500/30 p-8 rounded-3xl max-w-md shadow-2xl space-y-4">
+          <div className="w-12 h-12 bg-red-500/10 border border-red-500/20 rounded-2xl flex items-center justify-center mx-auto text-red-400">
+            <AlertCircle className="w-6 h-6" />
           </div>
-          <h2 className="text-xl font-bold text-white mb-2">Lỗi kết nối</h2>
-          <p className="text-zinc-400 text-sm mb-6 leading-relaxed">{error}</p>
-          <div className="flex flex-col gap-3">
+          <div>
+            <h2 className="text-base font-bold text-[var(--text-primary)]">Lỗi kết nối máy chủ</h2>
+            <p className="text-[var(--text-muted)] text-xs mt-1.5 leading-relaxed">{error}</p>
+          </div>
+          <div className="flex flex-col gap-2 pt-2">
             <button
               type="button"
               onClick={retryInit}
-              className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-xl transition-all"
+              className="inline-flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold py-2.5 px-4 rounded-xl text-xs transition-all active:scale-95 shadow-md"
             >
-              Thử lại
+              <RotateCcw className="w-3.5 h-3.5" />
+              Thử kết nối lại
             </button>
             <button
               type="button"
               onClick={() => signOut()}
-              className="text-zinc-500 hover:text-white text-sm font-medium transition-all"
+              className="inline-flex items-center justify-center gap-2 text-[var(--text-muted)] hover:text-white text-xs font-medium py-2 rounded-xl transition-all"
             >
+              <LogOut className="w-3.5 h-3.5" />
               Đăng xuất và quay lại
             </button>
           </div>
@@ -141,12 +143,19 @@ export default function IndexPage() {
   }
 
   return (
-    <div className="h-screen w-screen flex items-center justify-center bg-[#0a0a0f]">
+    <div className="h-screen w-screen flex flex-col items-center justify-center bg-[var(--background)] select-none">
       <div className="flex flex-col items-center gap-4">
-        <Loader2 className="w-10 h-10 animate-spin text-indigo-500" />
-        <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest animate-pulse">
-          Đang khởi tạo không gian giải toán...
-        </p>
+        <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 border border-indigo-500/25 flex items-center justify-center shadow-lg shadow-indigo-500/10">
+          <Compass className="w-6 h-6 text-indigo-400 animate-spin" />
+        </div>
+        <div className="text-center">
+          <p className="text-xs font-mono font-medium text-[var(--text-secondary)] tracking-wider">
+            MathSolver Studio v5.1
+          </p>
+          <p className="text-[10px] font-mono text-[var(--text-muted)] uppercase tracking-widest mt-1 animate-pulse">
+            Đang khởi tạo không gian làm việc...
+          </p>
+        </div>
       </div>
     </div>
   );

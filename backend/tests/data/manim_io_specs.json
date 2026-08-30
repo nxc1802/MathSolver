@@ -1,0 +1,727 @@
+{
+  "case_1": {
+    "spec": {
+      "problem": "Cho hình chóp S.ABCD có đáy ABCD là hình vuông cạnh 10. Chiều cao SO vuông góc với đáy tại tâm O, SO=15. Tính thể tích khối chóp S.ABCD.",
+      "solution_steps": [
+        "Bước 1: Tính diện tích đáy ABCD: S_ABCD = a^2 = 10^2 = 100.",
+        "Bước 2: Xác định chiều cao khối chóp: SO = 15.",
+        "Bước 3: Áp dụng công thức thể tích khối chóp: V = (1/3) * S_ABCD * SO = (1/3) * 100 * 15 = 500."
+      ],
+      "geometry": [
+        {
+          "type": "point_3d",
+          "label": "S",
+          "properties": {
+            "coordinates": [
+              0.0,
+              0.0,
+              15.0
+            ]
+          }
+        },
+        {
+          "type": "point_3d",
+          "label": "A",
+          "properties": {
+            "coordinates": [
+              -5.0,
+              -5.0,
+              0.0
+            ]
+          }
+        },
+        {
+          "type": "point_3d",
+          "label": "B",
+          "properties": {
+            "coordinates": [
+              5.0,
+              -5.0,
+              0.0
+            ]
+          }
+        },
+        {
+          "type": "point_3d",
+          "label": "C",
+          "properties": {
+            "coordinates": [
+              5.0,
+              5.0,
+              0.0
+            ]
+          }
+        },
+        {
+          "type": "point_3d",
+          "label": "D",
+          "properties": {
+            "coordinates": [
+              -5.0,
+              5.0,
+              0.0
+            ]
+          }
+        },
+        {
+          "type": "point_3d",
+          "label": "O",
+          "properties": {
+            "coordinates": [
+              0.0,
+              0.0,
+              0.0
+            ]
+          }
+        },
+        {
+          "type": "pyramid",
+          "label": "pyramid_S_A_B_C_D",
+          "properties": {
+            "type": "pyramid",
+            "apex": "S",
+            "base": [
+              "A",
+              "B",
+              "C",
+              "D"
+            ],
+            "points": [
+              "S",
+              "A",
+              "B",
+              "C",
+              "D"
+            ]
+          }
+        }
+      ],
+      "animations": [
+        {
+          "action": "draw",
+          "targets": [
+            "A",
+            "B",
+            "C",
+            "D",
+            "AB",
+            "BC",
+            "CD",
+            "DA"
+          ],
+          "narration": "Dựng Hình cơ bản: A, B, C, D.",
+          "duration_hint": 2.5
+        },
+        {
+          "action": "draw",
+          "targets": [
+            "S",
+            "O",
+            "SA",
+            "SB",
+            "SC",
+            "SD"
+          ],
+          "narration": "Dựng Điểm và đoạn phụ: S, O.",
+          "duration_hint": 2.5
+        },
+        {
+          "action": "rotate_camera",
+          "targets": [
+            "scene_3d"
+          ],
+          "narration": "Quan sát khối đa diện trong không gian 3 chiều.",
+          "duration_hint": 3.0
+        },
+        {
+          "action": "write",
+          "targets": [
+            "step_1"
+          ],
+          "narration": "Bước 1: Tính diện tích đáy ABCD: S_ABCD = a^2 = 10^2 = 100.",
+          "duration_hint": 3.5
+        },
+        {
+          "action": "write",
+          "targets": [
+            "step_2"
+          ],
+          "narration": "Bước 2: Xác định chiều cao khối chóp: SO = 15.",
+          "duration_hint": 3.5
+        },
+        {
+          "action": "write",
+          "targets": [
+            "step_3"
+          ],
+          "narration": "Bước 3: Áp dụng công thức thể tích khối chóp: V = (1/3) * S_ABCD * SO = (1/3) * 100 * 15 = 500.",
+          "duration_hint": 3.5
+        }
+      ],
+      "output_config": {
+        "quality": "720p",
+        "format": "mp4",
+        "language": "vi"
+      }
+    },
+    "prompt": "Chủ đề / Đề bài: Cho hình chóp S.ABCD có đáy ABCD là hình vuông cạnh 10. Chiều cao SO vuông góc với đáy tại tâm O, SO=15. Tính thể tích khối chóp S.ABCD.\nCác bước giải thích / chứng minh chi tiết:\n  1. Bước 1: Tính diện tích đáy ABCD: S_ABCD = a^2 = 10^2 = 100.\n  2. Bước 2: Xác định chiều cao khối chóp: SO = 15.\n  3. Bước 3: Áp dụng công thức thể tích khối chóp: V = (1/3) * S_ABCD * SO = (1/3) * 100 * 15 = 500.\nCác đối tượng hình học / tọa độ giải được:\n  - point_3d (S) - thuộc tính: {'coordinates': [0.0, 0.0, 15.0]}\n  - point_3d (A) - thuộc tính: {'coordinates': [-5.0, -5.0, 0.0]}\n  - point_3d (B) - thuộc tính: {'coordinates': [5.0, -5.0, 0.0]}\n  - point_3d (C) - thuộc tính: {'coordinates': [5.0, 5.0, 0.0]}\n  - point_3d (D) - thuộc tính: {'coordinates': [-5.0, 5.0, 0.0]}\n  - point_3d (O) - thuộc tính: {'coordinates': [0.0, 0.0, 0.0]}\n  - pyramid (pyramid_S_A_B_C_D) - thuộc tính: {'type': 'pyramid', 'apex': 'S', 'base': ['A', 'B', 'C', 'D'], 'points': ['S', 'A', 'B', 'C', 'D']}\nChỉ dẫn hoạt họa (animation beats):\n  - Beat 1: draw [đối tượng: A, B, C, D, AB, BC, CD, DA] | Lời thoại: 'Dựng Hình cơ bản: A, B, C, D.'\n  - Beat 2: draw [đối tượng: S, O, SA, SB, SC, SD] | Lời thoại: 'Dựng Điểm và đoạn phụ: S, O.'\n  - Beat 3: rotate_camera [đối tượng: scene_3d] | Lời thoại: 'Quan sát khối đa diện trong không gian 3 chiều.'\n  - Beat 4: write [đối tượng: step_1] | Lời thoại: 'Bước 1: Tính diện tích đáy ABCD: S_ABCD = a^2 = 10^2 = 100.'\n  - Beat 5: write [đối tượng: step_2] | Lời thoại: 'Bước 2: Xác định chiều cao khối chóp: SO = 15.'\n  - Beat 6: write [đối tượng: step_3] | Lời thoại: 'Bước 3: Áp dụng công thức thể tích khối chóp: V = (1/3) * S_ABCD * SO = (1/3) * 100 * 15 = 500.'"
+  },
+  "case_2": {
+    "spec": {
+      "problem": "Cho hình chóp tam giác đều S.ABC có cạnh đáy bằng 6, chiều cao SO = 8 vuông góc với đáy tại trọng tâm O của tam giác ABC. Tính thể tích khối chóp S.ABC.",
+      "solution_steps": [
+        "Bước 1: Tính diện tích đáy tam giác đều ABC: S_ABC = (a^2 * sqrt(3)) / 4 = (6^2 * sqrt(3)) / 4 = 9*sqrt(3).",
+        "Bước 2: Xác định chiều cao SO = 8.",
+        "Bước 3: Áp dụng công thức thể tích khối chóp: V = (1/3) * S_ABC * SO = (1/3) * 9*sqrt(3) * 8 = 24*sqrt(3)."
+      ],
+      "geometry": [
+        {
+          "type": "point_3d",
+          "label": "S",
+          "properties": {
+            "coordinates": [
+              0.0,
+              0.0,
+              8.0
+            ]
+          }
+        },
+        {
+          "type": "point_3d",
+          "label": "A",
+          "properties": {
+            "coordinates": [
+              -3.0,
+              -1.732,
+              0.0
+            ]
+          }
+        },
+        {
+          "type": "point_3d",
+          "label": "B",
+          "properties": {
+            "coordinates": [
+              3.0,
+              -1.732,
+              0.0
+            ]
+          }
+        },
+        {
+          "type": "point_3d",
+          "label": "C",
+          "properties": {
+            "coordinates": [
+              0.0,
+              3.464,
+              0.0
+            ]
+          }
+        },
+        {
+          "type": "point_3d",
+          "label": "O",
+          "properties": {
+            "coordinates": [
+              0.0,
+              0.0,
+              0.0
+            ]
+          }
+        },
+        {
+          "type": "pyramid",
+          "label": "pyramid_S_A_B_C",
+          "properties": {
+            "type": "pyramid",
+            "apex": "S",
+            "base": [
+              "A",
+              "B",
+              "C"
+            ],
+            "points": [
+              "S",
+              "A",
+              "B",
+              "C"
+            ]
+          }
+        }
+      ],
+      "animations": [
+        {
+          "action": "draw",
+          "targets": [
+            "A",
+            "B",
+            "C",
+            "AB",
+            "BC",
+            "CA"
+          ],
+          "narration": "Dựng Hình cơ bản: A, B, C.",
+          "duration_hint": 2.5
+        },
+        {
+          "action": "draw",
+          "targets": [
+            "S",
+            "O",
+            "SA",
+            "SB",
+            "SC"
+          ],
+          "narration": "Dựng Điểm và đoạn phụ: S, O.",
+          "duration_hint": 2.5
+        },
+        {
+          "action": "rotate_camera",
+          "targets": [
+            "scene_3d"
+          ],
+          "narration": "Quan sát khối đa diện trong không gian 3 chiều.",
+          "duration_hint": 3.0
+        },
+        {
+          "action": "write",
+          "targets": [
+            "step_1"
+          ],
+          "narration": "Bước 1: Tính diện tích đáy tam giác đều ABC: S_ABC = (a^2 * sqrt(3)) / 4 = (6^2 * sqrt(3)) / 4 = 9*sqrt(3).",
+          "duration_hint": 3.5
+        },
+        {
+          "action": "write",
+          "targets": [
+            "step_2"
+          ],
+          "narration": "Bước 2: Xác định chiều cao SO = 8.",
+          "duration_hint": 3.5
+        },
+        {
+          "action": "write",
+          "targets": [
+            "step_3"
+          ],
+          "narration": "Bước 3: Áp dụng công thức thể tích khối chóp: V = (1/3) * S_ABC * SO = (1/3) * 9*sqrt(3) * 8 = 24*sqrt(3).",
+          "duration_hint": 3.5
+        }
+      ],
+      "output_config": {
+        "quality": "720p",
+        "format": "mp4",
+        "language": "vi"
+      }
+    },
+    "prompt": "Chủ đề / Đề bài: Cho hình chóp tam giác đều S.ABC có cạnh đáy bằng 6, chiều cao SO = 8 vuông góc với đáy tại trọng tâm O của tam giác ABC. Tính thể tích khối chóp S.ABC.\nCác bước giải thích / chứng minh chi tiết:\n  1. Bước 1: Tính diện tích đáy tam giác đều ABC: S_ABC = (a^2 * sqrt(3)) / 4 = (6^2 * sqrt(3)) / 4 = 9*sqrt(3).\n  2. Bước 2: Xác định chiều cao SO = 8.\n  3. Bước 3: Áp dụng công thức thể tích khối chóp: V = (1/3) * S_ABC * SO = (1/3) * 9*sqrt(3) * 8 = 24*sqrt(3).\nCác đối tượng hình học / tọa độ giải được:\n  - point_3d (S) - thuộc tính: {'coordinates': [0.0, 0.0, 8.0]}\n  - point_3d (A) - thuộc tính: {'coordinates': [-3.0, -1.732, 0.0]}\n  - point_3d (B) - thuộc tính: {'coordinates': [3.0, -1.732, 0.0]}\n  - point_3d (C) - thuộc tính: {'coordinates': [0.0, 3.464, 0.0]}\n  - point_3d (O) - thuộc tính: {'coordinates': [0.0, 0.0, 0.0]}\n  - pyramid (pyramid_S_A_B_C) - thuộc tính: {'type': 'pyramid', 'apex': 'S', 'base': ['A', 'B', 'C'], 'points': ['S', 'A', 'B', 'C']}\nChỉ dẫn hoạt họa (animation beats):\n  - Beat 1: draw [đối tượng: A, B, C, AB, BC, CA] | Lời thoại: 'Dựng Hình cơ bản: A, B, C.'\n  - Beat 2: draw [đối tượng: S, O, SA, SB, SC] | Lời thoại: 'Dựng Điểm và đoạn phụ: S, O.'\n  - Beat 3: rotate_camera [đối tượng: scene_3d] | Lời thoại: 'Quan sát khối đa diện trong không gian 3 chiều.'\n  - Beat 4: write [đối tượng: step_1] | Lời thoại: 'Bước 1: Tính diện tích đáy tam giác đều ABC: S_ABC = (a^2 * sqrt(3)) / 4 = (6^2 * sqrt(3)) / 4 = 9*sqrt(3).'\n  - Beat 5: write [đối tượng: step_2] | Lời thoại: 'Bước 2: Xác định chiều cao SO = 8.'\n  - Beat 6: write [đối tượng: step_3] | Lời thoại: 'Bước 3: Áp dụng công thức thể tích khối chóp: V = (1/3) * S_ABC * SO = (1/3) * 9*sqrt(3) * 8 = 24*sqrt(3).'"
+  },
+  "case_3": {
+    "spec": {
+      "problem": "Cho hình chóp cụt tứ giác đều ABCD.A1B1C1D1 có cạnh đáy dưới bằng 8, cạnh đáy trên bằng 4, chiều cao giữa hai đáy h=6. Tính thể tích khối chóp cụt.",
+      "solution_steps": [
+        "Bước 1: Tính diện tích đáy dưới S1 = a^2 = 8^2 = 64.",
+        "Bước 2: Tính diện tích đáy trên S2 = a1^2 = 4^2 = 16.",
+        "Bước 3: Áp dụng công thức thể tích khối chóp cụt: V = (1/3) * h * (S1 + S2 + sqrt(S1 * S2)) = (1/3) * 6 * (64 + 16 + sqrt(64 * 16)) = 224."
+      ],
+      "geometry": [
+        {
+          "type": "point_3d",
+          "label": "A",
+          "properties": {
+            "coordinates": [
+              -4.0,
+              -4.0,
+              0.0
+            ]
+          }
+        },
+        {
+          "type": "point_3d",
+          "label": "B",
+          "properties": {
+            "coordinates": [
+              4.0,
+              -4.0,
+              0.0
+            ]
+          }
+        },
+        {
+          "type": "point_3d",
+          "label": "C",
+          "properties": {
+            "coordinates": [
+              4.0,
+              4.0,
+              0.0
+            ]
+          }
+        },
+        {
+          "type": "point_3d",
+          "label": "D",
+          "properties": {
+            "coordinates": [
+              -4.0,
+              4.0,
+              0.0
+            ]
+          }
+        },
+        {
+          "type": "point_3d",
+          "label": "A1",
+          "properties": {
+            "coordinates": [
+              -2.0,
+              -2.0,
+              6.0
+            ]
+          }
+        },
+        {
+          "type": "point_3d",
+          "label": "B1",
+          "properties": {
+            "coordinates": [
+              2.0,
+              -2.0,
+              6.0
+            ]
+          }
+        },
+        {
+          "type": "point_3d",
+          "label": "C1",
+          "properties": {
+            "coordinates": [
+              2.0,
+              2.0,
+              6.0
+            ]
+          }
+        },
+        {
+          "type": "point_3d",
+          "label": "D1",
+          "properties": {
+            "coordinates": [
+              -2.0,
+              2.0,
+              6.0
+            ]
+          }
+        },
+        {
+          "type": "point_3d",
+          "label": "O",
+          "properties": {
+            "coordinates": [
+              0.0,
+              0.0,
+              0.0
+            ]
+          }
+        },
+        {
+          "type": "point_3d",
+          "label": "O1",
+          "properties": {
+            "coordinates": [
+              0.0,
+              0.0,
+              6.0
+            ]
+          }
+        },
+        {
+          "type": "frustum",
+          "label": "frustum_A_B_C_D_A1_B1_C1_D1",
+          "properties": {
+            "type": "frustum",
+            "points": [
+              "A",
+              "B",
+              "C",
+              "D",
+              "A1",
+              "B1",
+              "C1",
+              "D1"
+            ]
+          }
+        }
+      ],
+      "animations": [
+        {
+          "action": "draw",
+          "targets": [
+            "A",
+            "B",
+            "C",
+            "D",
+            "AB",
+            "BC",
+            "CD",
+            "DA"
+          ],
+          "narration": "Dựng Đáy dưới: A, B, C, D.",
+          "duration_hint": 2.5
+        },
+        {
+          "action": "draw",
+          "targets": [
+            "A1",
+            "B1",
+            "C1",
+            "D1",
+            "O",
+            "O1",
+            "A1B1",
+            "B1C1",
+            "C1D1",
+            "D1A1",
+            "AA1",
+            "BB1",
+            "CC1",
+            "DD1",
+            "OO1"
+          ],
+          "narration": "Dựng Đáy trên và cạnh bên: A1, B1, C1, D1, O, O1.",
+          "duration_hint": 2.5
+        },
+        {
+          "action": "rotate_camera",
+          "targets": [
+            "scene_3d"
+          ],
+          "narration": "Quan sát khối đa diện trong không gian 3 chiều.",
+          "duration_hint": 3.0
+        },
+        {
+          "action": "write",
+          "targets": [
+            "step_1"
+          ],
+          "narration": "Bước 1: Tính diện tích đáy dưới S1 = a^2 = 8^2 = 64.",
+          "duration_hint": 3.5
+        },
+        {
+          "action": "write",
+          "targets": [
+            "step_2"
+          ],
+          "narration": "Bước 2: Tính diện tích đáy trên S2 = a1^2 = 4^2 = 16.",
+          "duration_hint": 3.5
+        },
+        {
+          "action": "write",
+          "targets": [
+            "step_3"
+          ],
+          "narration": "Bước 3: Áp dụng công thức thể tích khối chóp cụt: V = (1/3) * h * (S1 + S2 + sqrt(S1 * S2)) = (1/3) * 6 * (64 + 16 + sqrt(64 * 16)) = 224.",
+          "duration_hint": 3.5
+        }
+      ],
+      "output_config": {
+        "quality": "720p",
+        "format": "mp4",
+        "language": "vi"
+      }
+    },
+    "prompt": "Chủ đề / Đề bài: Cho hình chóp cụt tứ giác đều ABCD.A1B1C1D1 có cạnh đáy dưới bằng 8, cạnh đáy trên bằng 4, chiều cao giữa hai đáy h=6. Tính thể tích khối chóp cụt.\nCác bước giải thích / chứng minh chi tiết:\n  1. Bước 1: Tính diện tích đáy dưới S1 = a^2 = 8^2 = 64.\n  2. Bước 2: Tính diện tích đáy trên S2 = a1^2 = 4^2 = 16.\n  3. Bước 3: Áp dụng công thức thể tích khối chóp cụt: V = (1/3) * h * (S1 + S2 + sqrt(S1 * S2)) = (1/3) * 6 * (64 + 16 + sqrt(64 * 16)) = 224.\nCác đối tượng hình học / tọa độ giải được:\n  - point_3d (A) - thuộc tính: {'coordinates': [-4.0, -4.0, 0.0]}\n  - point_3d (B) - thuộc tính: {'coordinates': [4.0, -4.0, 0.0]}\n  - point_3d (C) - thuộc tính: {'coordinates': [4.0, 4.0, 0.0]}\n  - point_3d (D) - thuộc tính: {'coordinates': [-4.0, 4.0, 0.0]}\n  - point_3d (A1) - thuộc tính: {'coordinates': [-2.0, -2.0, 6.0]}\n  - point_3d (B1) - thuộc tính: {'coordinates': [2.0, -2.0, 6.0]}\n  - point_3d (C1) - thuộc tính: {'coordinates': [2.0, 2.0, 6.0]}\n  - point_3d (D1) - thuộc tính: {'coordinates': [-2.0, 2.0, 6.0]}\n  - point_3d (O) - thuộc tính: {'coordinates': [0.0, 0.0, 0.0]}\n  - point_3d (O1) - thuộc tính: {'coordinates': [0.0, 0.0, 6.0]}\n  - frustum (frustum_A_B_C_D_A1_B1_C1_D1) - thuộc tính: {'type': 'frustum', 'points': ['A', 'B', 'C', 'D', 'A1', 'B1', 'C1', 'D1']}\nChỉ dẫn hoạt họa (animation beats):\n  - Beat 1: draw [đối tượng: A, B, C, D, AB, BC, CD, DA] | Lời thoại: 'Dựng Đáy dưới: A, B, C, D.'\n  - Beat 2: draw [đối tượng: A1, B1, C1, D1, O, O1, A1B1, B1C1, C1D1, D1A1, AA1, BB1, CC1, DD1, OO1] | Lời thoại: 'Dựng Đáy trên và cạnh bên: A1, B1, C1, D1, O, O1.'\n  - Beat 3: rotate_camera [đối tượng: scene_3d] | Lời thoại: 'Quan sát khối đa diện trong không gian 3 chiều.'\n  - Beat 4: write [đối tượng: step_1] | Lời thoại: 'Bước 1: Tính diện tích đáy dưới S1 = a^2 = 8^2 = 64.'\n  - Beat 5: write [đối tượng: step_2] | Lời thoại: 'Bước 2: Tính diện tích đáy trên S2 = a1^2 = 4^2 = 16.'\n  - Beat 6: write [đối tượng: step_3] | Lời thoại: 'Bước 3: Áp dụng công thức thể tích khối chóp cụt: V = (1/3) * h * (S1 + S2 + sqrt(S1 * S2)) = (1/3) * 6 * (64 + 16 + sqrt(64 * 16)) = 224.'"
+  },
+  "case_4": {
+    "spec": {
+      "problem": "Cho hình hộp chữ nhật ABCD.A'B'C'D' có AB=4, AD=3, AA'=5. Tính độ dài đường chéo AC'.",
+      "solution_steps": [
+        "Bước 1: Tính bình phương độ dài đường chéo đáy: AC^2 = AB^2 + AD^2 = 4^2 + 3^2 = 25.",
+        "Bước 2: Áp dụng định lý Pythagoras trong tam giác vuông ACC': AC'^2 = AC^2 + CC'^2 = 25 + 5^2 = 50.",
+        "Bước 3: Tính độ dài đường chéo không gian: AC' = sqrt(50) = 5*sqrt(2) ≈ 7.07."
+      ],
+      "geometry": [
+        {
+          "type": "point_3d",
+          "label": "A",
+          "properties": {
+            "coordinates": [
+              0.0,
+              0.0,
+              0.0
+            ]
+          }
+        },
+        {
+          "type": "point_3d",
+          "label": "B",
+          "properties": {
+            "coordinates": [
+              4.0,
+              0.0,
+              0.0
+            ]
+          }
+        },
+        {
+          "type": "point_3d",
+          "label": "C",
+          "properties": {
+            "coordinates": [
+              4.0,
+              3.0,
+              0.0
+            ]
+          }
+        },
+        {
+          "type": "point_3d",
+          "label": "D",
+          "properties": {
+            "coordinates": [
+              0.0,
+              3.0,
+              0.0
+            ]
+          }
+        },
+        {
+          "type": "point_3d",
+          "label": "A_prime",
+          "properties": {
+            "coordinates": [
+              0.0,
+              0.0,
+              5.0
+            ]
+          }
+        },
+        {
+          "type": "point_3d",
+          "label": "B_prime",
+          "properties": {
+            "coordinates": [
+              4.0,
+              0.0,
+              5.0
+            ]
+          }
+        },
+        {
+          "type": "point_3d",
+          "label": "C_prime",
+          "properties": {
+            "coordinates": [
+              4.0,
+              3.0,
+              5.0
+            ]
+          }
+        },
+        {
+          "type": "point_3d",
+          "label": "D_prime",
+          "properties": {
+            "coordinates": [
+              0.0,
+              3.0,
+              5.0
+            ]
+          }
+        },
+        {
+          "type": "cuboid",
+          "label": "cuboid_A_B_C_D_A_prime_B_prime_C_prime_D_prime",
+          "properties": {
+            "type": "cuboid",
+            "points": [
+              "A",
+              "B",
+              "C",
+              "D",
+              "A_prime",
+              "B_prime",
+              "C_prime",
+              "D_prime"
+            ]
+          }
+        }
+      ],
+      "animations": [
+        {
+          "action": "draw",
+          "targets": [
+            "A",
+            "B",
+            "C",
+            "D",
+            "AB",
+            "BC",
+            "CD",
+            "DA"
+          ],
+          "narration": "Dựng Đáy dưới ABCD: A, B, C, D.",
+          "duration_hint": 2.5
+        },
+        {
+          "action": "draw",
+          "targets": [
+            "A_prime",
+            "B_prime",
+            "C_prime",
+            "D_prime",
+            "A_primeB_prime",
+            "B_primeC_prime",
+            "C_primeD_prime",
+            "D_primeA_prime",
+            "AA_prime",
+            "BB_prime",
+            "CC_prime",
+            "DD_prime"
+          ],
+          "narration": "Dựng Đáy trên và cạnh bên: A_prime, B_prime, C_prime, D_prime.",
+          "duration_hint": 2.5
+        },
+        {
+          "action": "rotate_camera",
+          "targets": [
+            "scene_3d"
+          ],
+          "narration": "Quan sát khối đa diện trong không gian 3 chiều.",
+          "duration_hint": 3.0
+        },
+        {
+          "action": "write",
+          "targets": [
+            "step_1"
+          ],
+          "narration": "Bước 1: Tính bình phương độ dài đường chéo đáy: AC^2 = AB^2 + AD^2 = 4^2 + 3^2 = 25.",
+          "duration_hint": 3.5
+        },
+        {
+          "action": "write",
+          "targets": [
+            "step_2"
+          ],
+          "narration": "Bước 2: Áp dụng định lý Pythagoras trong tam giác vuông ACC': AC'^2 = AC^2 + CC'^2 = 25 + 5^2 = 50.",
+          "duration_hint": 3.5
+        },
+        {
+          "action": "write",
+          "targets": [
+            "step_3"
+          ],
+          "narration": "Bước 3: Tính độ dài đường chéo không gian: AC' = sqrt(50) = 5*sqrt(2) ≈ 7.07.",
+          "duration_hint": 3.5
+        }
+      ],
+      "output_config": {
+        "quality": "720p",
+        "format": "mp4",
+        "language": "vi"
+      }
+    },
+    "prompt": "Chủ đề / Đề bài: Cho hình hộp chữ nhật ABCD.A'B'C'D' có AB=4, AD=3, AA'=5. Tính độ dài đường chéo AC'.\nCác bước giải thích / chứng minh chi tiết:\n  1. Bước 1: Tính bình phương độ dài đường chéo đáy: AC^2 = AB^2 + AD^2 = 4^2 + 3^2 = 25.\n  2. Bước 2: Áp dụng định lý Pythagoras trong tam giác vuông ACC': AC'^2 = AC^2 + CC'^2 = 25 + 5^2 = 50.\n  3. Bước 3: Tính độ dài đường chéo không gian: AC' = sqrt(50) = 5*sqrt(2) ≈ 7.07.\nCác đối tượng hình học / tọa độ giải được:\n  - point_3d (A) - thuộc tính: {'coordinates': [0.0, 0.0, 0.0]}\n  - point_3d (B) - thuộc tính: {'coordinates': [4.0, 0.0, 0.0]}\n  - point_3d (C) - thuộc tính: {'coordinates': [4.0, 3.0, 0.0]}\n  - point_3d (D) - thuộc tính: {'coordinates': [0.0, 3.0, 0.0]}\n  - point_3d (A_prime) - thuộc tính: {'coordinates': [0.0, 0.0, 5.0]}\n  - point_3d (B_prime) - thuộc tính: {'coordinates': [4.0, 0.0, 5.0]}\n  - point_3d (C_prime) - thuộc tính: {'coordinates': [4.0, 3.0, 5.0]}\n  - point_3d (D_prime) - thuộc tính: {'coordinates': [0.0, 3.0, 5.0]}\n  - cuboid (cuboid_A_B_C_D_A_prime_B_prime_C_prime_D_prime) - thuộc tính: {'type': 'cuboid', 'points': ['A', 'B', 'C', 'D', 'A_prime', 'B_prime', 'C_prime', 'D_prime']}\nChỉ dẫn hoạt họa (animation beats):\n  - Beat 1: draw [đối tượng: A, B, C, D, AB, BC, CD, DA] | Lời thoại: 'Dựng Đáy dưới ABCD: A, B, C, D.'\n  - Beat 2: draw [đối tượng: A_prime, B_prime, C_prime, D_prime, A_primeB_prime, B_primeC_prime, C_primeD_prime, D_primeA_prime, AA_prime, BB_prime, CC_prime, DD_prime] | Lời thoại: 'Dựng Đáy trên và cạnh bên: A_prime, B_prime, C_prime, D_prime.'\n  - Beat 3: rotate_camera [đối tượng: scene_3d] | Lời thoại: 'Quan sát khối đa diện trong không gian 3 chiều.'\n  - Beat 4: write [đối tượng: step_1] | Lời thoại: 'Bước 1: Tính bình phương độ dài đường chéo đáy: AC^2 = AB^2 + AD^2 = 4^2 + 3^2 = 25.'\n  - Beat 5: write [đối tượng: step_2] | Lời thoại: 'Bước 2: Áp dụng định lý Pythagoras trong tam giác vuông ACC': AC'^2 = AC^2 + CC'^2 = 25 + 5^2 = 50.'\n  - Beat 6: write [đối tượng: step_3] | Lời thoại: 'Bước 3: Tính độ dài đường chéo không gian: AC' = sqrt(50) = 5*sqrt(2) ≈ 7.07.'"
+  }
+}

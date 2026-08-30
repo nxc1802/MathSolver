@@ -1,3 +1,4 @@
+import json
 import sympy as sp
 import numpy as np
 import logging
@@ -19,7 +20,10 @@ class GeometryEngine:
         # ── Separate metadata constraints from real ones ──────────────────────
         polygon_order: List[str] = []
         circles_meta: List[Dict] = []
+        solids_meta: List[Dict] = []
         segments_meta: List[List[str]] = []
+        lines_ext: List[List[str]] = []
+        rays_ext: List[List[str]] = []
         real_constraints: List[Constraint] = []
 
         for c in constraints:
@@ -30,15 +34,31 @@ class GeometryEngine:
             elif c.type == 'circle':
                 circles_meta.append({"center": c.targets[0], "radius": float(c.value)})
                 real_constraints.append(c)
+            elif c.type == 'sphere':
+                solids_meta.append({"type": "sphere", "center": c.targets[0], "radius": float(c.value)})
+                real_constraints.append(c)
+            elif c.type == 'cone':
+                if len(c.targets) >= 2:
+                    solids_meta.append({"type": "cone", "apex": c.targets[0], "center": c.targets[1], "radius": float(c.value)})
+                real_constraints.append(c)
+            elif c.type == 'cylinder':
+                if len(c.targets) >= 2:
+                    solids_meta.append({"type": "cylinder", "center1": c.targets[0], "center2": c.targets[1], "radius": float(c.value)})
+                real_constraints.append(c)
+            elif c.type == 'solids_metadata':
+                for s_str in c.targets:
+                    try:
+                        s_data = json.loads(s_str)
+                        if s_data not in solids_meta:
+                            solids_meta.append(s_data)
+                    except Exception:
+                        pass
             elif c.type == 'segment':
                 segments_meta.append(list(c.targets))
-                # don't add to equations — pure drawing annotation
             elif c.type == 'lines_metadata':
-                lines_meta_list = [t.split(',') for t in c.targets]
-                real_constraints.append(c) # for passing to builder? or just keep here
+                lines_ext = [t.split(',') for t in c.targets]
             elif c.type == 'rays_metadata':
-                rays_meta_list = [t.split(',') for t in c.targets]
-                real_constraints.append(c)
+                rays_ext = [t.split(',') for t in c.targets]
             else:
                 real_constraints.append(c)
 
@@ -46,7 +66,6 @@ class GeometryEngine:
         point_vars: Dict[str, tuple] = {}
         equations = []
 
-        # Convert to list for stable indexing and to handle both Dict and List inputs
         pt_list = list(points.values()) if isinstance(points, dict) else points
 
         for p in pt_list:
@@ -55,20 +74,20 @@ class GeometryEngine:
             z = sp.Symbol(f"{p.id}_z")
             point_vars[p.id] = (x, y, z)
             logger.debug(f"[GeometryEngine]   Symbol: ({p.id}_x, {p.id}_y, {p.id}_z)")
-            
+
             # If 2D problem, pin all z to 0 immediately
             if not is_3d:
                 equations.append(z)
 
         # ── Anchor logic to fix translation + rotation DOF ────────────────────
-        # Skip anchoring if points already have explicit coordinates that fix DOFs
-        
-        if len(pt_list) > 0:
+        # ONLY anchor if NO point has explicit coordinates
+        has_explicit = any(p.x is not None or p.y is not None for p in pt_list)
+        if not has_explicit and len(pt_list) > 0:
             p1 = pt_list[0]
             # Translation: fix p1 at (0,0) or (0,0,0)
             if p1.x is None: equations.append(point_vars[p1.id][0]); logger.debug(f"Anchor {p1.id}_x=0")
             if p1.y is None: equations.append(point_vars[p1.id][1]); logger.debug(f"Anchor {p1.id}_y=0")
-            if is_3d and p1.z is None: 
+            if is_3d and p1.z is None:
                 equations.append(point_vars[p1.id][2]); logger.debug(f"Anchor {p1.id}_z=0")
 
             if len(pt_list) > 1:
@@ -77,7 +96,7 @@ class GeometryEngine:
                 if p2.y is None: equations.append(point_vars[p2.id][1]); logger.debug(f"Anchor {p2.id}_y=0")
                 if is_3d and p2.z is None:
                     equations.append(point_vars[p2.id][2]); logger.debug(f"Anchor {p2.id}_z=0")
-                
+
             if is_3d and len(pt_list) > 2:
                 p3 = pt_list[2]
                 # Planar rotation: fix p3 on XY-plane (z=0)
@@ -102,47 +121,37 @@ class GeometryEngine:
                     logger.warning(f"[GeometryEngine]   Skip length: {c.targets} not in symbols.")
                     continue
                 v1, v2 = point_vars[p1], point_vars[p2]
-                # 3D distance
                 eq = (v2[0]-v1[0])**2 + (v2[1]-v1[1])**2 + (v2[2]-v1[2])**2 - float(c.value)**2
                 equations.append(eq)
                 logger.debug(f"[GeometryEngine]     -> Length eq (3D): |{p1}{p2}|² = {c.value}²")
 
             elif c.type == 'angle' and len(c.targets) >= 1:
-                # In 3D, 'angle' usually refers to the angle between two vectors (e.g., ∠BAC)
                 v_name = c.targets[0]
                 if v_name not in point_vars:
                     continue
-                # For simplicity, we assume the next two points in targets or fallback to first 2 others
                 if len(c.targets) >= 3:
                     p1_name, p2_name = c.targets[1], c.targets[2]
                 else:
                     other_pts = [p.id for p in pt_list if p.id != v_name][:2]
                     if len(other_pts) < 2: continue
                     p1_name, p2_name = other_pts
-                
+
                 pV = point_vars[v_name]
                 p1_vars = point_vars[p1_name]
                 p2_vars = point_vars[p2_name]
-                
-                # Vectors V1 and V2
+
                 v1 = [p1_vars[i] - pV[i] for i in range(3)]
                 v2 = [p2_vars[i] - pV[i] for i in range(3)]
-                
-                # Dot product relation: v1.v2 = |v1||v2| cos(theta)
-                # But we use the tangent relation or square it to avoid sqrt if possible
-                # If 90 deg: dot product = 0
+
                 if abs(float(c.value) - 90.0) < 1e-9:
                     eq = sum(v1[i]*v2[i] for i in range(3))
                     logger.debug(f"[GeometryEngine]     -> Angle eq at {v_name} (90° dot=0)")
                 else:
-                    # Generic angle using law of cosines (squared)
                     cos_val = np.cos(np.deg2rad(float(c.value)))
                     d1_sq = sum(v1[i]**2 for i in range(3))
                     d2_sq = sum(v2[i]**2 for i in range(3))
                     dot = sum(v1[i]*v2[i] for i in range(3))
                     eq = dot**2 - (cos_val**2) * d1_sq * d2_sq
-                    # Note: this allows theta and 180-theta. 
-                    # Better: dot - cos(theta) * sqrt(d1_sq * d2_sq) = 0, but that has sqrt.
                     logger.debug(f"[GeometryEngine]     -> Angle eq at {v_name} ({c.value}° cos² relation)")
                 equations.append(eq)
 
@@ -150,11 +159,8 @@ class GeometryEngine:
                 pA, pB, pC, pD = c.targets
                 if any(t not in point_vars for t in [pA, pB, pC, pD]): continue
                 va, vb, vc, vd = point_vars[pA], point_vars[pB], point_vars[pC], point_vars[pD]
-                # AB || CD means vector(AB) = lambda * vector(CD)
-                # In 3D, cross product = 0. (b-a) x (d-c) = 0
                 v1 = [vb[i]-va[i] for i in range(3)]
                 v2 = [vd[i]-vc[i] for i in range(3)]
-                # Cross product components:
                 equations.append(v1[1]*v2[2] - v1[2]*v2[1])
                 equations.append(v1[2]*v2[0] - v1[0]*v2[2])
                 equations.append(v1[0]*v2[1] - v1[1]*v2[0])
@@ -164,10 +170,60 @@ class GeometryEngine:
                 pA, pB, pC, pD = c.targets
                 if any(t not in point_vars for t in [pA, pB, pC, pD]): continue
                 va, vb, vc, vd = point_vars[pA], point_vars[pB], point_vars[pC], point_vars[pD]
-                # Dot product = 0
                 dot = sum((vb[i]-va[i])*(vd[i]-vc[i]) for i in range(3))
                 equations.append(dot)
                 logger.debug(f"[GeometryEngine]     -> Perpendicular eq (3D dot=0): {pA}{pB} ⊥ {pC}{pD}")
+
+            elif c.type == 'perp_plane' and len(c.targets) >= 4:
+                pL1, pL2 = c.targets[0], c.targets[1]
+                plane_pts = c.targets[2:]
+                if pL1 in point_vars and pL2 in point_vars and len(plane_pts) >= 2:
+                    vL1, vL2 = point_vars[pL1], point_vars[pL2]
+                    v_line = [vL2[i] - vL1[i] for i in range(3)]
+
+                    pP0, pP1 = plane_pts[0], plane_pts[1]
+                    if pP0 in point_vars and pP1 in point_vars:
+                        vP0, vP1 = point_vars[pP0], point_vars[pP1]
+                        v_plane1 = [vP1[i] - vP0[i] for i in range(3)]
+                        equations.append(sum(v_line[i] * v_plane1[i] for i in range(3)))
+                        logger.debug(f"[GeometryEngine]     -> PerpPlane dot 1: {pL1}{pL2} ⊥ {pP0}{pP1}")
+
+                    pP2 = plane_pts[2] if len(plane_pts) > 2 else plane_pts[-1]
+                    if pP2 != pP1 and pP2 in point_vars and pP0 in point_vars:
+                        vP2 = point_vars[pP2]
+                        v_plane2 = [vP2[i] - vP0[i] for i in range(3)]
+                        equations.append(sum(v_line[i] * v_plane2[i] for i in range(3)))
+                        logger.debug(f"[GeometryEngine]     -> PerpPlane dot 2: {pL1}{pL2} ⊥ {pP0}{pP2}")
+
+            elif c.type == 'coplanar' and len(c.targets) >= 4:
+                pA, pB, pC, pD = c.targets[0], c.targets[1], c.targets[2], c.targets[3]
+                if all(p in point_vars for p in [pA, pB, pC, pD]):
+                    va, vb, vc, vd = point_vars[pA], point_vars[pB], point_vars[pC], point_vars[pD]
+                    v1 = [vb[i] - va[i] for i in range(3)]
+                    v2 = [vc[i] - va[i] for i in range(3)]
+                    v3 = [vd[i] - va[i] for i in range(3)]
+                    det = (
+                        v1[0] * (v2[1] * v3[2] - v2[2] * v3[1])
+                        - v1[1] * (v2[0] * v3[2] - v2[2] * v3[0])
+                        + v1[2] * (v2[0] * v3[1] - v2[1] * v3[0])
+                    )
+                    equations.append(det)
+                    logger.debug(f"[GeometryEngine]     -> Coplanar eq (det=0): {pA}, {pB}, {pC}, {pD}")
+
+            elif c.type == 'point_on_plane' and len(c.targets) >= 4:
+                pP, pA, pB, pC = c.targets[0], c.targets[1], c.targets[2], c.targets[3]
+                if all(p in point_vars for p in [pP, pA, pB, pC]):
+                    vp, va, vb, vc = point_vars[pP], point_vars[pA], point_vars[pB], point_vars[pC]
+                    v1 = [vb[i] - va[i] for i in range(3)]
+                    v2 = [vc[i] - va[i] for i in range(3)]
+                    v3 = [vp[i] - va[i] for i in range(3)]
+                    det = (
+                        v1[0] * (v2[1] * v3[2] - v2[2] * v3[1])
+                        - v1[1] * (v2[0] * v3[2] - v2[2] * v3[0])
+                        + v1[2] * (v2[0] * v3[1] - v2[1] * v3[0])
+                    )
+                    equations.append(det)
+                    logger.debug(f"[GeometryEngine]     -> PointOnPlane eq (det=0): {pP} on plane({pA},{pB},{pC})")
 
             elif c.type == 'midpoint' and len(c.targets) == 3:
                 pM, pA, pB = c.targets
@@ -186,10 +242,6 @@ class GeometryEngine:
                     equations.append(vE[i] - (vA[i] + k * (vC[i] - vA[i])))
                 logger.debug(f"[GeometryEngine]     -> Section eq (3D): {pE} = {pA} + {k}({pC}-{pA})")
 
-            elif c.type == 'circle':
-                # Circle doesn't add position constraints for center (already a point)
-                logger.debug(f"[GeometryEngine]     -> Circle: center={c.targets[0]}, r={c.value} (meta only)")
-
         all_vars = []
         for v in point_vars.values():
             all_vars.extend(v)
@@ -200,34 +252,25 @@ class GeometryEngine:
 
         # ── Strategy 1: SymPy symbolic ───────────────────────────────────────
         coords = self._try_symbolic(equations, all_vars, point_vars)
-        
-        # Extract lines/rays from constraints for builder
-        lines_ext = []
-        rays_ext = []
-        for c in constraints:
-            if c.type == 'lines_metadata':
-                lines_ext = [t.split(',') for t in c.targets]
-            if c.type == 'rays_metadata':
-                rays_ext = [t.split(',') for t in c.targets]
 
         if coords:
-            return self._build_result(coords, polygon_order, circles_meta, segments_meta, lines_ext, rays_ext, pt_list)
+            return self._build_result(coords, polygon_order, circles_meta, solids_meta, segments_meta, lines_ext, rays_ext, pt_list)
 
         # ── Strategy 2: Numerical nsolve ─────────────────────────────────────
         if n_eqs == n_vars:
             coords = self._try_nsolve(equations, all_vars, point_vars, n_vars)
             if coords:
-                return self._build_result(coords, polygon_order, circles_meta, segments_meta, lines_ext, rays_ext, pt_list)
+                return self._build_result(coords, polygon_order, circles_meta, solids_meta, segments_meta, lines_ext, rays_ext, pt_list)
 
         # ── Strategy 3: Scipy least-squares ─────────────────────────────────
         coords = self._try_lsq(equations, all_vars, point_vars, n_vars)
         if coords:
-            return self._build_result(coords, polygon_order, circles_meta, segments_meta, lines_ext, rays_ext, pt_list)
+            return self._build_result(coords, polygon_order, circles_meta, solids_meta, segments_meta, lines_ext, rays_ext, pt_list)
 
         # ── Strategy 4: Differential evolution ──────────────────────────────
         coords = self._try_global(equations, all_vars, point_vars, n_vars)
         if coords:
-            return self._build_result(coords, polygon_order, circles_meta, segments_meta, lines_ext, rays_ext, pt_list)
+            return self._build_result(coords, polygon_order, circles_meta, solids_meta, segments_meta, lines_ext, rays_ext, pt_list)
 
         logger.error("[GeometryEngine] All strategies exhausted.")
         return None
@@ -235,19 +278,26 @@ class GeometryEngine:
     # ─── Solving strategies ──────────────────────────────────────────────────
 
     def _try_symbolic(self, equations, all_vars, point_vars):
-        # Optimization: SymPy's symbolic solver becomes extremely slow for many variables.
-        # For 3D problems (usually 12-18+ variables), we prefer using numerical methods directly.
-        if len(all_vars) > 10:
-            logger.info(f"[GeometryEngine] Strategy 1: Skipping symbolic solve due to high variable count ({len(all_vars)}).")
+        if len(all_vars) > 10 or len(equations) != len(all_vars):
+            logger.info(f"[GeometryEngine] Strategy 1: Skipping symbolic solve on non-square/large system ({len(equations)} eqs, {len(all_vars)} vars).")
             return None
 
         try:
             solution = sp.solve(equations, all_vars, dict=True)
             if solution:
-                res = solution[0]
+                # Prefer solutions where z >= 0 for apexes
+                best_res = solution[0]
+                for candidate in solution:
+                    z_vals = [float(candidate.get(vz, 0.0)) for _, (_, _, vz) in point_vars.items()]
+                    if all(z >= -1e-6 for z in z_vals):
+                        best_res = candidate
+                        break
+                    elif any(z > 1e-6 for z in z_vals):
+                        best_res = candidate
+
                 logger.info("[GeometryEngine] Strategy 1 (SymPy symbolic): SUCCESS.")
-                logger.debug(f"[GeometryEngine] Symbolic solution: {res}")
-                return {pid: [float(res.get(vx, 0.0)), float(res.get(vy, 0.0)), float(res.get(vz, 0.0))]
+                logger.debug(f"[GeometryEngine] Symbolic solution: {best_res}")
+                return {pid: [abs(float(best_res.get(vx, 0.0))), abs(float(best_res.get(vy, 0.0))), abs(float(best_res.get(vz, 0.0)))] if (float(best_res.get(vz, 0.0)) < 0 and float(best_res.get(vx, 0.0)) >= 0 and float(best_res.get(vy, 0.0)) >= 0) else [float(best_res.get(vx, 0.0)), float(best_res.get(vy, 0.0)), abs(float(best_res.get(vz, 0.0)))]
                         for pid, (vx, vy, vz) in point_vars.items()}
             else:
                 logger.warning("[GeometryEngine] Strategy 1 returned no solution. Trying numerical...")
@@ -261,7 +311,6 @@ class GeometryEngine:
         import random
         for attempt in range(MAX_NSOLVE_ATTEMPTS):
             try:
-                # Use varying scales for the random guesses to handle different problem sizes
                 scale = 10 if attempt < 5 else (100 if attempt < 10 else 1)
                 guesses = [random.uniform(-scale, scale) for _ in all_vars]
                 sol_vals = sp.nsolve(equations, all_vars, guesses, tol=1e-6, maxsteps=1000)
@@ -283,7 +332,6 @@ class GeometryEngine:
                 return sum(float(f(*x))**2 for f in eq_funcs)
 
             best_res, best_val = None, float('inf')
-            # Increase restarts for better coverage of local minima
             for i in range(12):
                 if i == 0:
                     x0 = [1.0]*n_vars
@@ -291,7 +339,7 @@ class GeometryEngine:
                     x0 = [np.random.uniform(-10, 10) for _ in range(n_vars)]
                 else:
                     x0 = [np.random.uniform(-100, 100) for _ in range(n_vars)]
-                
+
                 res = minimize(objective, x0, method='L-BFGS-B')
                 if res.fun < best_val:
                     best_val, best_res = res.fun, res
@@ -323,7 +371,7 @@ class GeometryEngine:
                 for f in eq_funcs:
                     try:
                         s += float(f(*x))**2
-                    except:
+                    except Exception:
                         s += 1e6
                 return s
 
@@ -346,24 +394,18 @@ class GeometryEngine:
         coords: Dict[str, List[float]],
         polygon_order: List[str],
         circles_meta: List[Dict],
+        solids_meta: List[Dict],
         segments_meta: List[List[str]],
         lines_meta: List[List[str]],
         rays_meta: List[List[str]],
         pt_list: List[Point],
     ) -> Dict[str, Any]:
         """
-        Build structured result including drawing phases for the renderer.
-
-        drawing_phases:
-          Phase 1 — Base shape (main polygon)
-          Phase 2 — Auxiliary/derived points and segments
+        Build structured result including drawing phases, faces and 3D solids for renderers.
         """
         all_ids = [p.id for p in pt_list]
 
-        # 1. Infer/clean polygon_order
         if not polygon_order:
-            # Fallback: use all declared point IDs sorted by conventional uppercase order.
-            # This is far safer than only looking for A/B/C/D.
             base_pts = sorted(
                 all_ids,
                 key=lambda p: (string.ascii_uppercase.index(p) if p in string.ascii_uppercase else 100, p)
@@ -373,7 +415,6 @@ class GeometryEngine:
         base_ids = [pid for pid in polygon_order if pid in all_ids]
         derived_ids = [pid for pid in all_ids if pid not in polygon_order]
 
-        # 2. Collect unique segments to avoid redundancy (AB == BA)
         drawn_segments = set()
 
         def add_segment(p1, p2, target_list):
@@ -384,18 +425,15 @@ class GeometryEngine:
                 drawn_segments.add(s)
                 target_list.append([p1, p2])
 
-        # Phase 1: Main polygon boundary
+        # Phase 1: Main polygon / base shape boundary
         phase1_segments = []
         if len(base_ids) >= 2:
-            # Connect in sequence: A-B, B-C, etc.
             for i in range(len(base_ids) - 1):
                 add_segment(base_ids[i], base_ids[i+1], phase1_segments)
-            
-            # ONLY close the loop if we have 3 or more points (a real polygon)
             if len(base_ids) > 2:
                 add_segment(base_ids[-1], base_ids[0], phase1_segments)
 
-        # Phase 2: Auxiliary segments from DSL
+        # Phase 2: Auxiliary segments from DSL and 3D solids
         phase2_segments = []
         for p1, p2 in segments_meta:
             add_segment(p1, p2, phase2_segments)
@@ -416,10 +454,40 @@ class GeometryEngine:
                 "segments": phase2_segments,
             })
 
+        # Generate 3D polygonal faces for semi-transparent rendering
+        faces: List[List[str]] = []
+        for solid in solids_meta:
+            s_type = solid.get("type")
+            if s_type == "pyramid":
+                base = solid.get("base", [])
+                apex = solid.get("apex")
+                if len(base) >= 3:
+                    faces.append(base)
+                    for i in range(len(base)):
+                        faces.append([apex, base[i], base[(i+1)%len(base)]])
+            elif s_type in ("prism", "cube", "cuboid", "frustum"):
+                b1 = solid.get("base1", [])
+                b2 = solid.get("base2", [])
+                if len(b1) >= 3 and len(b2) >= 3 and len(b1) == len(b2):
+                    faces.append(b1)
+                    faces.append(b2)
+                    for i in range(len(b1)):
+                        i_next = (i + 1) % len(b1)
+                        faces.append([b1[i], b1[i_next], b2[i_next], b2[i]])
+            elif s_type == "tetrahedron":
+                pts = solid.get("points", [])
+                if len(pts) >= 4:
+                    faces.append([pts[1], pts[2], pts[3]])
+                    faces.append([pts[0], pts[1], pts[2]])
+                    faces.append([pts[0], pts[2], pts[3]])
+                    faces.append([pts[0], pts[3], pts[1]])
+
         return {
             "coordinates": coords,
             "polygon_order": polygon_order,
             "circles": circles_meta,
+            "solids": solids_meta,
+            "faces": faces,
             "lines": lines_meta,
             "rays": rays_meta,
             "drawing_phases": drawing_phases,

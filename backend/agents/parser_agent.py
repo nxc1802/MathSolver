@@ -1,15 +1,11 @@
-import os
 import json
 import logging
-from openai import AsyncOpenAI
+import re
 from typing import Dict, Any
 from dotenv import load_dotenv
 
 load_dotenv()
 logger = logging.getLogger(__name__)
-
-from app.url_utils import openai_compatible_api_key, sanitize_env
-
 
 from app.llm_client import get_llm_client
 
@@ -19,7 +15,7 @@ class ParserAgent:
         self.llm = get_llm_client()
 
     async def process(self, text: str, feedback: str = None, context: Dict[str, Any] = None) -> Dict[str, Any]:
-        logger.info(f"==[ParserAgent] Processing input (len={len(text)})==")
+        logger.info(f"==[ParserAgent] Processing input (len={len(text)}) (v5.2)==")
         if feedback:
             logger.warning(f"[ParserAgent] Feedback from previous attempt: {feedback}")
         if context:
@@ -36,9 +32,9 @@ class ParserAgent:
         Output ONLY a JSON object with this EXACT structure (no extra keys, no markdown):
         {
             "entities": ["Point A", "Point B", ...],
-            "type": "pyramid|prism|sphere|rectangle|triangle|circle|parallelogram|trapezoid|square|rhombus|general",
+            "type": "cube|cuboid|tetrahedron|cone|cylinder|frustum|pyramid|prism|sphere|rectangle|triangle|circle|parallelogram|trapezoid|square|rhombus|general",
             "values": {"AB": 5, "SO": 15, "radius": 3},
-            "target_question": "Câu hỏi cụ thể cần giải (ví dụ: 'Tính diện tích tam giác ABC'). NẾU KHÔNG CÓ CÂU HỎI THÌ ĐỂ null.",
+            "target_question": "Câu hỏi cụ thể cần giải (ví dụ: 'Tính thể tích khối chóp S.ABCD'). NẾU KHÔNG CÓ CÂU HỎI THÌ ĐỂ null.",
             "analysis": "Tóm tắt ngắn gọn toàn bộ bài toán sau khi đã cập nhật các yêu cầu mới bằng tiếng Việt."
         }
         Rules:
@@ -64,12 +60,8 @@ class ParserAgent:
             response_format={"type": "json_object"}
         )
         
-        # Pre-process raw string: extract the JSON block if present
-        import re
-        clean_raw = raw.strip()
-        # Handle potential markdown code blocks
+        clean_raw = raw.strip() if raw else ""
         if clean_raw.startswith("```"):
-            import re
             match = re.search(r"```(?:json)?\s*(.*?)\s*```", clean_raw, re.DOTALL)
             if match:
                 clean_raw = match.group(1).strip()
@@ -78,22 +70,19 @@ class ParserAgent:
             result = json.loads(clean_raw)
         except json.JSONDecodeError as e:
             logger.error(f"[ParserAgent] JSON Parse Error: {e}. Attempting regex fallback...")
-            import re
             json_match = re.search(r'(\{.*\})', clean_raw, re.DOTALL)
             if json_match:
                 try:
-                    # Handle single quotes if present (common LLM failure)
                     json_str = json_match.group(1)
                     if "'" in json_str and '"' not in json_str:
                          json_str = json_str.replace("'", '"')
                     result = json.loads(json_str)
-                except:
+                except Exception:
                     result = None
             else:
                 result = None
 
             if not result:
-                # Fallback for critical failure
                 result = {
                     "entities": [],
                     "type": "general",
@@ -101,6 +90,6 @@ class ParserAgent:
                     "target_question": None,
                     "analysis": text
                 }
-        logger.info(f"[ParserAgent] LLM response received.")
+        logger.info("[ParserAgent] LLM response received.")
         logger.debug(f"[ParserAgent] Parsed JSON: {json.dumps(result, ensure_ascii=False, indent=2)}")
         return result

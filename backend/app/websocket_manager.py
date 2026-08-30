@@ -19,7 +19,13 @@ async def notify_status(job_id: str, data: dict) -> None:
         try:
             await connection.send_json(data)
         except Exception as e:
-            logger.error("WS error sending to %s: %s", job_id, e)
+            logger.warning("WS error sending to %s: %s (removing dead connection)", job_id, e)
+            try:
+                active_connections[job_id].remove(connection)
+            except (ValueError, KeyError):
+                pass
+    if job_id in active_connections and not active_connections[job_id]:
+        del active_connections[job_id]
 
 
 def register_websocket_routes(app) -> None:

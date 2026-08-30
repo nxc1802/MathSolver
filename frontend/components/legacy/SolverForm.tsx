@@ -3,7 +3,7 @@
 import React, { useRef, useState } from "react";
 import { getApiBaseUrl } from "@/lib/api-config";
 import { motion } from "framer-motion";
-import { Upload, Sparkles, Image as ImageIcon, Loader2 } from "lucide-react";
+import { Sparkles, Image as ImageIcon, Loader2 } from "lucide-react";
 
 interface SolverFormProps {
   input: string;

@@ -28,7 +28,7 @@ setup_application_logging()
 # Routers (after logging)
 from app.dependencies import get_current_user_id
 from app.ocr_local_file import ocr_from_local_image_path
-from app.routers import auth, sessions, solve
+from app.routers import auth, sessions, solve, ai_core
 from agents.ocr_agent import OCRAgent
 from app.routers.solve import get_orchestrator
 from app.job_poll import normalize_job_row_for_client
@@ -38,7 +38,7 @@ from app.websocket_manager import register_websocket_routes
 logger = logging.getLogger("app.main")
 _access = logging.getLogger(ACCESS_LOGGER_NAME)
 
-app = FastAPI(title="Visual Math Solver API v5.1")
+app = FastAPI(title="Visual Math Solver API v5.2")
 
 
 @app.middleware("http")
@@ -72,9 +72,7 @@ _broker_tail = BROKER_URL.split("@")[-1] if "@" in BROKER_URL else BROKER_URL
 if get_log_level() in ("debug", "info"):
     logger.info("App starting LOG_LEVEL=%s | Redis: %s", get_log_level(), _broker_tail)
 else:
-    logger.warning(
-        "App starting LOG_LEVEL=%s | Redis: %s", get_log_level(), _broker_tail
-    )
+    logger.warning("App starting LOG_LEVEL=%s | Redis: %s", get_log_level(), _broker_tail)
 
 app.add_middleware(
     CORSMiddleware,
@@ -88,6 +86,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(ai_core.router)
 app.include_router(auth.router)
 app.include_router(sessions.router)
 app.include_router(solve.router)
@@ -100,12 +99,13 @@ def get_ocr_agent() -> OCRAgent:
     return get_orchestrator().ocr_agent
 
 
-supabase_client = get_supabase()
-
-
 @app.get("/")
 def read_root():
-    return {"message": "Visual Math Solver API v5.1 is running", "version": "5.1"}
+    return {
+        "message": "Visual Math Solver API v5.2 is running",
+        "version": "5.2",
+        "ai_core_direct_endpoint": "/api/v1/ai/solve"
+    }
 
 
 @app.post("/api/v1/ocr")
@@ -132,11 +132,13 @@ async def get_job_status(
     user_id=Depends(get_current_user_id),
 ):
     """Retrieve job status (can be used for polling if WS fails). Owner-only."""
+    supabase_client = get_supabase()
+    if not supabase_client:
+        raise HTTPException(status_code=503, detail="Database service currently unavailable.")
     response = supabase_client.table("jobs").select("*").eq("id", job_id).execute()
     if not response.data:
         raise HTTPException(status_code=404, detail="Job not found")
     job = response.data[0]
     if job.get("user_id") is not None and str(job["user_id"]) != str(user_id):
         raise HTTPException(status_code=403, detail="Forbidden: You do not own this job.")
-    # Stable contract for FE poll (job_id alias, parsed result JSON, string UUIDs)
     return normalize_job_row_for_client(job)

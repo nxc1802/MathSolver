@@ -45,18 +45,31 @@ export function normalizeMessageMetadata(
   const circles = 
     Array.isArray(raw.circles) ? (raw.circles as Array<{ center: string; radius: number }>) : undefined;
   const drawing_phases = 
-    Array.isArray(raw.drawing_phases) ? (raw.drawing_phases as any[]) : undefined;
+    Array.isArray(raw.drawing_phases) ? (raw.drawing_phases as Array<{ phase: number; label: string; points: string[]; segments: string[][] }>) : undefined;
   const lines = 
     Array.isArray(raw.lines) ? (raw.lines as Array<[string, string]>) : undefined;
   const rays = 
     Array.isArray(raw.rays) ? (raw.rays as Array<[string, string]>) : undefined;
 
   const is_3d = typeof raw.is_3d === "boolean" ? raw.is_3d : undefined;
-  const solution = raw.solution && typeof raw.solution === "object" ? (raw.solution as any) : undefined;
+  let solution: NonNullable<ChatMessage["metadata"]>["solution"] = undefined;
+  if (raw.solution && typeof raw.solution === "object") {
+    const solObj = raw.solution as Record<string, unknown>;
+    if (typeof solObj.answer === "string") {
+      solution = {
+        answer: solObj.answer,
+        steps: Array.isArray(solObj.steps) ? (solObj.steps as string[]) : [],
+        symbolic_math:
+          solObj.symbolic_math && typeof solObj.symbolic_math === "object"
+            ? (solObj.symbolic_math as Record<string, string>)
+            : undefined,
+      };
+    }
+  }
 
   let coordinates: Record<string, [number, number] | [number, number, number]> | undefined;
   if (raw.coordinates && typeof raw.coordinates === "object") {
-    coordinates = raw.coordinates as Record<string, any>;
+    coordinates = raw.coordinates as Record<string, [number, number] | [number, number, number]>;
   }
 
   const out: NonNullable<ChatMessage["metadata"]> = {};

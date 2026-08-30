@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useParams } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { Film, Loader2 } from "lucide-react";
-import useSWR, { useSWRConfig } from "swr";
+import useSWR from "swr";
 import { useAuth } from "@/lib/auth-context";
 import { getApiBaseUrl } from "@/lib/api-config";
 import { messageFromApi } from "@/lib/chat-messages";
@@ -29,7 +29,11 @@ import AnimationPreview from "../../../components/media/AnimationPreview";
 import VersionSwitcher from "../../../components/geometry/VersionSwitcher";
 
 import { useSolverJob } from "@/hooks/useSolverJob";
-import { loadGeometryState, saveGeometryState, type GeometryState } from "@/lib/session-geometry-cache";
+import {
+  loadGeometryState,
+  saveGeometryState,
+  type GeometryState,
+} from "@/lib/session-geometry-cache";
 import {
   pickCanvasMode,
   projectCoordinates2D,
@@ -40,23 +44,22 @@ import {
 } from "@/lib/geometry-display";
 import { getPendingQueue, savePendingQueue } from "@/lib/job-tracker";
 import {
-  readSplitPercent, writeSplitPercent,
-  readMainSplitPercent, writeMainSplitPercent,
-  readSidebarCollapsed, writeSidebarCollapsed,
-  SPLIT_MIN_PCT, SPLIT_MAX_PCT,
-  MAIN_SPLIT_MIN_PCT, MAIN_SPLIT_MAX_PCT,
+  readSplitPercent,
+  writeSplitPercent,
+  readMainSplitPercent,
+  writeMainSplitPercent,
+  readSidebarCollapsed,
+  writeSidebarCollapsed,
+  SPLIT_MIN_PCT,
+  SPLIT_MAX_PCT,
+  MAIN_SPLIT_MIN_PCT,
+  MAIN_SPLIT_MAX_PCT,
 } from "@/lib/session-ui-storage";
 
 async function fetchChatMessages([url, token]: [string, string]): Promise<ChatMessage[]> {
-  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` }});
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
   if (!res.ok) throw new Error("Failed to fetch messages");
   return (await res.json()).map(messageFromApi);
-}
-
-async function fetchSessionAssets([url, token]: [string, string]): Promise<any[]> {
-  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` }});
-  if (!res.ok) return [];
-  return res.json();
 }
 
 type OcrFlowState =
@@ -79,17 +82,23 @@ export default function ChatSessionPage() {
   const sessionId = params?.sessionId as string;
   const isTempSession = sessionId?.startsWith("temp-");
   const { session: userSession } = useAuth();
-  const { mutate: globalMutate } = useSWRConfig();
 
-  const messagesKey = userSession?.access_token && !isTempSession 
-    ? [`${getApiBaseUrl()}/api/v1/sessions/${sessionId}/messages`, userSession.access_token] as const : null;
-  const assetsKey = userSession?.access_token && !isTempSession 
-    ? [`${getApiBaseUrl()}/api/v1/sessions/${sessionId}/assets`, userSession.access_token] as const : null;
+  const messagesKey =
+    userSession?.access_token && !isTempSession
+      ? ([
+          `${getApiBaseUrl()}/api/v1/sessions/${sessionId}/messages`,
+          userSession.access_token,
+        ] as const)
+      : null;
 
-  const { data: messages = [], isLoading: historyLoadingRaw, mutate: mutateMessages } = useSWR(
-    messagesKey, fetchChatMessages, { revalidateOnFocus: false, dedupingInterval: 2000 }
-  );
-  const { data: sessionAssets = [], mutate: mutateAssets } = useSWR(assetsKey, fetchSessionAssets, { revalidateOnFocus: false });
+  const {
+    data: messages = [],
+    isLoading: historyLoadingRaw,
+    mutate: mutateMessages,
+  } = useSWR(messagesKey, fetchChatMessages, {
+    revalidateOnFocus: false,
+    dedupingInterval: 2000,
+  });
 
   const [inputText, setInputText] = useState("");
   const [pendingDraftImages, setPendingDraftImages] = useState<DraftImage[]>([]);
@@ -99,20 +108,22 @@ export default function ChatSessionPage() {
   const [pendingQueue, setPendingQueue] = useState<{ id: string; text: string }[]>([]);
   const [queueNotice, setQueueNotice] = useState<string | null>(null);
 
-  // UI States
+  // UI Resizing States
   const [splitPercent, setSplitPercent] = useState(14.3);
   const [mainSplitPercent, setMainSplitPercent] = useState(50);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [uiHydrated, setUiHydrated] = useState(false);
-  const draggingType = useRef<'sidebar' | 'main' | null>(null);
+  const draggingType = useRef<"sidebar" | "main" | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Geometry Cache States
-  const [coordinates, setCoordinates] = useState<any>(null);
+  const [coordinates, setCoordinates] = useState<Record<string, [number, number, number] | [number, number]> | null>(null);
   const [is3d, setIs3d] = useState(false);
   const [polygonOrder, setPolygonOrder] = useState<string[] | null>(null);
-  const [drawingPhases, setDrawingPhases] = useState<any[] | null>(null);
+  const [drawingPhases, setDrawingPhases] = useState<Array<{ phase: number; label: string; points: string[]; segments: string[][] }> | null>(null);
+  const [faces, setFaces] = useState<string[][] | null>(null);
+  const [solids, setSolids] = useState<Array<{ type: string; [key: string]: unknown }> | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [videoVersion, setVideoVersion] = useState(1);
   const [activeSnapshotJobId, setActiveSnapshotJobId] = useState<string | null>(null);
@@ -120,28 +131,38 @@ export default function ChatSessionPage() {
   const prevRouteSessionIdRef = useRef<string | undefined>(undefined);
 
   // Job Hooks
-  const { job, startSolve, startRenderVideo, resetJob } = useSolverJob(sessionId, userSession?.access_token);
+  const { job, startSolve, startRenderVideo, resetJob } = useSolverJob(
+    sessionId,
+    userSession?.access_token
+  );
 
   const geometrySnapshots = useMemo(() => {
-    return messages?.filter((m) => m.role === "assistant" && m.type !== "error" && m.metadata?.coordinates) || [];
+    return (
+      messages?.filter(
+        (m) =>
+          m.role === "assistant" &&
+          m.type !== "error" &&
+          m.metadata?.coordinates
+      ) || []
+    );
   }, [messages]);
 
   const isQueueFull = pendingQueue.length >= 5;
   const queueFullBlock = job.phase !== "idle" && isQueueFull;
   const ocrPreviewBlocking = ocrFlow.status !== "idle";
 
-  const applyGeometryFromSnapshot = (meta: any) => {
+  const applyGeometryFromSnapshot = (meta: Record<string, unknown> | null | undefined) => {
     if (!meta) return;
     logGeometryDebug("applyGeometryFromSnapshot", meta);
     const rawCoords = (meta.coordinates || {}) as Record<string, unknown>;
     const mode = pickCanvasMode({
-      is_3d: meta.is_3d,
-      is3d: meta.is3d,
+      is_3d: meta.is_3d as boolean | undefined,
+      is3d: meta.is3d as boolean | undefined,
       coordinates: rawCoords,
     });
     const inconsistency = detectGeometryInconsistency({
-      is_3d: meta.is_3d,
-      is3d: meta.is3d,
+      is_3d: meta.is_3d as boolean | undefined,
+      is3d: meta.is3d as boolean | undefined,
       coordinates: rawCoords,
     });
     if (inconsistency) logGeometryBeHandoff(inconsistency, meta);
@@ -153,13 +174,19 @@ export default function ChatSessionPage() {
       setCoordinates(projectCoordinates2D(rawCoords));
       setIs3d(false);
     }
-    setPolygonOrder(meta.polygon_order || meta.polygonOrder || null);
-    setDrawingPhases(meta.drawing_phases || meta.drawingPhases || null);
-    setVideoUrl(meta.video_url || meta.videoUrl || null);
-    setActiveSnapshotJobId(meta.job_id || meta.jobId || null);
+    setPolygonOrder((meta.polygon_order as string[]) || (meta.polygonOrder as string[]) || null);
+    setDrawingPhases(
+      (meta.drawing_phases as Array<{ phase: number; label: string; points: string[]; segments: string[][] }>) ||
+        (meta.drawingPhases as Array<{ phase: number; label: string; points: string[]; segments: string[][] }>) ||
+        null
+    );
+    setFaces((meta.faces as string[][]) || null);
+    setSolids((meta.solids as Array<{ type: string; [key: string]: unknown }>) || null);
+    setVideoUrl((meta.video_url as string) || (meta.videoUrl as string) || null);
+    setActiveSnapshotJobId((meta.job_id as string) || (meta.jobId as string) || null);
   };
 
-  // Restore cache on session change; reset composer attachments (light path temp-* → real id to avoid full remount feel).
+  // Restore cache on session change
   useEffect(() => {
     const prev = prevRouteSessionIdRef.current;
     prevRouteSessionIdRef.current = sessionId;
@@ -169,7 +196,7 @@ export default function ChatSessionPage() {
 
     if (tempToReal) {
       const cached = loadGeometryState(sessionId);
-      if (cached) applyGeometryFromSnapshot(cached);
+      if (cached) applyGeometryFromSnapshot(cached as unknown as Record<string, unknown>);
       else {
         setCoordinates(null);
         setIs3d(false);
@@ -182,8 +209,8 @@ export default function ChatSessionPage() {
       return;
     }
 
-    setPendingDraftImages((prev) => {
-      revokeDraftImages(prev);
+    setPendingDraftImages((prevDrafts) => {
+      revokeDraftImages(prevDrafts);
       return [];
     });
     setOcrFlow((f) => {
@@ -196,7 +223,7 @@ export default function ChatSessionPage() {
     if (isTempSession) return;
     const cached = loadGeometryState(sessionId);
     if (cached) {
-      applyGeometryFromSnapshot(cached);
+      applyGeometryFromSnapshot(cached as unknown as Record<string, unknown>);
     }
     setPendingQueue(getPendingQueue(sessionId));
   }, [sessionId, isTempSession]);
@@ -205,7 +232,9 @@ export default function ChatSessionPage() {
   useEffect(() => {
     if (geometrySnapshots.length > prevSnapshotsCountRef.current) {
       setVideoVersion(geometrySnapshots.length);
-      applyGeometryFromSnapshot(geometrySnapshots[geometrySnapshots.length - 1].metadata);
+      applyGeometryFromSnapshot(
+        geometrySnapshots[geometrySnapshots.length - 1].metadata as Record<string, unknown>
+      );
     }
     prevSnapshotsCountRef.current = geometrySnapshots.length;
   }, [geometrySnapshots]);
@@ -216,16 +245,13 @@ export default function ChatSessionPage() {
     let cancelled = false;
     const run = async () => {
       try {
-        await Promise.all([
-          mutateMessages(undefined, { revalidate: true }),
-          mutateAssets(undefined, { revalidate: true }),
-        ]);
+        await mutateMessages(undefined, { revalidate: true });
       } catch (e) {
-        console.error("Revalidate messages/assets after job:", e);
+        console.error("Revalidate messages after job:", e);
       } finally {
         if (cancelled) return;
         if (resultSnap) {
-          applyGeometryFromSnapshot(resultSnap);
+          applyGeometryFromSnapshot(resultSnap as unknown as Record<string, unknown>);
           if (!isTempSession) {
             saveGeometryState(sessionId, {
               coordinates: resultSnap.coordinates,
@@ -243,7 +269,7 @@ export default function ChatSessionPage() {
     return () => {
       cancelled = true;
     };
-  }, [job.phase, job.result, mutateMessages, mutateAssets, resetJob, sessionId, isTempSession]);
+  }, [job.phase, job.result, mutateMessages, resetJob, sessionId, isTempSession]);
 
   // Queue Processing
   useEffect(() => {
@@ -264,18 +290,31 @@ export default function ChatSessionPage() {
       if (!draggingType.current || !containerRef.current) return;
       const rect = containerRef.current.getBoundingClientRect();
       const x = e.clientX - rect.left;
-      if (draggingType.current === 'sidebar' && !sidebarCollapsed) {
-        setSplitPercent(Math.min(Math.max((x / rect.width) * 100, SPLIT_MIN_PCT), SPLIT_MAX_PCT));
-      } else if (draggingType.current === 'main') {
+      if (draggingType.current === "sidebar" && !sidebarCollapsed) {
+        setSplitPercent(
+          Math.min(Math.max((x / rect.width) * 100, SPLIT_MIN_PCT), SPLIT_MAX_PCT)
+        );
+      } else if (draggingType.current === "main") {
         const sidebarWidth = sidebarCollapsed ? 52 : (rect.width * splitPercent) / 100;
         const relativeX = x - sidebarWidth;
-        setMainSplitPercent(Math.min(Math.max((relativeX / (rect.width - sidebarWidth)) * 100, MAIN_SPLIT_MIN_PCT), MAIN_SPLIT_MAX_PCT));
+        setMainSplitPercent(
+          Math.min(
+            Math.max((relativeX / (rect.width - sidebarWidth)) * 100, MAIN_SPLIT_MIN_PCT),
+            MAIN_SPLIT_MAX_PCT
+          )
+        );
       }
     };
-    const handleMouseUp = () => { draggingType.current = null; document.body.style.cursor = ""; };
+    const handleMouseUp = () => {
+      draggingType.current = null;
+      document.body.style.cursor = "";
+    };
     window.addEventListener("mousemove", handleMouseMove);
     window.addEventListener("mouseup", handleMouseUp);
-    return () => { window.removeEventListener("mousemove", handleMouseMove); window.removeEventListener("mouseup", handleMouseUp); };
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
   }, [sidebarCollapsed, splitPercent]);
 
   useEffect(() => {
@@ -286,7 +325,11 @@ export default function ChatSessionPage() {
   }, []);
 
   useEffect(() => {
-    if (uiHydrated) { writeSplitPercent(splitPercent); writeMainSplitPercent(mainSplitPercent); writeSidebarCollapsed(sidebarCollapsed); }
+    if (uiHydrated) {
+      writeSplitPercent(splitPercent);
+      writeMainSplitPercent(mainSplitPercent);
+      writeSidebarCollapsed(sidebarCollapsed);
+    }
   }, [splitPercent, mainSplitPercent, sidebarCollapsed, uiHydrated]);
 
   // Auto-scroll to bottom
@@ -317,8 +360,7 @@ export default function ChatSessionPage() {
     const parts: string[] = [];
     let combinedText = "";
 
-    const useLegacyOcr =
-      isTempSession || sessionId.startsWith("temp-");
+    const useLegacyOcr = isTempSession || sessionId.startsWith("temp-");
 
     if (useLegacyOcr) {
       for (const d of attachments) {
@@ -409,7 +451,6 @@ export default function ChatSessionPage() {
       ],
       { revalidate: false }
     );
-    // docs/API.md: after OCR preview + user edit, send JSON solve with text only (no image_url).
     startSolve(text, false);
   };
 
@@ -497,6 +538,7 @@ export default function ChatSessionPage() {
     });
     setInputText(text);
   };
+
   const removeQueued = (id: string) => {
     setPendingQueue((prev) => {
       const n = prev.filter((q) => q.id !== id);
@@ -506,41 +548,76 @@ export default function ChatSessionPage() {
   };
 
   return (
-    <div ref={containerRef} className="h-[100dvh] w-screen flex bg-[#0a0a0f] text-[var(--foreground)] overflow-hidden">
-      <div className={`h-full flex flex-col shrink-0 border-r border-white/5 ${sidebarCollapsed ? "w-[52px]" : ""}`} style={sidebarCollapsed ? undefined : { width: `${splitPercent}%` }}>
-        <ChatSidebar compact={sidebarCollapsed} onCollapse={() => setSidebarCollapsed(true)} onExpand={() => setSidebarCollapsed(false)} />
+    <div
+      ref={containerRef}
+      className="h-[100dvh] w-screen flex bg-[var(--background)] text-[var(--foreground)] overflow-hidden"
+    >
+      {/* Sidebar Rail */}
+      <div
+        className={`h-full flex flex-col shrink-0 border-r border-[var(--border)] transition-all ${
+          sidebarCollapsed ? "w-[52px]" : ""
+        }`}
+        style={sidebarCollapsed ? undefined : { width: `${splitPercent}%` }}
+      >
+        <ChatSidebar
+          compact={sidebarCollapsed}
+          onCollapse={() => setSidebarCollapsed(true)}
+          onExpand={() => setSidebarCollapsed(false)}
+        />
       </div>
-      {!sidebarCollapsed && <div role="separator" onMouseDown={() => { draggingType.current = 'sidebar'; document.body.style.cursor = "col-resize"; }} className="w-1 cursor-col-resize hover:bg-indigo-500/30 z-10 shrink-0" />}
 
+      {/* Sidebar Drag Resizer */}
+      {!sidebarCollapsed && (
+        <div
+          role="separator"
+          onMouseDown={() => {
+            draggingType.current = "sidebar";
+            document.body.style.cursor = "col-resize";
+          }}
+          className="w-1 cursor-col-resize hover:bg-indigo-500/40 z-10 shrink-0 transition-colors"
+        />
+      )}
+
+      {/* Main App Canvas */}
       <div className="flex-1 flex flex-col min-w-0 bg-[var(--bg-secondary)]">
         <div className="flex-1 flex overflow-hidden">
-          <div className="flex flex-col border-r border-white/5 min-w-0 bg-[var(--panel-bg)]" style={{ width: `${mainSplitPercent}%` }}>
+          {/* Chat Column */}
+          <div
+            className="flex flex-col border-r border-[var(--border)] min-w-0 bg-[var(--panel-bg)]"
+            style={{ width: `${mainSplitPercent}%` }}
+          >
             {messages.length === 0 &&
             pendingQueue.length === 0 &&
             !historyLoadingRaw &&
             ocrFlow.status === "idle" ? (
-              <HeroWelcome onSuggestionClick={(text) => {
-                setInputText(text);
-              }} />
+              <HeroWelcome
+                onSuggestionClick={(text) => {
+                  setInputText(text);
+                }}
+              />
             ) : (
               <ChatMessageList
                 messages={messages}
                 historyLoading={historyLoadingRaw && !isTempSession}
                 isTempSession={isTempSession}
-                currentStatus={job.phase !== 'idle' && job.phase !== 'success' ? job.message : null}
+                currentStatus={
+                  job.phase !== "idle" && job.phase !== "success" ? job.message : null
+                }
                 pendingQueue={pendingQueue}
                 editQueued={editQueued}
                 removeQueued={removeQueued}
                 messagesEndRef={messagesEndRef}
               />
             )}
+
             {queueNotice && (
-              <div className="px-4 pt-2 max-w-3xl mx-auto">
-                <p className="text-xs text-amber-400/90 bg-amber-500/10 border border-amber-500/20 rounded-xl px-3 py-2">
+              <div className="px-4 pt-2 max-w-3xl mx-auto w-full">
+                <p className="text-xs text-amber-300 bg-amber-500/10 border border-amber-500/20 rounded-xl px-3 py-2">
                   {queueNotice}
                 </p>
               </div>
             )}
+
             {ocrFlow.status !== "idle" && (
               <div className="px-4 pb-2 shrink-0">
                 <OcrConfirmCard
@@ -557,6 +634,7 @@ export default function ChatSessionPage() {
                 />
               </div>
             )}
+
             <ChatInput
               inputText={inputText}
               setInputText={setInputText}
@@ -570,58 +648,126 @@ export default function ChatSessionPage() {
               onSolve={handleComposerSend}
             />
           </div>
-          <div role="separator" onMouseDown={() => { draggingType.current = 'main'; document.body.style.cursor = "col-resize"; }} className="w-1 cursor-col-resize hover:bg-indigo-500/30 z-10 shrink-0" />
 
-          <div className="flex-1 flex flex-col bg-black/40 overflow-hidden relative">
-            <div className="flex-1 flex flex-col p-6 space-y-6 overflow-hidden">
+          {/* Main Column Drag Resizer */}
+          <div
+            role="separator"
+            onMouseDown={() => {
+              draggingType.current = "main";
+              document.body.style.cursor = "col-resize";
+            }}
+            className="w-1 cursor-col-resize hover:bg-indigo-500/40 z-10 shrink-0 transition-colors"
+          />
+
+          {/* Geometry & Animation Workspace */}
+          <div className="flex-1 flex flex-col bg-black/30 overflow-hidden relative">
+            <div className="flex-1 flex flex-col p-4 md:p-6 space-y-4 overflow-hidden">
               <AnimatePresence mode="popLayout">
                 {coordinates && (
-                  <motion.div key="static" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="flex-1 flex flex-col min-h-0 space-y-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-3">
-                        <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-[0.2em]">HÌNH VẼ MÔ PHỎNG</span>
-                        
+                  <motion.div
+                    key="static"
+                    initial={{ opacity: 0, scale: 0.98 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="flex-1 flex flex-col min-h-0 space-y-2.5"
+                  >
+                    <div className="flex items-center justify-between gap-2 px-1">
+                      <div className="flex items-center gap-2.5">
+                        <span className="text-[10px] font-mono font-semibold text-[var(--text-secondary)] uppercase tracking-wider">
+                          Mô hình Hình học {is3d ? "3D" : "2D"}
+                        </span>
+
                         {coordinates && !videoUrl && (
                           <button
-                            onClick={() => startRenderVideo(activeSnapshotJobId || undefined)}
-                            disabled={job.phase === 'rendering' || job.phase === 'rendering_queued'}
-                            className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-[9px] font-bold text-indigo-400 hover:bg-indigo-500/20 transition-all disabled:opacity-50"
+                            type="button"
+                            onClick={() =>
+                              startRenderVideo(activeSnapshotJobId || undefined)
+                            }
+                            disabled={
+                              job.phase === "rendering" ||
+                              job.phase === "rendering_queued"
+                            }
+                            className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/25 text-[10px] font-mono font-semibold text-indigo-300 hover:bg-indigo-500/20 active:scale-95 transition-all disabled:opacity-50"
                           >
-                            {job.phase === 'rendering' || job.phase === 'rendering_queued' ? (
-                              <Loader2 className="w-3 h-3 animate-spin" />
+                            {job.phase === "rendering" ||
+                            job.phase === "rendering_queued" ? (
+                              <Loader2 className="w-3 h-3 animate-spin text-indigo-400" />
                             ) : (
-                              <Film className="w-3 h-3" />
+                              <Film className="w-3 h-3 text-indigo-400" />
                             )}
-                            TẠO ANIMATION
+                            Tạo Animation
                           </button>
                         )}
                       </div>
 
-                      <VersionSwitcher currentVersion={videoVersion} totalVersions={geometrySnapshots.length} onPrev={() => {
-                        if (videoVersion > 1) {
-                          setVideoVersion(v => v - 1);
-                          applyGeometryFromSnapshot(geometrySnapshots[videoVersion - 2].metadata);
-                        }
-                      }} onNext={() => {
-                        if (videoVersion < geometrySnapshots.length) {
-                          setVideoVersion(v => v + 1);
-                          applyGeometryFromSnapshot(geometrySnapshots[videoVersion].metadata);
-                        }
-                      }} />
+                      <VersionSwitcher
+                        currentVersion={videoVersion}
+                        totalVersions={geometrySnapshots.length}
+                        onPrev={() => {
+                          if (videoVersion > 1) {
+                            setVideoVersion((v) => v - 1);
+                            applyGeometryFromSnapshot(
+                              geometrySnapshots[videoVersion - 2]
+                                .metadata as Record<string, unknown>
+                            );
+                          }
+                        }}
+                        onNext={() => {
+                          if (videoVersion < geometrySnapshots.length) {
+                            setVideoVersion((v) => v + 1);
+                            applyGeometryFromSnapshot(
+                              geometrySnapshots[videoVersion]
+                                .metadata as Record<string, unknown>
+                            );
+                          }
+                        }}
+                      />
                     </div>
-                     <div className="bg-zinc-900 border border-white/5 rounded-2xl p-2 flex-1 min-h-0 relative overflow-hidden shadow-2xl">
-                       {is3d ? (
-                         <Interactive3DCanvas coordinates={coordinates} drawingPhases={drawingPhases || []} />
-                       ) : (
-                         <StaticGeometryCanvas coordinates={coordinates} polygonOrder={polygonOrder || []} drawingPhases={drawingPhases || []} circles={[]} lines={[]} rays={[]} />
-                       )}
-                     </div>
+
+                    <div className="flex-1 min-h-0 relative overflow-hidden">
+                      {is3d ? (
+                        <Interactive3DCanvas
+                          coordinates={coordinates}
+                          drawingPhases={drawingPhases || []}
+                          faces={faces || []}
+                          solids={solids || []}
+                        />
+                      ) : (
+                        <StaticGeometryCanvas
+                          coordinates={
+                            coordinates as Record<string, [number, number]>
+                          }
+                          polygonOrder={polygonOrder || []}
+                          drawingPhases={drawingPhases || []}
+                          circles={[]}
+                          lines={[]}
+                          rays={[]}
+                        />
+                      )}
+                    </div>
                   </motion.div>
                 )}
-                {(videoUrl || job.phase === 'rendering' || job.phase === 'rendering_queued') && (
-                  <motion.div key="animation" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="flex-1 flex flex-col min-h-0 space-y-3">
-                     <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-[0.2em]">ANIMATION MANIM</span>
-                     <AnimationPreview videoUrl={videoUrl || undefined} loading={job.phase === 'rendering' || job.phase === 'rendering_queued'} />
+
+                {(videoUrl ||
+                  job.phase === "rendering" ||
+                  job.phase === "rendering_queued") && (
+                  <motion.div
+                    key="animation"
+                    initial={{ opacity: 0, scale: 0.98 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="flex-1 flex flex-col min-h-0 space-y-2.5"
+                  >
+                    <div className="flex items-center justify-between px-1">
+                      <span className="text-[10px] font-mono font-semibold text-[var(--text-secondary)] uppercase tracking-wider">
+                        Animation Manim Video
+                      </span>
+                    </div>
+                    <AnimationPreview
+                      videoUrl={videoUrl || undefined}
+                      loading={
+                        job.phase === "rendering" ||
+                        job.phase === "rendering_queued"
+                      }
+                    />
                   </motion.div>
                 )}
               </AnimatePresence>

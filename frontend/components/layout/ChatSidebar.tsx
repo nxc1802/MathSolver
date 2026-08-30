@@ -1,11 +1,17 @@
 "use client";
 
-import React from "react";
-import { Calculator, ChevronLeft, ChevronRight, LogOut, User as UserIcon, Settings } from "lucide-react";
+import React, { useState } from "react";
+import {
+  Compass,
+  ChevronLeft,
+  ChevronRight,
+  LogOut,
+  User as UserIcon,
+  Settings,
+} from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import SessionList from "./SessionList";
 import SettingsModal from "../settings/SettingsModal";
-import { useState } from "react";
 import { motion } from "framer-motion";
 
 type ChatSidebarProps = {
@@ -15,92 +21,119 @@ type ChatSidebarProps = {
   onExpand?: () => void;
 };
 
-export default function ChatSidebar({ compact = false, onCollapse, onExpand }: ChatSidebarProps) {
+export default function ChatSidebar({
+  compact = false,
+  onCollapse,
+  onExpand,
+}: ChatSidebarProps) {
   const { user, signOut } = useAuth();
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   if (compact) {
     return (
-      <motion.div 
+      <motion.aside
         layout
-        className="flex flex-col h-full bg-[var(--card-bg)] border-r border-[var(--border)]"
+        aria-label="Thanh bên rút gọn"
+        className="flex flex-col h-full bg-[var(--bg-secondary)] border-r border-[var(--border)] select-none"
       >
-        <div className="flex-shrink-0 flex flex-col items-center gap-2 pt-2 pb-3 px-1 border-b border-[var(--border)]">
+        <div className="flex-shrink-0 flex flex-col items-center gap-2.5 pt-3 pb-3 px-1.5 border-b border-[var(--border)]">
           <button
             type="button"
-            aria-label="Mở rộng sidebar"
-            title="Mở rộng"
+            aria-label="Mở rộng thanh bên"
+            title="Mở rộng (Expand)"
             onClick={onExpand}
-            className="shrink-0 p-1 rounded-md text-zinc-500 hover:text-indigo-300 hover:bg-white/5 transition-colors"
+            className="shrink-0 p-1.5 rounded-lg text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-white/5 active:scale-95 transition-all"
           >
-            <ChevronRight className="w-3.5 h-3.5" />
+            <ChevronRight className="w-4 h-4" />
           </button>
           <div
-            className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-md shadow-indigo-500/15"
-            title="MathSolver"
+            className="w-8 h-8 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 flex items-center justify-center shadow-sm"
+            title="MathSolver Studio"
           >
-            <Calculator className="w-4 h-4 text-white" />
+            <Compass className="w-4 h-4" />
           </div>
         </div>
 
-        <div className="flex-1 min-h-0 overflow-hidden px-0.5">
+        <div className="flex-1 min-h-0 overflow-hidden px-1 py-1">
           <SessionList compact />
         </div>
 
-        <div className="flex-shrink-0 flex flex-col items-center gap-2 py-3 px-1 border-t border-white/5 bg-black/20">
-          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-zinc-700 to-zinc-800 flex items-center justify-center border border-white/10 overflow-hidden">
+        <div className="flex-shrink-0 flex flex-col items-center gap-2.5 py-3 px-1.5 border-t border-[var(--border)] bg-black/20">
+          <div
+            className="w-8 h-8 rounded-full bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden"
+            title={user?.email || "Tài khoản"}
+          >
             {user?.user_metadata?.avatar_url ? (
-              <img src={user.user_metadata.avatar_url} alt="" className="w-full h-full object-cover" />
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={user.user_metadata.avatar_url}
+                alt=""
+                className="w-full h-full object-cover"
+              />
             ) : (
               <UserIcon className="w-4 h-4 text-zinc-400" />
             )}
           </div>
           <button
             type="button"
-            onClick={signOut}
-            className="p-1.5 rounded-lg text-zinc-600 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-            title="Đăng xuất"
-          >
-            <LogOut className="w-3.5 h-3.5" />
-          </button>
-          <button 
-            type="button" 
-            className="p-1 text-zinc-600 hover:text-white transition-colors" 
+            className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-white/5 active:scale-95 transition-all"
             title="Cài đặt"
             onClick={() => setIsSettingsOpen(true)}
           >
-            <Settings className="w-3.5 h-3.5" />
+            <Settings className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onClick={signOut}
+            className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-red-400 hover:bg-red-500/10 active:scale-95 transition-all"
+            title="Đăng xuất"
+          >
+            <LogOut className="w-4 h-4" />
           </button>
         </div>
 
-        <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
-      </motion.div>
+        <SettingsModal
+          isOpen={isSettingsOpen}
+          onClose={() => setIsSettingsOpen(false)}
+        />
+      </motion.aside>
     );
   }
 
   return (
-    <motion.div 
+    <motion.aside
       layout
-      className="flex flex-col h-full bg-[var(--card-bg)]"
+      aria-label="Thanh bên chính"
+      className="flex flex-col h-full bg-[var(--bg-secondary)] border-r border-[var(--border)] select-none"
     >
-      <div className="flex-shrink-0 px-4 py-4 border-b border-[var(--border)]">
-        <div className="flex items-start justify-between gap-2">
+      {/* Header */}
+      <div className="flex-shrink-0 px-4 py-3.5 border-b border-[var(--border)]">
+        <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-9 h-9 shrink-0 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
-              <Calculator className="w-5 h-5 text-white" />
+            <div className="w-8 h-8 shrink-0 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 flex items-center justify-center shadow-sm">
+              <Compass className="w-4 h-4" />
             </div>
             <div className="min-w-0">
-              <h1 className="text-base font-bold text-white tracking-tight leading-none truncate">MathSolver</h1>
-              <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-[0.2em] mt-1">v5.1 Agentic AI</p>
+              <div className="flex items-center gap-1.5">
+                <span className="text-sm font-semibold tracking-tight text-[var(--text-primary)] truncate">
+                  MathSolver
+                </span>
+                <span className="text-[9px] font-mono px-1.5 py-0.5 rounded-md bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 font-medium">
+                  v5.1
+                </span>
+              </div>
+              <p className="text-[10px] text-[var(--text-muted)] tracking-wide truncate">
+                Agentic Geometry AI
+              </p>
             </div>
           </div>
           {onCollapse && (
             <button
               type="button"
               aria-label="Thu gọn sidebar"
-              title="Thu gọn"
+              title="Thu gọn (Collapse)"
               onClick={onCollapse}
-              className="shrink-0 p-1.5 rounded-lg text-zinc-500 hover:text-zinc-200 hover:bg-white/5 transition-colors"
+              className="shrink-0 p-1.5 rounded-lg text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-white/5 active:scale-95 transition-all"
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
@@ -108,53 +141,71 @@ export default function ChatSidebar({ compact = false, onCollapse, onExpand }: C
         </div>
       </div>
 
-      <div className="flex-1 overflow-hidden">
-        <div className="px-5 pt-6 pb-2">
-          <h2 className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest">Lịch sử bài toán</h2>
+      {/* Session History */}
+      <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+        <div className="px-4 pt-3.5 pb-1 flex items-center justify-between">
+          <span className="text-[10px] font-mono font-medium tracking-wider uppercase text-[var(--text-muted)]">
+            Phiên giải toán
+          </span>
         </div>
-        <SessionList />
+        <div className="flex-1 min-h-0 overflow-hidden">
+          <SessionList />
+        </div>
       </div>
 
-      <div className="flex-shrink-0 p-4 border-t border-[var(--border)] bg-black/5">
-        <div className="group relative flex items-center gap-3 p-2 rounded-xl hover:bg-white/5 transition-all">
-          <div className="w-9 h-9 rounded-full bg-gradient-to-br from-zinc-700 to-zinc-800 flex items-center justify-center border border-[var(--border)]">
-            {user?.user_metadata?.avatar_url ? (
-              <img src={user.user_metadata.avatar_url} alt="" className="w-full h-full rounded-full" />
-            ) : (
-              <UserIcon className="w-5 h-5 text-zinc-400" />
-            )}
+      {/* User Footer */}
+      <div className="flex-shrink-0 p-3 border-t border-[var(--border)] bg-black/10">
+        <div className="flex items-center justify-between gap-2 p-1.5 rounded-xl bg-[var(--card-bg)] border border-[var(--border)]">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 rounded-full bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden shrink-0">
+              {user?.user_metadata?.avatar_url ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={user.user_metadata.avatar_url}
+                  alt=""
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <UserIcon className="w-4 h-4 text-zinc-400" />
+              )}
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs font-medium text-[var(--text-primary)] truncate">
+                {user?.user_metadata?.full_name ||
+                  user?.email?.split("@")[0] ||
+                  "Người dùng"}
+              </p>
+              <p className="text-[10px] text-[var(--text-muted)] font-mono truncate">
+                {user?.email}
+              </p>
+            </div>
           </div>
 
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-bold text-white truncate">
-              {user?.user_metadata?.full_name || user?.email?.split("@")[0] || "Người dùng"}
-            </p>
-            <p className="text-[10px] text-[var(--text-muted)] truncate">{user?.email}</p>
+          <div className="flex items-center gap-0.5 shrink-0">
+            <button
+              type="button"
+              className="p-1.5 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-white/5 rounded-lg active:scale-95 transition-all"
+              title="Cài đặt"
+              onClick={() => setIsSettingsOpen(true)}
+            >
+              <Settings className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={signOut}
+              className="p-1.5 text-[var(--text-muted)] hover:text-red-400 hover:bg-red-500/10 rounded-lg active:scale-95 transition-all"
+              title="Đăng xuất"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
           </div>
-
-          <button
-            type="button"
-            onClick={signOut}
-            className="p-2 hover:bg-red-500/10 hover:text-red-400 rounded-lg text-zinc-600 transition-all"
-            title="Đăng xuất"
-          >
-            <LogOut className="w-4 h-4" />
-          </button>
         </div>
-
-        <div className="mt-4 flex items-center justify-start px-2 py-2">
-          <button 
-            type="button" 
-            className="text-zinc-600 hover:text-white transition-colors p-1" 
-            title="Cài đặt"
-            onClick={() => setIsSettingsOpen(true)}
-          >
-            <Settings className="w-4 h-4" />
-          </button>
-        </div>
-
-        <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
       </div>
-    </motion.div>
+
+      <SettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+      />
+    </motion.aside>
   );
 }

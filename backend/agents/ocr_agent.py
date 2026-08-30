@@ -1,6 +1,18 @@
-import asyncio
-import logging
+"""
+OCR Agent (v5.3).
+Pure visual perception agent responsible for recognizing text, mathematical formulas, and layout
+from geometry problem images using Pix2Text.
+Strictly adheres to the Design Principle:
+- OCR only extracts and structures visual content without LLM hallucinations or semantic alteration.
+- Emits structured CanonicalOCRResult for downstream Problem Parser / VLM.
+"""
 
+from __future__ import annotations
+
+import logging
+from typing import Any, Dict, Optional
+
+from vision_ocr.canonical_schema import CanonicalOCRResult
 from vision_ocr.pipeline import OcrVisionPipeline
 
 logger = logging.getLogger(__name__)
@@ -8,105 +20,45 @@ logger = logging.getLogger(__name__)
 
 class ImprovedOCRAgent:
     """
-    API-facing OCR: composes ``OcrVisionPipeline`` (vision only) with optional LLM refinement.
-    Celery OCR workers should import ``OcrVisionPipeline`` directly from ``vision_ocr``.
+    Math OCR Agent (v5.3).
+    Wraps ``OcrVisionPipeline`` (Pix2Text) and produces CanonicalOCRResult.
     """
 
-    def __init__(self, skip_llm_refinement: bool = False):
-        self._skip_llm_refinement = bool(skip_llm_refinement)
+    def __init__(self, **kwargs):
         self._vision = OcrVisionPipeline()
-        logger.info(
-            "[ImprovedOCRAgent] Vision pipeline ready (skip_llm_refinement=%s)...",
-            self._skip_llm_refinement,
-        )
-
-        if self._skip_llm_refinement:
-            self.llm = None
-            logger.info("[ImprovedOCRAgent] LLM client skipped (raw OCR only).")
-        else:
-            from app.llm_client import get_llm_client
-
-            self.llm = get_llm_client()
-            logger.info("[ImprovedOCRAgent] Multi-Layer LLM Client initialized.")
+        logger.info("[ImprovedOCRAgent] Math OCR Vision Pipeline ready (Pix2Text Engine).")
 
     async def process_image(self, image_path: str) -> str:
-        combined_text = await self._vision.process_image(image_path)
+        """
+        Processes image and returns reconstructed Markdown text containing inline and display LaTeX.
+        """
+        canonical = await self._vision.process_image_canonical(image_path)
+        return canonical.text
 
-        if not combined_text.strip():
-            return combined_text
-
-        if self._skip_llm_refinement or self.llm is None:
-            logger.info("[ImprovedOCRAgent] Skipping MegaLLM refinement (raw OCR output).")
-            return combined_text
-
-        try:
-            logger.info("[ImprovedOCRAgent] Sending to MegaLLM for refinement...")
-            refined_text = await asyncio.wait_for(
-                self.refine_with_llm(combined_text), timeout=30.0
-            )
-            return refined_text
-        except asyncio.TimeoutError:
-            logger.error("[ImprovedOCRAgent] MegaLLM refinement timed out.")
-            return combined_text
-        except Exception as e:
-            logger.error("[ImprovedOCRAgent] MegaLLM refinement failed: %s", e)
-            return combined_text
-
-    async def refine_with_llm(self, text: str) -> str:
-        if not text.strip():
-            return ""
-        if self.llm is None:
-            logger.warning("[ImprovedOCRAgent] refine_with_llm: no LLM client; returning raw text.")
-            return text
-
-        prompt = f"""Bạn là một chuyên gia số hóa tài liệu toán học.
-Dưới đây là kết quả OCR thô từ một trang sách toán Tiếng Việt.
-Kết quả này có thể chứa lỗi chính tả, lỗi định dạng mã LaTeX, hoặc bị ngắt quãng không logic.
-
-Nhiệm vụ của bạn:
-1. Sửa lỗi chính tả tiếng Việt.
-2. Đảm bảo các công thức toán học được viết đúng định dạng LaTeX và nằm trong cặp dấu $...$.
-3. Giữ nguyên cấu trúc logic của bài toán.
-4. Trả về nội dung đã được làm sạch dưới dạng Markdown.
-
-Nội dung OCR thô:
----
-{text}
----
-
-Kết quả làm sạch:"""
-
-        try:
-            refined = await self.llm.chat_completions_create(
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.1,
-            )
-            logger.info("[ImprovedOCRAgent] LLM refinement complete.")
-            return refined
-        except Exception as e:
-            logger.error("[ImprovedOCRAgent] LLM refinement failed: %s", e)
-            return text
+    async def process_image_canonical(self, image_path: str) -> CanonicalOCRResult:
+        """
+        Processes image and returns full CanonicalOCRResult structure:
+        - text: Markdown string with LaTeX formulas
+        - latex: List of all extracted mathematical expressions
+        - elements: Region bounding boxes and classifications
+        - reading_order: Document sequential layout reading order
+        - confidence: Extraction confidence score
+        """
+        return await self._vision.process_image_canonical(image_path)
 
     async def process_url(self, url: str) -> str:
-        combined_text = await self._vision.process_url(url)
+        """
+        Fetches image from URL and returns reconstructed Markdown text with LaTeX.
+        """
+        return await self._vision.process_url(url)
 
-        if not combined_text.strip() or combined_text.lstrip().startswith("Error:"):
-            return combined_text
-
-        if self._skip_llm_refinement or self.llm is None:
-            return combined_text
-
-        try:
-            return await asyncio.wait_for(self.refine_with_llm(combined_text), timeout=30.0)
-        except asyncio.TimeoutError:
-            logger.error("[ImprovedOCRAgent] MegaLLM refinement timed out.")
-            return combined_text
-        except Exception as e:
-            logger.error("[ImprovedOCRAgent] MegaLLM refinement failed: %s", e)
-            return combined_text
+    async def process_url_canonical(self, url: str) -> CanonicalOCRResult:
+        """
+        Fetches image from URL and returns full CanonicalOCRResult.
+        """
+        return await self._vision.process_url_canonical(url)
 
 
 class OCRAgent(ImprovedOCRAgent):
-    """Alias for compatibility with existing code."""
-
+    """Alias for backward compatibility."""
     pass

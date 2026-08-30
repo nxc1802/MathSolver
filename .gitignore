@@ -46,3 +46,6 @@ celery_worker.log
 /backend/integration_report.md
 /backend/full_api_test_report.md
 /backend/pytest_*.xml
+/backend/external_agents/
+/backend/scratch/
+/backend/static/

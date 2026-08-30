@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useLayoutEffect } from 'react';
 import { getApiBaseUrl, getWsBaseUrl } from '@/lib/api-config';
 import { saveActiveJob, getActiveJob, clearActiveJob } from '@/lib/job-tracker';
-import { validateJobResult } from '@/lib/validators';
+import { validateJobResult, type JobResult } from '@/lib/validators';
 
 export type SolverPhase = 'idle' | 'uploading' | 'ocr' | 'parsing' | 'solving' | 'rendering_queued' | 'rendering' | 'success' | 'error';
 
@@ -9,7 +9,7 @@ export interface JobState {
   phase: SolverPhase;
   progress: number;
   message: string;
-  result?: any;
+  result?: JobResult | null;
   error?: string;
   jobId?: string;
 }
@@ -197,7 +197,6 @@ export function useSolverJob(sessionId: string, token?: string | null) {
     }
   }, [sessionId, token, attachToJob, cleanup]);
 
-  // Re-attach when session route changes only (avoid re-running when attachToJob identity changes, e.g. token hydration).
   useEffect(() => {
     if (!sessionId || sessionId.startsWith("temp-")) return;
     const activeJobId = getActiveJob(sessionId);

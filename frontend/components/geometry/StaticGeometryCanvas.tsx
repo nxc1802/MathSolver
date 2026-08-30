@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { useMemo, useState, useRef, useEffect } from "react";
+import { useMemo, useState, useRef } from "react";
 import { ZoomIn, ZoomOut, RotateCcw, Move } from "lucide-react";
 
 interface StaticGeometryCanvasProps {
@@ -18,7 +18,14 @@ interface StaticGeometryCanvasProps {
   }>;
 }
 
-export default function StaticGeometryCanvas({ coordinates, polygonOrder, circles, lines, rays, drawingPhases }: StaticGeometryCanvasProps) {
+export default function StaticGeometryCanvas({
+  coordinates,
+  polygonOrder,
+  circles,
+  lines,
+  rays,
+  drawingPhases,
+}: StaticGeometryCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
@@ -45,7 +52,7 @@ export default function StaticGeometryCanvas({ coordinates, polygonOrder, circle
       return { label, x: px, y: py };
     });
 
-    const circleParsed = (circles || []).map(c => {
+    const circleParsed = (circles || []).map((c) => {
       const centerCoords = coordinates[c.center];
       if (!centerCoords) return null;
       const r = Number(c.radius);
@@ -56,22 +63,21 @@ export default function StaticGeometryCanvas({ coordinates, polygonOrder, circle
       minY = Math.min(minY, cy - r);
       maxY = Math.max(maxY, cy + r);
       return { cx, cy, r };
-    }).filter(Boolean) as Array<{ cx: number, cy: number, r: number }>;
+    }).filter(Boolean) as Array<{ cx: number; cy: number; r: number }>;
 
-    const padding = Math.max((maxX - minX) * 0.2, (maxY - minY) * 0.2, 10);
+    const padding = Math.max((maxX - minX) * 0.25, (maxY - minY) * 0.25, 12);
     const vb = `${minX - padding} ${minY - padding} ${maxX - minX + padding * 2} ${maxY - minY + padding * 2}`;
     const sX = maxX - minX + padding * 2;
 
-    const resPhasePaths: Array<{ d: string, phase: number }> = [];
+    const resPhasePaths: Array<{ d: string; phase: number }> = [];
 
     if (drawingPhases && drawingPhases.length > 0) {
-      // Trust backend drawing_phases — only render phases that actually have segments.
-      drawingPhases.forEach(phase => {
-        if (!phase.segments || phase.segments.length === 0) return; // skip empty phases
+      drawingPhases.forEach((phase) => {
+        if (!phase.segments || phase.segments.length === 0) return;
         const segmentsD: string[] = [];
         phase.segments.forEach(([p1Label, p2Label]) => {
-          const pt1 = parsedPoints.find(p => p.label === p1Label);
-          const pt2 = parsedPoints.find(p => p.label === p2Label);
+          const pt1 = parsedPoints.find((p) => p.label === p1Label);
+          const pt2 = parsedPoints.find((p) => p.label === p2Label);
           if (pt1 && pt2) {
             segmentsD.push(`M ${pt1.x} ${pt1.y} L ${pt2.x} ${pt2.y}`);
           }
@@ -82,14 +88,13 @@ export default function StaticGeometryCanvas({ coordinates, polygonOrder, circle
       });
     }
 
-    // Fallback: only use polygonOrder — NEVER auto-connect all points (avoids nonsensical lines)
     if (resPhasePaths.length === 0 && polygonOrder && polygonOrder.length >= 2) {
       const ordered = polygonOrder
-        .map(label => parsedPoints.find(p => p.label === label))
+        .map((label) => parsedPoints.find((p) => p.label === label))
         .filter(Boolean) as typeof parsedPoints;
 
       if (ordered.length >= 2) {
-        let d = ordered.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(" ");
+        let d = ordered.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
         if (ordered.length >= 3) d += " Z";
         resPhasePaths.push({ d, phase: 1 });
       }
@@ -98,12 +103,11 @@ export default function StaticGeometryCanvas({ coordinates, polygonOrder, circle
     // Lines (Infinite)
     const resLinePaths: string[] = [];
     (lines || []).forEach(([p1, p2]) => {
-      const pt1 = parsedPoints.find(p => p.label === p1);
-      const pt2 = parsedPoints.find(p => p.label === p2);
+      const pt1 = parsedPoints.find((p) => p.label === p1);
+      const pt2 = parsedPoints.find((p) => p.label === p2);
       if (pt1 && pt2) {
         const dx = pt2.x - pt1.x;
         const dy = pt2.y - pt1.y;
-        // Extend far beyond viewBox
         const x1 = pt1.x - dx * 2000;
         const y1 = pt1.y - dy * 2000;
         const x2 = pt1.x + dx * 2000;
@@ -115,12 +119,11 @@ export default function StaticGeometryCanvas({ coordinates, polygonOrder, circle
     // Rays
     const resRayPaths: string[] = [];
     (rays || []).forEach(([p1, p2]) => {
-      const pt1 = parsedPoints.find(p => p.label === p1);
-      const pt2 = parsedPoints.find(p => p.label === p2);
+      const pt1 = parsedPoints.find((p) => p.label === p1);
+      const pt2 = parsedPoints.find((p) => p.label === p2);
       if (pt1 && pt2) {
         const dx = pt2.x - pt1.x;
         const dy = pt2.y - pt1.y;
-        // Start at pt1, extend far past pt2
         const x2 = pt1.x + dx * 2000;
         const y2 = pt1.y + dy * 2000;
         resRayPaths.push(`M ${pt1.x} ${pt1.y} L ${x2} ${y2}`);
@@ -134,17 +137,16 @@ export default function StaticGeometryCanvas({ coordinates, polygonOrder, circle
     if (e.ctrlKey || e.metaKey) {
       e.preventDefault();
       const delta = e.deltaY > 0 ? 0.9 : 1.1;
-      setScale(s => Math.min(Math.max(s * delta, 0.5), 5));
+      setScale((s) => Math.min(Math.max(s * delta, 0.4), 6));
     } else {
-      // Scale move by viewbox ratio
       const rect = containerRef.current?.getBoundingClientRect();
       if (!rect) return;
       const vbWidth = Number(viewBox.split(" ")[2]);
       const ratio = vbWidth / rect.width;
 
-      setOffset(prev => ({
+      setOffset((prev) => ({
         x: prev.x - (e.deltaX * ratio) / scale,
-        y: prev.y - (e.deltaY * ratio) / scale
+        y: prev.y - (e.deltaY * ratio) / scale,
       }));
     }
   };
@@ -158,17 +160,17 @@ export default function StaticGeometryCanvas({ coordinates, polygonOrder, circle
 
   const handleMouseMove = (e: React.MouseEvent) => {
     if (!isDragging || !containerRef.current) return;
-    
+
     const rect = containerRef.current.getBoundingClientRect();
     const vbWidth = Number(viewBox.split(" ")[2]);
     const ratio = vbWidth / rect.width;
 
-    const dx = (e.clientX - dragStart.current.x) * ratio / scale;
-    const dy = (e.clientY - dragStart.current.y) * ratio / scale;
+    const dx = ((e.clientX - dragStart.current.x) * ratio) / scale;
+    const dy = ((e.clientY - dragStart.current.y) * ratio) / scale;
 
     setOffset({
       x: dragStartOffset.current.x + dx,
-      y: dragStartOffset.current.y + dy
+      y: dragStartOffset.current.y + dy,
     });
   };
 
@@ -181,84 +183,105 @@ export default function StaticGeometryCanvas({ coordinates, polygonOrder, circle
 
   if (!coordinates || Object.keys(coordinates).length === 0) {
     return (
-      <motion.div
-        initial={{ opacity: 0, scale: 0.9 }}
-        animate={{ opacity: 1, scale: 1 }}
-        className="bg-zinc-950 border border-white/5 rounded-3xl overflow-hidden flex-1 min-h-0 relative flex items-center justify-center p-8"
-      >
-        <p className="text-zinc-500 font-medium animate-pulse">Hệ thống đang dựng tọa độ...</p>
-      </motion.div>
+      <div className="bg-[var(--card-bg)] border border-[var(--border)] rounded-2xl overflow-hidden flex-1 min-h-0 relative flex items-center justify-center p-8">
+        <p className="text-xs font-mono text-[var(--text-muted)] animate-pulse">
+          Đang khởi tạo tọa độ không gian 2D...
+        </p>
+      </div>
     );
   }
 
   const r = spanX * 0.012;
-  const fontSize = spanX * 0.035;
+  const fontSize = spanX * 0.036;
 
   return (
-    <div 
+    <div
       ref={containerRef}
-      className="bg-zinc-950 border border-white/10 rounded-3xl overflow-hidden flex-1 min-h-0 relative group select-none cursor-grab active:cursor-grabbing"
+      className="bg-[var(--card-bg)] border border-[var(--border)] rounded-2xl overflow-hidden flex-1 min-h-0 relative select-none cursor-grab active:cursor-grabbing shadow-inner"
       onWheel={handleWheel}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp}
     >
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(99,102,241,0.05)_0%,transparent_100%)] pointer-events-none" />
-      
-      {/* Controls */}
-      <div className="absolute top-4 right-4 flex flex-col gap-2 z-20">
-        <button 
-          onClick={() => setScale(s => Math.min(s * 1.2, 5))}
-          className="p-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-zinc-400 hover:text-white transition-all backdrop-blur-md"
-          title="Zoom In"
+      {/* Background blueprint grid */}
+      <div className="absolute inset-0 bg-grid-pattern opacity-60 pointer-events-none" />
+
+      {/* Floating HUD Controls */}
+      <div className="absolute top-3 right-3 flex flex-col gap-1.5 z-20">
+        <button
+          type="button"
+          onClick={() => setScale((s) => Math.min(s * 1.25, 6))}
+          className="p-2 bg-[var(--panel-glass)] hover:bg-white/10 border border-[var(--border)] rounded-xl text-zinc-300 hover:text-white backdrop-blur-md shadow-sm active:scale-95 transition-all"
+          title="Phóng to (Zoom In)"
         >
-          <ZoomIn className="w-4 h-4" />
+          <ZoomIn className="w-3.5 h-3.5" />
         </button>
-        <button 
-          onClick={() => setScale(s => Math.max(s / 1.2, 0.5))}
-          className="p-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-zinc-400 hover:text-white transition-all backdrop-blur-md"
-          title="Zoom Out"
+        <button
+          type="button"
+          onClick={() => setScale((s) => Math.max(s / 1.25, 0.4))}
+          className="p-2 bg-[var(--panel-glass)] hover:bg-white/10 border border-[var(--border)] rounded-xl text-zinc-300 hover:text-white backdrop-blur-md shadow-sm active:scale-95 transition-all"
+          title="Thu nhỏ (Zoom Out)"
         >
-          <ZoomOut className="w-4 h-4" />
+          <ZoomOut className="w-3.5 h-3.5" />
         </button>
-        <button 
+        <button
+          type="button"
           onClick={resetView}
-          className="p-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-zinc-400 hover:text-white transition-all backdrop-blur-md"
-          title="Reset View"
+          className="p-2 bg-[var(--panel-glass)] hover:bg-white/10 border border-[var(--border)] rounded-xl text-zinc-300 hover:text-white backdrop-blur-md shadow-sm active:scale-95 transition-all"
+          title="Căn giữa lại (Reset View)"
         >
-          <RotateCcw className="w-4 h-4" />
+          <RotateCcw className="w-3.5 h-3.5" />
         </button>
       </div>
 
-      <div className="absolute bottom-4 left-4 flex items-center gap-2 px-3 py-1.5 bg-white/5 border border-white/10 rounded-full backdrop-blur-md z-20 opacity-0 group-hover:opacity-100 transition-opacity">
-        <Move className="w-3.5 h-3.5 text-zinc-500" />
-        <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Kéo để di chuyển • Ctrl+Cuộn để phóng to</span>
+      {/* Mode Badge Header */}
+      <div className="absolute top-3 left-3 z-20">
+        <div className="flex items-center gap-2 px-3 py-1 bg-[var(--panel-glass)] border border-[var(--border)] rounded-full backdrop-blur-md shadow-sm">
+          <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+          <span className="text-[10px] font-mono font-semibold text-[var(--text-secondary)] uppercase tracking-wider">
+            2D Geometry Canvas
+          </span>
+        </div>
       </div>
-      
-      <svg 
-        viewBox={viewBox} 
+
+      {/* Navigation Help Bar */}
+      <div className="absolute bottom-3 left-3 flex items-center gap-2 px-3 py-1 bg-[var(--panel-glass)] border border-[var(--border)] rounded-full backdrop-blur-md z-20 pointer-events-none opacity-80">
+        <Move className="w-3 h-3 text-[var(--text-muted)]" />
+        <span className="text-[9px] font-mono text-[var(--text-muted)]">
+          Kéo để di chuyển • Ctrl + Cuộn để phóng to
+        </span>
+      </div>
+
+      {/* Main SVG Geometry */}
+      <svg
+        viewBox={viewBox}
         className="w-full h-full"
         preserveAspectRatio="xMidYMid meet"
       >
         <motion.g
-          animate={{ 
+          animate={{
             scale,
             x: offset.x,
-            y: offset.y
+            y: offset.y,
           }}
-          transition={isDragging ? { type: "tween", duration: 0 } : { type: "spring", stiffness: 300, damping: 30 }}
+          transition={
+            isDragging
+              ? { type: "tween", duration: 0 }
+              : { type: "spring", stiffness: 350, damping: 32 }
+          }
           style={{ originX: "center", originY: "center" }}
         >
+          {/* Phase Drawing Segments */}
           {phasePaths.map((p, idx) => {
             const isBase = p.phase === 1;
             return (
-              <path 
+              <path
                 key={`phase-${idx}`}
-                d={p.d} 
-                fill="none" 
-                stroke={isBase ? "rgba(99, 102, 241, 0.9)" : "rgba(167, 139, 250, 0.7)"} 
-                strokeWidth={isBase ? "2.5" : "1.8"}
+                d={p.d}
+                fill="none"
+                stroke={isBase ? "rgba(129, 140, 248, 0.95)" : "rgba(192, 132, 252, 0.85)"}
+                strokeWidth={isBase ? "2.2" : "1.6"}
                 strokeDasharray={isBase ? "none" : "4 3"}
                 vectorEffect="non-scaling-stroke"
                 strokeLinejoin="round"
@@ -267,60 +290,67 @@ export default function StaticGeometryCanvas({ coordinates, polygonOrder, circle
             );
           })}
 
+          {/* Infinite Lines */}
           {linePaths.map((d, i) => (
-            <path 
+            <path
               key={`line-${i}`}
               d={d}
               fill="none"
-              stroke="rgba(79, 70, 229, 0.6)"
-              strokeWidth="1.5"
-              vectorEffect="non-scaling-stroke"
-              strokeDasharray="10 5"
-            />
-          ))}
-
-          {rayPaths.map((d, i) => (
-            <path 
-              key={`ray-${i}`}
-              d={d}
-              fill="none"
-              stroke="rgba(139, 92, 246, 0.6)"
-              strokeWidth="1.5"
+              stroke="rgba(99, 102, 241, 0.5)"
+              strokeWidth="1.2"
               vectorEffect="non-scaling-stroke"
               strokeDasharray="8 4"
             />
           ))}
-          
+
+          {/* Rays */}
+          {rayPaths.map((d, i) => (
+            <path
+              key={`ray-${i}`}
+              d={d}
+              fill="none"
+              stroke="rgba(168, 85, 247, 0.5)"
+              strokeWidth="1.2"
+              vectorEffect="non-scaling-stroke"
+              strokeDasharray="6 3"
+            />
+          ))}
+
+          {/* Circles */}
           {circlePaths.map((c, i) => (
-            <circle 
+            <circle
               key={`circle-${i}`}
               cx={c.cx}
               cy={c.cy}
               r={c.r}
               fill="none"
-              stroke="rgba(167, 139, 250, 0.6)"
-              strokeWidth="1.5"
+              stroke="rgba(147, 197, 253, 0.6)"
+              strokeWidth="1.4"
               vectorEffect="non-scaling-stroke"
-              strokeDasharray="5 3"
+              strokeDasharray="4 2"
             />
           ))}
-          
+
+          {/* Vertex Points and Labels */}
           {points.map((p) => (
             <g key={p.label}>
-              <circle 
-                cx={p.x} 
-                cy={p.y} 
-                r={r} 
-                fill="white"
-                className="drop-shadow-[0_0_4px_rgba(255,255,255,0.5)]"
+              <circle
+                cx={p.x}
+                cy={p.y}
+                r={r}
+                fill="#ffffff"
+                stroke="#6366f1"
+                strokeWidth="1.5"
+                vectorEffect="non-scaling-stroke"
               />
-              <text 
-                x={p.x + r * 1.8} 
-                y={p.y - r * 1.8} 
-                fill="white" 
-                fontSize={fontSize} 
-                fontWeight="800"
-                className="pointer-events-none drop-shadow-lg"
+              <text
+                x={p.x + r * 1.8}
+                y={p.y - r * 1.8}
+                fill="#ffffff"
+                fontSize={fontSize}
+                fontFamily="var(--font-geist-mono), monospace"
+                fontWeight="700"
+                className="pointer-events-none select-none drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]"
               >
                 {p.label}
               </text>

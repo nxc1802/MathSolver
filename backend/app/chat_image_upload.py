@@ -201,6 +201,34 @@ def delete_storage_object(bucket_name: str, storage_path: str) -> None:
     try:
         from app.supabase_client import get_supabase
 
-        get_supabase().storage.from_(bucket_name).remove([storage_path])
+        supabase = get_supabase()
+        if supabase:
+            supabase.storage.from_(bucket_name).remove([storage_path])
     except Exception as e:
         logger.warning("delete_storage_object failed path=%s: %s", storage_path, e)
+
+
+def cleanup_session_storage(session_id: str) -> None:
+    """List and delete all storage files in video and image buckets under sessions/{session_id}/."""
+    from app.supabase_client import get_supabase
+
+    supabase = get_supabase()
+    if not supabase:
+        return
+
+    folder = f"sessions/{session_id}"
+    for bucket in ["image", os.getenv("SUPABASE_BUCKET", "video")]:
+        try:
+            items = supabase.storage.from_(bucket).list(folder)
+            if items:
+                paths_to_remove = []
+                for item in items:
+                    name = item.get("name") if isinstance(item, dict) else getattr(item, "name", None)
+                    if name and name != ".emptyFolderPlaceholder":
+                        paths_to_remove.append(f"{folder}/{name}")
+                if paths_to_remove:
+                    supabase.storage.from_(bucket).remove(paths_to_remove)
+                    logger.info("Cleaned up %d objects in bucket '%s' for session %s", len(paths_to_remove), bucket, session_id)
+        except Exception as e:
+            logger.warning("Failed to clean up storage bucket '%s' for session %s: %s", bucket, session_id, e)
+

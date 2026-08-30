@@ -4,15 +4,11 @@ from typing import Dict, Any
 logger = logging.getLogger(__name__)
 
 
-# ─── Shape rule registry ────────────────────────────────────────────────────
-# Each entry: keyword list → augmentation function
-# Augmentation receives (values: dict, text: str) and returns updated values dict.
-
 class KnowledgeAgent:
     """Knowledge Agent: Stores geometric theorems and common patterns to augment Parser output."""
 
     def augment_semantic_data(self, semantic_data: Dict[str, Any]) -> Dict[str, Any]:
-        logger.info("==[KnowledgeAgent] Augmenting semantic data==")
+        logger.info("==[KnowledgeAgent] Augmenting semantic data (v5.2)==")
         text = str(semantic_data.get("input_text", "")).lower()
         logger.debug(f"[KnowledgeAgent] Input text for matching: '{text[:200]}'")
 
@@ -32,6 +28,21 @@ class KnowledgeAgent:
     def _detect_shape(self, text: str, llm_type: str) -> str | None:
         """Detect shape from text keywords. LLM type provides a hint."""
         checks = [
+            # 3D Solids
+            (["lập phương", "hình lập phương", "khối lập phương", "cube"], "cube"),
+            (["hộp chữ nhật", "hình hộp chữ nhật", "khối hộp chữ nhật", "hình hộp", "cuboid", "parallelepiped"], "cuboid"),
+            (["tứ diện đều", "regular tetrahedron"], "regular_tetrahedron"),
+            (["tứ diện", "tetrahedron"], "tetrahedron"),
+            (["chóp cụt", "truncated pyramid", "frustum"], "frustum"),
+            (["chóp tứ giác đều", "chóp tam giác đều", "hình chóp đều"], "regular_pyramid"),
+            (["hình chóp", "khối chóp", "pyramid"], "pyramid"),
+            (["lăng trụ đứng", "lăng trụ đều", "right prism"], "right_prism"),
+            (["lăng trụ", "hình lăng trụ", "prism"], "prism"),
+            (["hình nón", "khối nón", "cone"], "cone"),
+            (["hình trụ", "khối trụ", "cylinder"], "cylinder"),
+            (["mặt cầu", "khối cầu", "hình cầu", "sphere"], "sphere"),
+
+            # 2D Shapes
             (["hình vuông", "square"],                      "square"),
             (["hình chữ nhật", "rectangle"],                "rectangle"),
             (["hình thoi", "rhombus"],                      "rhombus"),
@@ -51,6 +62,8 @@ class KnowledgeAgent:
 
         # Fallback: trust LLM-detected type if it's a known type
         known = {
+            "cube", "cuboid", "tetrahedron", "regular_tetrahedron", "pyramid", "regular_pyramid",
+            "prism", "right_prism", "cone", "cylinder", "sphere", "frustum",
             "rectangle", "square", "rhombus", "parallelogram",
             "trapezoid", "right_trapezoid", "triangle", "right_triangle",
             "equilateral_triangle", "isosceles_triangle", "circle",
@@ -67,8 +80,42 @@ class KnowledgeAgent:
         ad = values.get("AD")
         bc = values.get("BC")
         cd = values.get("CD")
+        side = ab or ad or bc or cd or values.get("side") or values.get("a")
 
-        if shape == "rectangle":
+        if shape == "cube":
+            if side:
+                values.setdefault("side", side)
+                values.setdefault("AB", side)
+                values.setdefault("AD", side)
+                values.setdefault("AA1", side)
+                logger.info(f"[KnowledgeAgent] Cube: all edges={side}")
+
+        elif shape == "regular_tetrahedron":
+            if side:
+                values.setdefault("side", side)
+                values.setdefault("AB", side)
+                values.setdefault("AC", side)
+                values.setdefault("AD", side)
+                values.setdefault("BC", side)
+                values.setdefault("CD", side)
+                values.setdefault("DB", side)
+                logger.info(f"[KnowledgeAgent] Regular Tetrahedron: all 6 edges={side}")
+
+        elif shape == "cone":
+            r = values.get("radius") or values.get("r")
+            h = values.get("height") or values.get("h") or values.get("SO")
+            if r: values.setdefault("radius", r)
+            if h: values.setdefault("height", h)
+            logger.info(f"[KnowledgeAgent] Cone: radius={r}, height={h}")
+
+        elif shape == "cylinder":
+            r = values.get("radius") or values.get("r")
+            h = values.get("height") or values.get("h") or values.get("O1O2")
+            if r: values.setdefault("radius", r)
+            if h: values.setdefault("height", h)
+            logger.info(f"[KnowledgeAgent] Cylinder: radius={r}, height={h}")
+
+        elif shape == "rectangle":
             if ab and ad:
                 values.setdefault("CD", ab)
                 values.setdefault("BC", ad)
@@ -78,7 +125,6 @@ class KnowledgeAgent:
                 values.setdefault("angle_A", 90)
 
         elif shape == "square":
-            side = ab or ad or bc or cd or values.get("side")
             if side:
                 values.update({"AB": side, "AD": side, "angle_A": 90})
                 logger.info(f"[KnowledgeAgent] Square: side={side}, angle_A=90°")
@@ -86,7 +132,6 @@ class KnowledgeAgent:
                 values.setdefault("angle_A", 90)
 
         elif shape == "rhombus":
-            side = ab or values.get("side")
             if side:
                 values.update({"AB": side, "BC": side, "CD": side, "DA": side})
                 logger.info(f"[KnowledgeAgent] Rhombus: all sides={side}")
@@ -96,7 +141,7 @@ class KnowledgeAgent:
                 values.setdefault("CD", ab)
             if ad:
                 values.setdefault("BC", ad)
-            logger.info(f"[KnowledgeAgent] Parallelogram: AB||CD, AD||BC")
+            logger.info("[KnowledgeAgent] Parallelogram: AB||CD, AD||BC")
 
         elif shape == "trapezoid":
             logger.info("[KnowledgeAgent] Trapezoid: AB||CD (bottom||top)")
@@ -106,22 +151,17 @@ class KnowledgeAgent:
             values.setdefault("angle_A", 90)
 
         elif shape == "equilateral_triangle":
-            side = ab or values.get("side")
             if side:
                 values.update({"AB": side, "BC": side, "CA": side, "angle_A": 60})
                 logger.info(f"[KnowledgeAgent] Equilateral triangle: all sides={side}, angle_A=60°")
 
         elif shape == "right_triangle":
-            # Try to infer which vertex is the right angle
             rt_vertex = _detect_right_angle_vertex(text)
             values.setdefault(f"angle_{rt_vertex}", 90)
             logger.info(f"[KnowledgeAgent] Right triangle: angle_{rt_vertex}=90°")
 
         elif shape == "isosceles_triangle":
             logger.info("[KnowledgeAgent] Isosceles triangle: AB=AC (default, LLM may override)")
-
-        elif shape == "circle":
-            logger.info("[KnowledgeAgent] Circle detected — no side augmentation needed.")
 
         return values
 
@@ -132,4 +172,4 @@ def _detect_right_angle_vertex(text: str) -> str:
         patterns = [f"vuông tại {vertex}", f"góc {vertex} vuông", f"right angle at {vertex}"]
         if any(p.lower() in text for p in patterns):
             return vertex
-    return "A"  # default
+    return "A"

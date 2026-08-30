@@ -31,17 +31,15 @@ export const JobResultSchema = z.object({
   solution: SolutionSchema.optional(),
   is_3d: z.boolean().optional(),
   video_url: z.string().optional(),
-}).catchall(z.any()); // Accept other fields if they exist
+}).catchall(z.unknown());
 
 export type JobResult = z.infer<typeof JobResultSchema>;
 
-export function validateJobResult(data: any): JobResult {
+export function validateJobResult(data: unknown): JobResult {
   const result = JobResultSchema.safeParse(data);
   if (result.success) {
     return result.data;
   }
   console.error("JobResult validation failed:", result.error);
-  // Return the original data loosely shaped if validation fails, 
-  // so we don't break the app entirely, just warn.
-  return data as JobResult;
+  return (data as JobResult) || {};
 }
