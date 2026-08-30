@@ -33,15 +33,13 @@ class MultiLayerLLMClient:
             or os.getenv("OPENROUTER_API_KEY_1")
             or os.getenv("OPENROUTER_API_KEY")
             or ""
-        )
+        ).strip("'\" ")
 
-        base_url = os.getenv("LLM_BASE_URL")
-        if not base_url:
-            # Detect Google API Key format
-            if api_key and (api_key.startswith("AQ.") or api_key.startswith("AIza")):
-                base_url = "https://generativelanguage.googleapis.com/v1beta/openai/"
-            else:
-                base_url = "https://openrouter.ai/api/v1"
+        base_url = os.getenv("LLM_BASE_URL", "").strip("'\" ")
+        if api_key and (api_key.startswith("AQ.") or api_key.startswith("AIza")):
+            base_url = "https://generativelanguage.googleapis.com/v1beta/openai/"
+        elif not base_url:
+            base_url = "https://openrouter.ai/api/v1"
 
         if not api_key:
             logger.error("[LLM] No API key found in environment.")
