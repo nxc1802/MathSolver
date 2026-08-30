@@ -31,7 +31,8 @@ opencv-python-headless>=4.8,<4.10
 # --- Video (GeometryScene via CLI) ---
 manim>=0.18,<0.20
 
-# --- OCR & vision (orchestrator / legacy /ocr) ---
+# --- OCR & vision (orchestrator / canonical Pix2Text OCR) ---
+pix2text>=1.1.0
 pix2tex>=0.1.4
 paddleocr==2.7.3
 paddlepaddle==2.6.2

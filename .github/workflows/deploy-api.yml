@@ -4,14 +4,7 @@ on:
   push:
     branches: [ main ]
     paths:
-      - 'backend/app/**'
-      - 'backend/agents/parser_agent.py'
-      - 'backend/agents/geometry_agent.py'
-      - 'backend/agents/ocr_agent.py'
-      - 'backend/agents/orchestrator.py'
-      - 'backend/solver/**'
-      - 'backend/requirements.txt'
-      - 'backend/Dockerfile'
+      - 'backend/**'
       - '.github/workflows/deploy-api.yml'
 
 jobs:
@@ -30,14 +23,13 @@ jobs:
           git config --global user.name "Cuong2004"
           
           mkdir hf_api_copy
-          # Use rsync-style copying to only include what we want, 
-          # but for simplicity in GA, we can just copy backend/ and rely on .gitignore 
-          # or just copy the whole thing as before, but the trigger is now granular.
           cp -r backend/* hf_api_copy/
           
           cd hf_api_copy
           git init
+          git checkout -b main
           git remote add origin https://Cuong2004:$HF_TOKEN@huggingface.co/spaces/Cuong2004/math-solver
           git add .
           git commit -m "Deploy API from GitHub Actions"
-          git push --force origin master:main
+          git push --force origin main
+

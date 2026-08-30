@@ -8,7 +8,6 @@ from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPExcepti
 
 from agents.orchestrator import Orchestrator
 from app.chat_image_upload import upload_session_chat_image, validate_chat_image_bytes
-from app.ocr_celery import ocr_celery_enabled
 from app.ocr_local_file import ocr_from_local_image_path
 from app.dependencies import get_current_user_id
 from app.errors import format_error_for_user
@@ -128,8 +127,7 @@ async def ocr_preview(
     if not body:
         raise HTTPException(status_code=400, detail="Empty file.")
 
-    if ocr_celery_enabled():
-        validate_chat_image_bytes(file.filename, body, file.content_type)
+    validate_chat_image_bytes(file.filename, body, file.content_type)
 
     suffix = os.path.splitext(file.filename or "")[1].lower()
     if suffix not in (".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ""):

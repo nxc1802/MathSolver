@@ -66,13 +66,12 @@ async def access_log_middleware(request: Request, call_next):
     return response
 
 
-from worker.celery_app import BROKER_URL
-
-_broker_tail = BROKER_URL.split("@")[-1] if "@" in BROKER_URL else BROKER_URL
+_redis_url = os.getenv("REDIS_URL") or os.getenv("CELERY_BROKER_URL") or "none"
+_redis_tail = _redis_url.split("@")[-1] if "@" in _redis_url else _redis_url
 if get_log_level() in ("debug", "info"):
-    logger.info("App starting LOG_LEVEL=%s | Redis: %s", get_log_level(), _broker_tail)
+    logger.info("App starting LOG_LEVEL=%s | Redis: %s", get_log_level(), _redis_tail)
 else:
-    logger.warning("App starting LOG_LEVEL=%s | Redis: %s", get_log_level(), _broker_tail)
+    logger.warning("App starting LOG_LEVEL=%s | Redis: %s", get_log_level(), _redis_tail)
 
 app.add_middleware(
     CORSMiddleware,
