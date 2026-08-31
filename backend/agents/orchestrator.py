@@ -241,13 +241,14 @@ class Orchestrator:
 
                 # Submit job to Manim Video Module
                 render_resp = await self.manim_client.submit_render_job(spec)
+                render_dict = render_resp.to_dict()
                 visualization_info = {
                     "spec": spec.model_dump(mode="json"),
                     "job_id": str(render_resp.job_id),
                     "project_id": str(render_resp.project_id) if render_resp.project_id else None,
                     "status": render_resp.status,
                     "video_url": render_resp.video_url,
-                    "error": render_resp.error,
+                    "error": render_dict.get("error"),
                 }
                 _step_io(
                     "step7_manim_job_submitted",
