@@ -108,9 +108,9 @@ class MathRenderResponse(BaseModel):
 
 
 def build_visualization_spec(
-    problem_text: str,
-    solution_steps: List[str],
-    coordinates: Dict[str, List[float]],
+    problem_text: Union[str, Dict[str, Any]] = "",
+    solution_steps: Optional[List[str]] = None,
+    coordinates: Optional[Dict[str, Any]] = None,
     engine_result: Optional[Dict[str, Any]] = None,
     semantic_data: Optional[Dict[str, Any]] = None,
     is_3d: bool = False,
@@ -119,18 +119,45 @@ def build_visualization_spec(
     """
     Automated Builder: Converts MathSolver internal geometry data, coordinates,
     drawing phases, and solution steps into a standard VisualizationSpec.
+    Supports either explicit keyword parameters or a single geometry_data dict.
     """
+    if isinstance(problem_text, dict):
+        data = problem_text
+        problem_text = (
+            data.get("problem")
+            or data.get("problem_text")
+            or (data.get("semantic") or {}).get("input_text")
+            or data.get("geometry_dsl")
+            or "Minh họa hình học và các bước giải toán"
+        )
+        sol = data.get("solution")
+        if isinstance(sol, dict):
+            solution_steps = sol.get("steps") or []
+        elif isinstance(sol, list):
+            solution_steps = sol
+        elif isinstance(sol, str):
+            solution_steps = [s.strip() for s in sol.split("\n") if s.strip()]
+        else:
+            solution_steps = data.get("solution_steps") or []
+
+        coordinates = data.get("coordinates") or {}
+        engine_result = data
+        semantic_data = data.get("semantic") or data.get("semantic_data")
+        is_3d = bool(data.get("is_3d", False))
+
+    coords = coordinates or {}
+    steps = solution_steps or []
     engine_res = engine_result or {}
     geometry_objs: List[GeometryObject] = []
     animation_beats: List[AnimationDirective] = []
 
     # 1. Add Point Objects with Solved Coordinates
-    for pt_name, coords in coordinates.items():
+    for pt_name, pt_coords in coords.items():
         geometry_objs.append(
             GeometryObject(
                 type="point_3d" if is_3d else "point_2d",
                 label=pt_name,
-                properties={"coordinates": coords},
+                properties={"coordinates": pt_coords},
             )
         )
 
@@ -182,7 +209,7 @@ def build_visualization_spec(
             )
         )
 
-    for idx, step in enumerate(solution_steps):
+    for idx, step in enumerate(steps):
         animation_beats.append(
             AnimationDirective(
                 action="write",
@@ -194,7 +221,7 @@ def build_visualization_spec(
 
     return VisualizationSpec(
         problem=problem_text,
-        solution_steps=solution_steps,
+        solution_steps=steps,
         geometry=geometry_objs,
         animations=animation_beats,
         output_config=OutputConfig(quality=quality, format="mp4", language="vi"),
