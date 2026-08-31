@@ -129,6 +129,67 @@ class DSLParser:
                 logger.debug(f"[DSLParser]   + POINT_ON: {target} on ({p1}, {p2})")
                 continue
 
+            # HEIGHT(S, O, ABCD) or ALTITUDE(S, O, ABCD) or HEIGHT(S, O, ABCD, 10)
+            m = re.match(r'(?:HEIGHT|ALTITUDE)\(([^,]+),\s*([^,]+),\s*([^,)]+)(?:,\s*([\d\.]+))?\)', line)
+            if m:
+                is_3d = True
+                s_apex, o_foot = m.group(1).strip(), m.group(2).strip()
+                base_pts = _parse_point_tokens(m.group(3))
+                val = float(m.group(4)) if m.group(4) else 0.0
+                ensure_point(s_apex)
+                ensure_point(o_foot)
+                for p in base_pts: ensure_point(p)
+                constraints.append(Constraint(type='height', targets=[s_apex, o_foot] + base_pts, value=val))
+                logger.debug(f"[DSLParser]   + HEIGHT: {s_apex}{o_foot} _|_ plane({base_pts}) (val={val})")
+                continue
+
+            # FOOT(H, P, AB) or FOOT_OF_PERPENDICULAR(H, P, AB)
+            m = re.match(r'(?:FOOT|FOOT_OF_PERPENDICULAR)\(([^,]+),\s*([^,]+),\s*(?:([^,]+),\s*([^)]+)|([^)]+))\)', line)
+            if m:
+                pH, pP = m.group(1).strip(), m.group(2).strip()
+                if m.group(3) and m.group(4):
+                    pA, pB = m.group(3).strip(), m.group(4).strip()
+                else:
+                    seg_pts = _parse_point_tokens(m.group(5))
+                    pA, pB = seg_pts[0], seg_pts[1] if len(seg_pts) > 1 else 'B'
+                ensure_point(pH)
+                ensure_point(pP)
+                ensure_point(pA)
+                ensure_point(pB)
+                constraints.append(Constraint(type='foot', targets=[pH, pP, pA, pB], value=0))
+                logger.debug(f"[DSLParser]   + FOOT: {pH} foot of {pP} on {pA}{pB}")
+                continue
+
+            # FOOT_PLANE(H, P, ABC)
+            m = re.match(r'FOOT_PLANE\(([^,]+),\s*([^,]+),\s*([^)]+)\)', line)
+            if m:
+                is_3d = True
+                pH, pP = m.group(1).strip(), m.group(2).strip()
+                plane_pts = _parse_point_tokens(m.group(3))
+                ensure_point(pH)
+                ensure_point(pP)
+                for p in plane_pts: ensure_point(p)
+                constraints.append(Constraint(type='foot_plane', targets=[pH, pP] + plane_pts, value=0))
+                logger.debug(f"[DSLParser]   + FOOT_PLANE: {pH} foot of {pP} on plane({plane_pts})")
+                continue
+
+            # MEDIAN(A, M, BC)
+            m = re.match(r'MEDIAN\(([^,]+),\s*([^,]+),\s*(?:([^,]+),\s*([^)]+)|([^)]+))\)', line)
+            if m:
+                pA, pM = m.group(1).strip(), m.group(2).strip()
+                if m.group(3) and m.group(4):
+                    pB, pC = m.group(3).strip(), m.group(4).strip()
+                else:
+                    seg_pts = _parse_point_tokens(m.group(5))
+                    pB, pC = seg_pts[0], seg_pts[1] if len(seg_pts) > 1 else 'C'
+                ensure_point(pA)
+                ensure_point(pM)
+                ensure_point(pB)
+                ensure_point(pC)
+                constraints.append(Constraint(type='median', targets=[pA, pM, pB, pC], value=0))
+                logger.debug(f"[DSLParser]   + MEDIAN: {pA}{pM} to {pB}{pC}")
+                continue
+
             # CENTER(O, ABCD) or CENTER(O, ABC) or CENTROID(G, ABC)
             m = re.match(r'(?:CENTER|CENTROID)\(([^,]+),\s*([^)]+)\)', line)
             if m:
@@ -665,4 +726,9 @@ class DSLParser:
             import json
             constraints.append(Constraint(type='solids_metadata', targets=[json.dumps(s) for s in solids], value=0))
 
-        return list(points.values()), constraints, is_3d
+        # Pass through ConstraintCompiler for semantic audit & derived constraint expansion (P0)
+        from .compiler import ConstraintCompiler
+        compiler = ConstraintCompiler()
+        compiled_points, compiled_constraints, is_3d = compiler.compile(points, constraints, is_3d)
+
+        return compiled_points, compiled_constraints, is_3d

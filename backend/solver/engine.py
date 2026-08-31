@@ -62,11 +62,28 @@ class GeometryEngine:
             else:
                 real_constraints.append(c)
 
+        pt_list = list(points.values()) if isinstance(points, dict) else points
+
+        # ── Step 0: Try Canonical Hierarchical Constructor (P1) ─────────────
+        from .constructors import StandardGeometryConstructor
+        constructor = StandardGeometryConstructor()
+        canonical_res = constructor.try_construct(pt_list, real_constraints, solids_meta, is_3d)
+        if canonical_res and "coordinates" in canonical_res:
+            logger.info("[GeometryEngine] Successfully constructed canonical standard representation.")
+            return self._build_result(
+                canonical_res["coordinates"],
+                polygon_order,
+                circles_meta,
+                solids_meta,
+                segments_meta,
+                lines_ext,
+                rays_ext,
+                pt_list,
+            )
+
         # ── Setup symbols ─────────────────────────────────────────────────────
         point_vars: Dict[str, tuple] = {}
         equations = []
-
-        pt_list = list(points.values()) if isinstance(points, dict) else points
 
         for p in pt_list:
             x = sp.Symbol(f"{p.id}_x")
@@ -504,6 +521,30 @@ class GeometryEngine:
                 for pid in coords:
                     if len(coords[pid]) >= 3 and pid not in has_explicit_pts:
                         coords[pid][2] = -coords[pid][2]
+
+        # Clean float zero residuals and restore explicit coordinates
+        for p in pt_list:
+            if p.id in coords:
+                if p.x is not None:
+                    coords[p.id][0] = float(p.x)
+                elif abs(coords[p.id][0]) < 1e-10:
+                    coords[p.id][0] = 0.0
+
+                if p.y is not None:
+                    coords[p.id][1] = float(p.y)
+                elif abs(coords[p.id][1]) < 1e-10:
+                    coords[p.id][1] = 0.0
+
+                if len(coords[p.id]) >= 3:
+                    if p.z is not None:
+                        coords[p.id][2] = float(p.z)
+                    elif abs(coords[p.id][2]) < 1e-10:
+                        coords[p.id][2] = 0.0
+
+        for pid in list(coords.keys()):
+            for idx in range(len(coords[pid])):
+                if abs(coords[pid][idx]) < 1e-10:
+                    coords[pid][idx] = 0.0
 
         if not polygon_order:
             base_pts = sorted(
