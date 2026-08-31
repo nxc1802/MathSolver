@@ -111,6 +111,46 @@ class VisualizationSpec(BaseModel):
     def show_axes(self) -> bool:
         return self.config.show_axes or self.output_config.show_axes
 
+    def to_manim_dict(self) -> Dict[str, Any]:
+        """Serializes VisualizationSpec into the exact schema expected by the Manim Agent Microservice."""
+        steps = [s for s in self.solution_steps if str(s).strip()] if self.solution_steps else []
+        if not steps:
+            steps = ["Dựng hình và phân tích hình học."]
+
+        geom_list = []
+        for g in self.geometry:
+            g_dict: Dict[str, Any] = {"type": g.type}
+            if g.label:
+                g_dict["label"] = g.label
+            if g.properties:
+                g_dict["properties"] = g.properties
+            geom_list.append(g_dict)
+
+        anim_list = []
+        for a in self.animations:
+            a_dict: Dict[str, Any] = {"action": a.action}
+            if a.targets:
+                a_dict["targets"] = a.targets
+            if a.narration:
+                a_dict["narration"] = a.narration
+            if a.duration_hint is not None:
+                a_dict["duration_hint"] = a.duration_hint
+            anim_list.append(a_dict)
+
+        out_cfg = {
+            "quality": self.config.quality if self.config else (self.output_config.quality if self.output_config else "720p"),
+            "format": self.config.format if self.config else (self.output_config.format if self.output_config else "mp4"),
+            "language": self.config.language if self.config else (self.output_config.language if self.output_config else "vi"),
+        }
+
+        return {
+            "problem": self.problem or "Bài toán hình học",
+            "solution_steps": steps,
+            "geometry": geom_list,
+            "animations": anim_list,
+            "output_config": out_cfg,
+        }
+
     def to_prompt(self) -> str:
         """Serializes the spec into a structured prompt for the Manim Agent."""
         parts = [f"Chủ đề / Đề bài: {self.problem}"]

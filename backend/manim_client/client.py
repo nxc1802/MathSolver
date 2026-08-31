@@ -71,7 +71,8 @@ class ManimClient:
         Endpoint: POST /v1/math/generate
         """
         url = f"{self.base_url}/v1/math/generate"
-        payload = MathRenderRequest(spec=spec, callback_url=callback_url).model_dump(mode="json")
+        spec_payload = spec.to_manim_dict() if hasattr(spec, "to_manim_dict") else spec.model_dump(mode="json")
+        payload = {"spec": spec_payload, "callback_url": callback_url}
 
         logger.info(f"==[ManimClient] Submitting render job to {url}==")
         try:
