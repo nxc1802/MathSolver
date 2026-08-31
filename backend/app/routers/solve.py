@@ -426,7 +426,8 @@ async def process_render_job(job_id: str, session_id: str, geometry_data: dict):
         await notify_status(job_id, {"status": "rendering", "job_id": job_id, "manim_job_id": str(manim_job_id)})
 
         # Poll for completion
-        status_resp = await client.wait_for_completion(manim_job_id, poll_interval=3.0, max_wait=300.0)
+        poll_timeout = float(os.getenv("MANIM_POLL_TIMEOUT", "600.0"))
+        status_resp = await client.wait_for_completion(manim_job_id, poll_interval=3.0, max_wait=poll_timeout)
         video_url = status_resp.video_url
 
         if status_resp.status == "failed" or not video_url:

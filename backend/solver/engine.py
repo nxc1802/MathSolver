@@ -1,9 +1,11 @@
+from __future__ import annotations
+
 import json
 import sympy as sp
 import numpy as np
 import logging
 import string
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional, Set, Tuple, Union
 from .models import Point, Constraint
 
 logger = logging.getLogger(__name__)
@@ -79,6 +81,7 @@ class GeometryEngine:
                 lines_ext,
                 rays_ext,
                 pt_list,
+                real_constraints,
             )
 
         # ── Setup symbols ─────────────────────────────────────────────────────
@@ -348,17 +351,17 @@ class GeometryEngine:
         if n_eqs == n_vars:
             coords = self._try_nsolve(equations, all_vars, point_vars, n_vars)
             if coords:
-                return self._build_result(coords, polygon_order, circles_meta, solids_meta, segments_meta, lines_ext, rays_ext, pt_list)
+                return self._build_result(coords, polygon_order, circles_meta, solids_meta, segments_meta, lines_ext, rays_ext, pt_list, real_constraints)
 
         # ── Strategy 3: Scipy least-squares ─────────────────────────────────
         coords = self._try_lsq(equations, all_vars, point_vars, n_vars)
         if coords:
-            return self._build_result(coords, polygon_order, circles_meta, solids_meta, segments_meta, lines_ext, rays_ext, pt_list)
+            return self._build_result(coords, polygon_order, circles_meta, solids_meta, segments_meta, lines_ext, rays_ext, pt_list, real_constraints)
 
         # ── Strategy 4: Differential evolution ──────────────────────────────
         coords = self._try_global(equations, all_vars, point_vars, n_vars)
         if coords:
-            return self._build_result(coords, polygon_order, circles_meta, solids_meta, segments_meta, lines_ext, rays_ext, pt_list)
+            return self._build_result(coords, polygon_order, circles_meta, solids_meta, segments_meta, lines_ext, rays_ext, pt_list, real_constraints)
 
         logger.error("[GeometryEngine] All strategies exhausted.")
         return None
@@ -500,11 +503,13 @@ class GeometryEngine:
         lines_meta: List[List[str]],
         rays_meta: List[List[str]],
         pt_list: List[Point],
+        constraints_meta: Optional[List[Constraint]] = None,
     ) -> Dict[str, Any]:
         """
         Build structured result including drawing phases, faces and 3D solids for renderers.
         """
         all_ids = [p.id for p in pt_list]
+        constraints = constraints_meta or []
 
         # Ensure canonical positive orientation (y >= 0 for base vertices, z >= 0 for apexes)
         has_explicit_pts = {p.id for p in pt_list if p.x is not None or p.y is not None or p.z is not None}
@@ -595,33 +600,24 @@ class GeometryEngine:
                 "segments": phase2_segments,
             })
 
+        # ─── Build Complete Topological Visualization Graph ──────────────────
+        from .vis_planner import VisualizationPlanner
+        planner = VisualizationPlanner()
+        vis_graph = planner.plan(
+            coords=coords,
+            constraints=constraints,
+            solids_meta=solids_meta,
+            circles_meta=circles_meta,
+            polygon_order=polygon_order,
+            segments_meta=segments_meta,
+            lines_meta=lines_meta,
+            rays_meta=rays_meta,
+            pt_list=pt_list,
+            is_3d=any(len(c) >= 3 and abs(c[2]) > 1e-4 for c in coords.values()),
+        )
+
         # Generate 3D polygonal faces for semi-transparent rendering
-        faces: List[List[str]] = []
-        for solid in solids_meta:
-            s_type = solid.get("type")
-            if s_type == "pyramid":
-                base = solid.get("base", [])
-                apex = solid.get("apex")
-                if len(base) >= 3:
-                    faces.append(base)
-                    for i in range(len(base)):
-                        faces.append([apex, base[i], base[(i+1)%len(base)]])
-            elif s_type in ("prism", "cube", "cuboid", "frustum"):
-                b1 = solid.get("base1", [])
-                b2 = solid.get("base2", [])
-                if len(b1) >= 3 and len(b2) >= 3 and len(b1) == len(b2):
-                    faces.append(b1)
-                    faces.append(b2)
-                    for i in range(len(b1)):
-                        i_next = (i + 1) % len(b1)
-                        faces.append([b1[i], b1[i_next], b2[i_next], b2[i]])
-            elif s_type == "tetrahedron":
-                pts = solid.get("points", [])
-                if len(pts) >= 4:
-                    faces.append([pts[1], pts[2], pts[3]])
-                    faces.append([pts[0], pts[1], pts[2]])
-                    faces.append([pts[0], pts[2], pts[3]])
-                    faces.append([pts[0], pts[3], pts[1]])
+        faces: List[List[str]] = [f.vertices for f in vis_graph.faces.values()]
 
         return {
             "coordinates": coords,
@@ -631,5 +627,8 @@ class GeometryEngine:
             "faces": faces,
             "lines": lines_meta,
             "rays": rays_meta,
-            "drawing_phases": drawing_phases,
+            "drawing_phases": vis_graph.drawing_phases if vis_graph.drawing_phases else drawing_phases,
+            "visualization_graph": vis_graph.model_dump(mode="json"),
+            "geometry_objects": vis_graph.to_geometry_objects_list(),
+            "auxiliary": [a.to_dict() for a in vis_graph.auxiliary],
         }

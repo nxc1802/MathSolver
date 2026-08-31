@@ -70,7 +70,7 @@ class VisualizationConfig(BaseModel):
     scale_factor: float = Field(default=1.0, description="Display scale factor for visualization zoom")
     center_focus: Optional[List[float]] = Field(default=None, description="Center point of camera focus")
     show_labels: bool = Field(default=True, description="Whether to show point/vertex labels")
-    quality: Literal["480p", "720p", "1080p"] = "720p"
+    quality: Literal["480p", "720p", "1080p", "4k"] = "480p"
     format: Literal["mp4", "gif"] = "mp4"
     language: str = Field(default="vi", description="Language code: vi, en, ...")
 
@@ -80,7 +80,7 @@ class OutputConfig(BaseModel):
 
     model_config = ConfigDict(extra="ignore")
 
-    quality: Literal["480p", "720p", "1080p"] = "720p"
+    quality: Literal["480p", "720p", "1080p", "4k"] = "480p"
     format: Literal["mp4", "gif"] = "mp4"
     language: str = Field(default="vi", description="Language code: vi, en, ...")
     show_axes: bool = False
@@ -106,6 +106,10 @@ class VisualizationSpec(BaseModel):
     )
     config: VisualizationConfig = Field(default_factory=VisualizationConfig)
     output_config: OutputConfig = Field(default_factory=OutputConfig)
+    visualization_graph: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Complete topological visualization graph with vertices, edges, faces, solids, and auxiliary constructions",
+    )
 
     @property
     def show_axes(self) -> bool:
@@ -244,7 +248,7 @@ def build_visualization_spec(
     semantic_data: Optional[Dict[str, Any]] = None,
     is_3d: bool = False,
     show_axes: bool = False,
-    quality: Literal["480p", "720p", "1080p"] = "720p",
+    quality: Literal["480p", "720p", "1080p", "4k"] = "480p",
 ) -> VisualizationSpec:
     """
     Automated Builder: Converts MathSolver internal geometry data, coordinates,
@@ -275,7 +279,7 @@ def build_visualization_spec(
         semantic_data = data.get("semantic") or data.get("semantic_data")
         is_3d = bool(data.get("is_3d", False))
         show_axes = bool(data.get("show_axes", show_axes))
-        if "quality" in data and data["quality"] in ("480p", "720p", "1080p"):
+        if "quality" in data and data["quality"] in ("480p", "720p", "1080p", "4k"):
             quality = data["quality"]
 
     coords = coordinates or {}
@@ -284,39 +288,48 @@ def build_visualization_spec(
     geometry_objs: List[GeometryObject] = []
     animation_beats: List[AnimationDirective] = []
 
-    # 1. Add Point Objects with Solved Coordinates (Mathematical geometry preserved)
-    for pt_name, pt_coords in coords.items():
-        geometry_objs.append(
-            GeometryObject(
-                type="point_3d" if is_3d else "point_2d",
-                label=pt_name,
-                properties={"coordinates": pt_coords},
+    # 1. Add Geometry Objects (Prefer rich topological objects if available)
+    raw_geom_objs = engine_res.get("geometry_objects")
+    if raw_geom_objs and isinstance(raw_geom_objs, list):
+        for gobj in raw_geom_objs:
+            if isinstance(gobj, dict) and "type" in gobj:
+                geometry_objs.append(
+                    GeometryObject(
+                        type=gobj.get("type", "object"),
+                        label=gobj.get("label"),
+                        properties=gobj.get("properties", {}),
+                    )
+                )
+    else:
+        # Fallback to points, solids, circles
+        for pt_name, pt_coords in coords.items():
+            geometry_objs.append(
+                GeometryObject(
+                    type="point_3d" if is_3d else "point_2d",
+                    label=pt_name,
+                    properties={"coordinates": pt_coords},
+                )
             )
-        )
-
-    # 2. Add Solids / Polygons
-    solids = engine_res.get("solids", [])
-    for solid in solids:
-        geometry_objs.append(
-            GeometryObject(
-                type=solid.get("type", "solid_3d"),
-                label=f"{solid.get('type')}_{'_'.join(solid.get('points', []))}",
-                properties=solid,
+        solids = engine_res.get("solids", [])
+        for solid in solids:
+            geometry_objs.append(
+                GeometryObject(
+                    type=solid.get("type", "solid_3d"),
+                    label=f"{solid.get('type')}_{'_'.join(solid.get('points', []))}",
+                    properties=solid,
+                )
             )
-        )
-
-    # 3. Add Circles
-    circles = engine_res.get("circles", [])
-    for c in circles:
-        geometry_objs.append(
-            GeometryObject(
-                type="circle",
-                label=f"circle_{c.get('center')}",
-                properties=c,
+        circles = engine_res.get("circles", [])
+        for c in circles:
+            geometry_objs.append(
+                GeometryObject(
+                    type="circle",
+                    label=f"circle_{c.get('center')}",
+                    properties=c,
+                )
             )
-        )
 
-    # 4. Construct Animation Beats from Drawing Phases and Solution Steps
+    # 2. Construct Animation Beats from Drawing Phases and Solution Steps
     drawing_phases = engine_res.get("drawing_phases", [])
     if drawing_phases:
         for phase in drawing_phases:
@@ -373,4 +386,5 @@ def build_visualization_spec(
         animations=animation_beats,
         config=vis_config,
         output_config=legacy_output,
+        visualization_graph=engine_res.get("visualization_graph"),
     )

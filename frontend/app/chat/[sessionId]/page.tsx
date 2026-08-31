@@ -124,6 +124,8 @@ export default function ChatSessionPage() {
   const [drawingPhases, setDrawingPhases] = useState<Array<{ phase: number; label: string; points: string[]; segments: string[][] }> | null>(null);
   const [faces, setFaces] = useState<string[][] | null>(null);
   const [solids, setSolids] = useState<Array<{ type: string; [key: string]: unknown }> | null>(null);
+  const [visGraph, setVisGraph] = useState<import("@/types/geometry").VisualizationGraph | null>(null);
+  const [auxiliary, setAuxiliary] = useState<import("@/types/geometry").VisAuxiliaryConstruction[] | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [videoVersion, setVideoVersion] = useState(1);
   const [activeSnapshotJobId, setActiveSnapshotJobId] = useState<string | null>(null);
@@ -182,6 +184,8 @@ export default function ChatSessionPage() {
     );
     setFaces((meta.faces as string[][]) || null);
     setSolids((meta.solids as Array<{ type: string; [key: string]: unknown }>) || null);
+    setVisGraph((meta.visualization_graph as import("@/types/geometry").VisualizationGraph) || (meta.visualizationGraph as import("@/types/geometry").VisualizationGraph) || null);
+    setAuxiliary((meta.auxiliary as import("@/types/geometry").VisAuxiliaryConstruction[]) || null);
     setVideoUrl((meta.video_url as string) || (meta.videoUrl as string) || null);
     setActiveSnapshotJobId((meta.job_id as string) || (meta.jobId as string) || null);
   };
@@ -257,6 +261,12 @@ export default function ChatSessionPage() {
               coordinates: resultSnap.coordinates,
               polygonOrder: resultSnap.polygon_order,
               drawingPhases: resultSnap.drawing_phases,
+              faces: resultSnap.faces,
+              solids: resultSnap.solids,
+              lines: resultSnap.lines,
+              rays: resultSnap.rays,
+              visualizationGraph: resultSnap.visualization_graph,
+              auxiliary: resultSnap.auxiliary,
               is_3d: resultSnap.is_3d,
               videoUrl: resultSnap.video_url,
             } as GeometryState);
@@ -733,6 +743,8 @@ export default function ChatSessionPage() {
                               drawingPhases={drawingPhases || []}
                               faces={faces || []}
                               solids={solids || []}
+                              visualizationGraph={visGraph}
+                              auxiliary={auxiliary}
                             />
                           ) : (
                             <StaticGeometryCanvas
@@ -744,6 +756,8 @@ export default function ChatSessionPage() {
                               circles={[]}
                               lines={[]}
                               rays={[]}
+                              visualizationGraph={visGraph}
+                              auxiliary={auxiliary}
                             />
                           )}
                         </div>

@@ -652,47 +652,60 @@ class DSLParser:
                     _add_poly_segments(pts, segments, constraints)
                     if not polygon_order: polygon_order = list(pts)
                 elif pt_type == "PYRAMID":
-                    # S_ABCD -> S is apex, ABCD is base
+                    # S_ABCD or S, ABCD -> S is apex, ABCD is base
                     if "_" in targets:
                         apex_raw, base_raw = targets.split("_", 1)
-                        apex = apex_raw.strip()
-                        base = _parse_point_tokens(base_raw)
-                        ensure_point(apex)
-                        for p in base: ensure_point(p)
-                        # Add segments from apex to all base points
-                        for p in base:
-                            if [apex, p] not in segments and [p, apex] not in segments:
-                                segments.append([apex, p])
-                                constraints.append(Constraint(type='segment', targets=[apex, p], value=0))
-                        # Also add base polygon segments
-                        _add_poly_segments(base, segments, constraints)
-                        if not polygon_order: polygon_order = list(base)
-                        solids.append({"type": "pyramid", "apex": apex, "base": base, "points": [apex] + base})
+                    elif "," in targets:
+                        apex_raw, base_raw = targets.split(",", 1)
+                    else:
+                        tokens = _parse_point_tokens(targets)
+                        apex_raw = tokens[0] if tokens else "S"
+                        base_raw = "".join(tokens[1:]) if len(tokens) > 1 else ""
+                    apex = apex_raw.strip()
+                    base = _parse_point_tokens(base_raw)
+                    ensure_point(apex)
+                    for p in base: ensure_point(p)
+                    # Add segments from apex to all base points
+                    for p in base:
+                        if [apex, p] not in segments and [p, apex] not in segments:
+                            segments.append([apex, p])
+                            constraints.append(Constraint(type='segment', targets=[apex, p], value=0))
+                    # Also add base polygon segments
+                    _add_poly_segments(base, segments, constraints)
+                    if not polygon_order: polygon_order = list(base)
+                    solids.append({"type": "pyramid", "apex": apex, "base": base, "points": [apex] + base})
                 elif pt_type == "PRISM":
-                    # ABC_DEF -> two bases
+                    # ABC_DEF or ABC, DEF -> two bases
                     if "_" in targets:
                         b1_raw, b2_raw = targets.split("_", 1)
-                        b1 = _parse_point_tokens(b1_raw)
-                        b2 = _parse_point_tokens(b2_raw)
-                        for p in b1 + b2: ensure_point(p)
-                        # Add base 1 segments
-                        _add_poly_segments(b1, segments, constraints)
-                        # Add base 2 segments
-                        _add_poly_segments(b2, segments, constraints)
-                        # Add lateral edges
-                        for p1, p2 in zip(b1, b2):
-                            if [p1, p2] not in segments and [p2, p1] not in segments:
-                                segments.append([p1, p2])
-                                constraints.append(Constraint(type='segment', targets=[p1, p2], value=0))
-                        if len(b1) >= 2 and len(b2) >= 2:
-                            for i in range(1, len(b1)):
-                                constraints.append(Constraint(type='parallel', targets=[b1[0], b2[0], b1[i], b2[i]], value=0))
-                                constraints.append(Constraint(type='length_equal', targets=[b1[0], b2[0], b1[i], b2[i]], value=0))
-                            constraints.append(Constraint(type='perpendicular', targets=[b1[0], b2[0], b1[0], b1[1]], value=0))
-                            if len(b1) >= 3:
-                                constraints.append(Constraint(type='perpendicular', targets=[b1[0], b2[0], b1[0], b1[2]], value=0))
-                        if not polygon_order: polygon_order = list(b1)
-                        solids.append({"type": "prism", "base1": b1, "base2": b2, "points": b1 + b2})
+                    elif "," in targets:
+                        b1_raw, b2_raw = targets.split(",", 1)
+                    else:
+                        tokens = _parse_point_tokens(targets)
+                        half = len(tokens) // 2
+                        b1_raw = "".join(tokens[:half])
+                        b2_raw = "".join(tokens[half:])
+                    b1 = _parse_point_tokens(b1_raw)
+                    b2 = _parse_point_tokens(b2_raw)
+                    for p in b1 + b2: ensure_point(p)
+                    # Add base 1 segments
+                    _add_poly_segments(b1, segments, constraints)
+                    # Add base 2 segments
+                    _add_poly_segments(b2, segments, constraints)
+                    # Add lateral edges
+                    for p1, p2 in zip(b1, b2):
+                        if [p1, p2] not in segments and [p2, p1] not in segments:
+                            segments.append([p1, p2])
+                            constraints.append(Constraint(type='segment', targets=[p1, p2], value=0))
+                    if len(b1) >= 2 and len(b2) >= 2:
+                        for i in range(1, len(b1)):
+                            constraints.append(Constraint(type='parallel', targets=[b1[0], b2[0], b1[i], b2[i]], value=0))
+                            constraints.append(Constraint(type='length_equal', targets=[b1[0], b2[0], b1[i], b2[i]], value=0))
+                        constraints.append(Constraint(type='perpendicular', targets=[b1[0], b2[0], b1[0], b1[1]], value=0))
+                        if len(b1) >= 3:
+                            constraints.append(Constraint(type='perpendicular', targets=[b1[0], b2[0], b1[0], b1[2]], value=0))
+                    if not polygon_order: polygon_order = list(b1)
+                    solids.append({"type": "prism", "base1": b1, "base2": b2, "points": b1 + b2})
                 logger.debug(f"[DSLParser]   + {pt_type}: {targets}")
                 continue
 

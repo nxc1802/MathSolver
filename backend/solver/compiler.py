@@ -81,6 +81,7 @@ class ConstraintCompiler:
                     expanded_constraints.append(
                         Constraint(type="length", targets=[s_apex, o_foot], value=float(val))
                     )
+                expanded_constraints.append(c)
                 logger.debug(f"[ConstraintCompiler] Expanded HEIGHT: {s_apex}{o_foot} _|_ plane({base_pts})")
 
             # -------------------------------------------------------------
@@ -95,7 +96,7 @@ class ConstraintCompiler:
                 add_segment(pM, pB)
                 expanded_constraints.append(Constraint(type="point_on", targets=[pM, pA, pB], value=0))
                 expanded_constraints.append(Constraint(type="length_equal", targets=[pM, pA, pM, pB], value=0))
-                expanded_constraints.append(Constraint(type="midpoint", targets=[pM, pA, pB], value=0))
+                expanded_constraints.append(c)
                 logger.debug(f"[ConstraintCompiler] Expanded MIDPOINT: {pM} = mid({pA}, {pB})")
 
             # -------------------------------------------------------------
@@ -113,7 +114,7 @@ class ConstraintCompiler:
                     expanded_constraints.append(
                         Constraint(type="point_on_plane", targets=[pO] + poly_pts[:3], value=0)
                     )
-                expanded_constraints.append(Constraint(type="center", targets=[pO] + poly_pts, value=0))
+                expanded_constraints.append(c)
                 logger.debug(f"[ConstraintCompiler] Expanded CENTER: {pO} center of {poly_pts}")
 
             # -------------------------------------------------------------
@@ -129,6 +130,7 @@ class ConstraintCompiler:
                 expanded_constraints.append(
                     Constraint(type="perpendicular", targets=[pP, pH, pA, pB], value=0)
                 )
+                expanded_constraints.append(c)
                 logger.debug(f"[ConstraintCompiler] Expanded FOOT: {pH} foot of {pP} on {pA}{pB}")
 
             # -------------------------------------------------------------
@@ -150,6 +152,7 @@ class ConstraintCompiler:
                 expanded_constraints.append(
                     Constraint(type="perp_plane", targets=[pP, pH] + plane_pts, value=0)
                 )
+                expanded_constraints.append(c)
                 logger.debug(f"[ConstraintCompiler] Expanded FOOT_PLANE: {pH} on plane({plane_pts})")
 
             # -------------------------------------------------------------
@@ -162,7 +165,20 @@ class ConstraintCompiler:
                     ensure_point(p)
                 add_segment(pA, pM)
                 expanded_constraints.append(Constraint(type="midpoint", targets=[pM, pB, pC], value=0))
+                expanded_constraints.append(c)
                 logger.debug(f"[ConstraintCompiler] Expanded MEDIAN: {pA}{pM} to {pB}{pC}")
+
+            # -------------------------------------------------------------
+            # BISECTOR: BISECTOR(A, D, B, C)
+            # -------------------------------------------------------------
+            elif c_type == "bisector" and len(targets) >= 4:
+                pA, pD, pB, pC = targets[0], targets[1], targets[2], targets[3]
+                for p in [pA, pD, pB, pC]:
+                    ensure_point(p)
+                add_segment(pA, pD)
+                expanded_constraints.append(Constraint(type="point_on", targets=[pD, pB, pC], value=0))
+                expanded_constraints.append(c)
+                logger.debug(f"[ConstraintCompiler] Expanded BISECTOR: {pA}{pD} to {pB}{pC}")
 
             # -------------------------------------------------------------
             # SQUARE: SQUARE(ABCD)

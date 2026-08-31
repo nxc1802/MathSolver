@@ -5,18 +5,19 @@
  * Data lives for the duration of the browser tab session (cleared on close).
  */
 
+import type { VisualizationGraph, VisAuxiliaryConstruction, DrawingPhase } from "@/types/geometry";
+
 export interface GeometryState {
   coordinates: Record<string, [number, number, number] | [number, number]> | null;
   polygonOrder: string[] | null;
   circles: Array<{ center: string; radius: number }> | null;
-  drawingPhases: Array<{
-    phase: number;
-    label: string;
-    points: string[];
-    segments: string[][];
-  }> | null;
+  drawingPhases: DrawingPhase[] | null;
+  faces: string[][] | null;
+  solids: Array<{ type: string; [key: string]: unknown }> | null;
   lines: Array<[string, string]> | null;
   rays: Array<[string, string]> | null;
+  visualizationGraph?: VisualizationGraph | null;
+  auxiliary?: VisAuxiliaryConstruction[] | null;
   videoUrl: string | null;
   activeJobId: string | null;
   is3d?: boolean; // @deprecated - use is_3d

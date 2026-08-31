@@ -1,3 +1,5 @@
+import type { GeometryMetadata } from './geometry';
+
 export type MessageRole = 'user' | 'assistant' | 'system';
 
 export type MessageType = 
@@ -17,51 +19,7 @@ export interface ChatMessage {
   type: MessageType;
   content: string;
   timestamp: number;
-  metadata?: {
-    coordinates?: Record<string, [number, number] | [number, number, number]>;
-    /** New in API v5.1 */
-    semantic_analysis?: string;
-    polygon_order?: string[];
-    circles?: Array<{ center: string; radius: number }>;
-    solids?: Array<{
-      type: string;
-      center?: string;
-      center1?: string;
-      center2?: string;
-      apex?: string;
-      radius?: number;
-      height?: number;
-      base?: string[];
-      base1?: string[];
-      base2?: string[];
-      points?: string[];
-    }>;
-    faces?: string[][];
-    drawing_phases?: Array<{
-      phase: number;
-      label: string;
-      points: string[];
-      segments: string[][];
-    }>;
-    lines?: Array<[string, string]>;
-    rays?: Array<[string, string]>;
-    /** Symbolic Solver Result (v5.1) */
-    solution?: {
-      answer: string;
-      steps: string[];
-      symbolic_math?: Record<string, string>;
-    };
-    is_3d?: boolean;
-    /** Primary key from API / DB (snake_case) */
-    video_url?: string;
-    /** @deprecated Prefer video_url */
-    videoUrl?: string;
-    job_id?: string;
-    /** @deprecated Prefer job_id */
-    jobId?: string;
-    geometry_dsl?: string;
-    image_url?: string;
-  };
+  metadata?: GeometryMetadata;
 }
 
 export interface ChatSession {
