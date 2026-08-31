@@ -38,6 +38,112 @@ export default function ChatMessageComponent({ message }: ChatMessageProps) {
   const isSystem = message.role === "system";
   const [showSteps, setShowSteps] = useState(true);
 
+  const solution = message.metadata?.solution;
+  const imageUrl = message.metadata?.image_url;
+  const videoUrl = message.metadata?.video_url ?? message.metadata?.videoUrl;
+
+  const renderSolutionBlock = () => {
+    if (!solution) return null;
+    return (
+      <div className="mt-4 p-4 rounded-2xl bg-indigo-500/[0.04] border border-indigo-500/20 space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 text-indigo-400">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+            <span className="text-xs font-semibold tracking-wide text-indigo-300">
+              Kết quả giải toán
+            </span>
+          </div>
+          {solution.steps && solution.steps.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowSteps(!showSteps)}
+              className="inline-flex items-center gap-1 text-[11px] font-mono text-[var(--text-muted)] hover:text-indigo-300 transition-colors"
+            >
+              <span>{showSteps ? "Thu gọn bước" : "Xem các bước"}</span>
+              {showSteps ? (
+                <ChevronUp className="w-3 h-3" />
+              ) : (
+                <ChevronDown className="w-3 h-3" />
+              )}
+            </button>
+          )}
+        </div>
+
+        {/* Final Answer */}
+        <div className="p-3 rounded-xl bg-black/20 border border-indigo-500/10 text-sm font-medium text-[var(--text-primary)]">
+          <ReactMarkdown
+            remarkPlugins={[remarkGfm, remarkMath]}
+            rehypePlugins={[rehypeKatex]}
+          >
+            {solution.answer}
+          </ReactMarkdown>
+        </div>
+
+        {/* Detailed Steps Accordion */}
+        {solution.steps && solution.steps.length > 0 && (
+          <AnimatePresence>
+            {showSteps && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: "auto", opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                className="overflow-hidden space-y-2 pt-1"
+              >
+                {solution.steps.map((step, idx) => (
+                  <div
+                    key={idx}
+                    className="p-3 rounded-xl bg-[var(--card-bg)] border border-[var(--border)] text-xs text-[var(--text-secondary)] leading-relaxed space-y-1"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-[9px] font-mono font-semibold px-1.5 py-0.5 rounded bg-indigo-500/10 border border-indigo-500/20 text-indigo-400">
+                        BƯỚC {idx + 1}
+                      </span>
+                    </div>
+                    <div className="pt-1 text-[var(--text-primary)]">
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm, remarkMath]}
+                        rehypePlugins={[rehypeKatex]}
+                      >
+                        {step}
+                      </ReactMarkdown>
+                    </div>
+                  </div>
+                ))}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        )}
+      </div>
+    );
+  };
+
+  const renderAttachments = () => (
+    <>
+      {/* Attached Image Thumbnail */}
+      {imageUrl && (
+        <div className="rounded-xl overflow-hidden border border-[var(--border)] bg-black/30 p-1 mt-3">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={imageUrl}
+            alt="Đề bài đính kèm"
+            className="max-w-full h-auto object-contain max-h-64 rounded-lg mx-auto"
+          />
+        </div>
+      )}
+
+      {/* Attached Video Output */}
+      {videoUrl && (
+        <div className="rounded-xl overflow-hidden border border-[var(--border)] bg-black/40 mt-3">
+          <video
+            src={videoUrl}
+            controls
+            className="w-full h-auto aspect-video rounded-lg"
+          />
+        </div>
+      )}
+    </>
+  );
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 6 }}
@@ -107,6 +213,8 @@ export default function ChatMessageComponent({ message }: ChatMessageProps) {
                 {message.content}
               </ReactMarkdown>
             </div>
+            {renderSolutionBlock()}
+            {renderAttachments()}
           </div>
         )}
 
@@ -124,16 +232,22 @@ export default function ChatMessageComponent({ message }: ChatMessageProps) {
             <pre className="text-xs font-mono text-emerald-300/90 bg-black/40 rounded-xl p-3 overflow-x-auto border border-emerald-500/20">
               <code>{message.content}</code>
             </pre>
+            {renderSolutionBlock()}
+            {renderAttachments()}
           </div>
         )}
 
         {/* Coordinates ready banner */}
         {message.type === "coordinates" && (
-          <div className="flex items-center gap-2 text-xs text-[var(--text-secondary)]">
-            <Shapes className="w-3.5 h-3.5 text-indigo-400" />
-            <span>
-              Đã dựng toạ độ không gian {message.metadata?.is_3d ? "3D" : "2D"} (Xem chi tiết trên bảng mô phỏng bên phải)
-            </span>
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 text-xs text-[var(--text-secondary)]">
+              <Shapes className="w-3.5 h-3.5 text-indigo-400" />
+              <span>
+                Đã dựng toạ độ không gian {message.metadata?.is_3d ? "3D" : "2D"} (Xem chi tiết trên bảng mô phỏng bên phải)
+              </span>
+            </div>
+            {renderSolutionBlock()}
+            {renderAttachments()}
           </div>
         )}
 
@@ -170,103 +284,8 @@ export default function ChatMessageComponent({ message }: ChatMessageProps) {
               </ReactMarkdown>
             </div>
 
-            {/* High-End Solution Steps Section */}
-            {message.metadata?.solution && (
-              <div className="mt-4 p-4 rounded-2xl bg-indigo-500/[0.04] border border-indigo-500/20 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-indigo-400">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                    <span className="text-xs font-semibold tracking-wide text-indigo-300">
-                      Kết quả giải toán
-                    </span>
-                  </div>
-                  {message.metadata.solution.steps && (
-                    <button
-                      type="button"
-                      onClick={() => setShowSteps(!showSteps)}
-                      className="inline-flex items-center gap-1 text-[11px] font-mono text-[var(--text-muted)] hover:text-indigo-300 transition-colors"
-                    >
-                      <span>{showSteps ? "Thu gọn bước" : "Xem các bước"}</span>
-                      {showSteps ? (
-                        <ChevronUp className="w-3 h-3" />
-                      ) : (
-                        <ChevronDown className="w-3 h-3" />
-                      )}
-                    </button>
-                  )}
-                </div>
-
-                {/* Final Answer */}
-                <div className="p-3 rounded-xl bg-black/20 border border-indigo-500/10 text-sm font-medium text-[var(--text-primary)]">
-                  <ReactMarkdown
-                    remarkPlugins={[remarkGfm, remarkMath]}
-                    rehypePlugins={[rehypeKatex]}
-                  >
-                    {message.metadata.solution.answer}
-                  </ReactMarkdown>
-                </div>
-
-                {/* Detailed Steps Accordion */}
-                {message.metadata.solution.steps && (
-                  <AnimatePresence>
-                    {showSteps && (
-                      <motion.div
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: "auto", opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
-                        className="overflow-hidden space-y-2 pt-1"
-                      >
-                        {message.metadata.solution.steps.map((step, idx) => (
-                          <div
-                            key={idx}
-                            className="p-3 rounded-xl bg-[var(--card-bg)] border border-[var(--border)] text-xs text-[var(--text-secondary)] leading-relaxed space-y-1"
-                          >
-                            <div className="flex items-center gap-2">
-                              <span className="text-[9px] font-mono font-semibold px-1.5 py-0.5 rounded bg-indigo-500/10 border border-indigo-500/20 text-indigo-400">
-                                BƯỚC {idx + 1}
-                              </span>
-                            </div>
-                            <div className="pt-1 text-[var(--text-primary)]">
-                              <ReactMarkdown
-                                remarkPlugins={[remarkGfm, remarkMath]}
-                                rehypePlugins={[rehypeKatex]}
-                              >
-                                {step}
-                              </ReactMarkdown>
-                            </div>
-                          </div>
-                        ))}
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                )}
-              </div>
-            )}
-
-            {/* Attached Image Thumbnail */}
-            {message.metadata?.image_url && (
-              <div className="rounded-xl overflow-hidden border border-[var(--border)] bg-black/30 p-1">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={message.metadata.image_url}
-                  alt="Đề bài đính kèm"
-                  className="max-w-full h-auto object-contain max-h-64 rounded-lg mx-auto"
-                />
-              </div>
-            )}
-
-            {/* Attached Video Output */}
-            {(message.metadata?.video_url ?? message.metadata?.videoUrl) && (
-              <div className="rounded-xl overflow-hidden border border-[var(--border)] bg-black/40">
-                <video
-                  src={
-                    message.metadata?.video_url ?? message.metadata?.videoUrl
-                  }
-                  controls
-                  className="w-full h-auto aspect-video rounded-lg"
-                />
-              </div>
-            )}
+            {renderSolutionBlock()}
+            {renderAttachments()}
           </div>
         )}
 

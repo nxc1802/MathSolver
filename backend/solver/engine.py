@@ -83,24 +83,64 @@ class GeometryEngine:
         # ONLY anchor if NO point has explicit coordinates
         has_explicit = any(p.x is not None or p.y is not None for p in pt_list)
         if not has_explicit and len(pt_list) > 0:
-            p1 = pt_list[0]
-            # Translation: fix p1 at (0,0) or (0,0,0)
-            if p1.x is None: equations.append(point_vars[p1.id][0]); logger.debug(f"Anchor {p1.id}_x=0")
-            if p1.y is None: equations.append(point_vars[p1.id][1]); logger.debug(f"Anchor {p1.id}_y=0")
-            if is_3d and p1.z is None:
-                equations.append(point_vars[p1.id][2]); logger.debug(f"Anchor {p1.id}_z=0")
+            if is_3d and solids_meta:
+                # Find base points from pyramid / prism / frustum
+                base_ids = []
+                for s in solids_meta:
+                    if s.get("type") == "pyramid" and s.get("base"):
+                        base_ids = s["base"]
+                        break
+                    elif s.get("type") in ("prism", "frustum") and s.get("base1"):
+                        base_ids = s["base1"]
+                        break
 
-            if len(pt_list) > 1:
-                p2 = pt_list[1]
-                # Rotation: fix p2 on X-axis (y=0)
-                if p2.y is None: equations.append(point_vars[p2.id][1]); logger.debug(f"Anchor {p2.id}_y=0")
-                if is_3d and p2.z is None:
-                    equations.append(point_vars[p2.id][2]); logger.debug(f"Anchor {p2.id}_z=0")
+                base_pts = [p for p in pt_list if p.id in base_ids]
+                if len(base_pts) >= 3:
+                    p1, p2, p3 = base_pts[0], base_pts[1], base_pts[2]
+                    # Fix base vertex 1 at (0,0,0)
+                    if p1.x is None: equations.append(point_vars[p1.id][0])
+                    if p1.y is None: equations.append(point_vars[p1.id][1])
+                    if p1.z is None: equations.append(point_vars[p1.id][2])
+                    # Fix base vertex 2 on X-axis (y=0, z=0)
+                    if p2.y is None: equations.append(point_vars[p2.id][1])
+                    if p2.z is None: equations.append(point_vars[p2.id][2])
+                    # Fix base vertex 3 on XY-plane (z=0)
+                    if p3.z is None: equations.append(point_vars[p3.id][2])
+                    # Pin all base vertices to z=0 (ground plane)
+                    for bp in base_pts[3:]:
+                        if bp.z is None:
+                            equations.append(point_vars[bp.id][2])
+                else:
+                    p1 = pt_list[0]
+                    if p1.x is None: equations.append(point_vars[p1.id][0])
+                    if p1.y is None: equations.append(point_vars[p1.id][1])
+                    if p1.z is None: equations.append(point_vars[p1.id][2])
+                    if len(pt_list) > 1:
+                        p2 = pt_list[1]
+                        if p2.y is None: equations.append(point_vars[p2.id][1])
+                        if p2.z is None: equations.append(point_vars[p2.id][2])
+                    if len(pt_list) > 2:
+                        p3 = pt_list[2]
+                        if p3.z is None: equations.append(point_vars[p3.id][2])
+            else:
+                p1 = pt_list[0]
+                # Translation: fix p1 at (0,0) or (0,0,0)
+                if p1.x is None: equations.append(point_vars[p1.id][0]); logger.debug(f"Anchor {p1.id}_x=0")
+                if p1.y is None: equations.append(point_vars[p1.id][1]); logger.debug(f"Anchor {p1.id}_y=0")
+                if is_3d and p1.z is None:
+                    equations.append(point_vars[p1.id][2]); logger.debug(f"Anchor {p1.id}_z=0")
 
-            if is_3d and len(pt_list) > 2:
-                p3 = pt_list[2]
-                # Planar rotation: fix p3 on XY-plane (z=0)
-                if p3.z is None: equations.append(point_vars[p3.id][2]); logger.debug(f"Anchor {p3.id}_z=0")
+                if len(pt_list) > 1:
+                    p2 = pt_list[1]
+                    # Rotation: fix p2 on X-axis (y=0)
+                    if p2.y is None: equations.append(point_vars[p2.id][1]); logger.debug(f"Anchor {p2.id}_y=0")
+                    if is_3d and p2.z is None:
+                        equations.append(point_vars[p2.id][2]); logger.debug(f"Anchor {p2.id}_z=0")
+
+                if is_3d and len(pt_list) > 2:
+                    p3 = pt_list[2]
+                    # Planar rotation: fix p3 on XY-plane (z=0)
+                    if p3.z is None: equations.append(point_vars[p3.id][2]); logger.debug(f"Anchor {p3.id}_z=0")
 
         # ── Build equations from explicit point coordinates ──────────────────
         for p in pt_list:
@@ -124,6 +164,15 @@ class GeometryEngine:
                 eq = (v2[0]-v1[0])**2 + (v2[1]-v1[1])**2 + (v2[2]-v1[2])**2 - float(c.value)**2
                 equations.append(eq)
                 logger.debug(f"[GeometryEngine]     -> Length eq (3D): |{p1}{p2}|² = {c.value}²")
+
+            elif c.type == 'length_equal' and len(c.targets) == 4:
+                pA, pB, pC, pD = c.targets
+                if all(t in point_vars for t in [pA, pB, pC, pD]):
+                    va, vb, vc, vd = point_vars[pA], point_vars[pB], point_vars[pC], point_vars[pD]
+                    d1_sq = sum((vb[i]-va[i])**2 for i in range(3))
+                    d2_sq = sum((vd[i]-vc[i])**2 for i in range(3))
+                    equations.append(d1_sq - d2_sq)
+                    logger.debug(f"[GeometryEngine]     -> LengthEqual: |{pA}{pB}| = |{pC}{pD}|")
 
             elif c.type == 'angle' and len(c.targets) >= 1:
                 v_name = c.targets[0]

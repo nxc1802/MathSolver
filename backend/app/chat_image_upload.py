@@ -54,18 +54,18 @@ def _max_bytes() -> int:
 
 
 def _magic_ok(ext: str, body: bytes) -> bool:
-    if len(body) < 12:
+    if len(body) < 2:
         return False
     if ext == ".png":
-        return body.startswith(b"\x89PNG\r\n\x1a\n")
+        return len(body) >= 8 and body.startswith(b"\x89PNG\r\n\x1a\n")
     if ext in (".jpg", ".jpeg"):
-        return body.startswith(b"\xff\xd8\xff")
+        return len(body) >= 3 and body.startswith(b"\xff\xd8\xff")
     if ext == ".webp":
-        return body.startswith(b"RIFF") and body[8:12] == b"WEBP"
+        return len(body) >= 12 and body.startswith(b"RIFF") and body[8:12] == b"WEBP"
     if ext == ".gif":
-        return body.startswith(b"GIF87a") or body.startswith(b"GIF89a")
+        return len(body) >= 6 and (body.startswith(b"GIF87a") or body.startswith(b"GIF89a"))
     if ext == ".bmp":
-        return body.startswith(b"BM")
+        return len(body) >= 2 and body.startswith(b"BM")
     return False
 
 

@@ -51,6 +51,9 @@ CIRCLE(O, 5)                         — circle with center O and radius 5
 SEGMENT(M, N)                        — auxiliary segment MN to be drawn
 POLYGON_ORDER(A, B, C, D)            — polygon boundary vertex ordering
 TRIANGLE(ABC)                        — 2D triangle
+SQUARE(ABCD)                         — square with vertices A, B, C, D
+RECTANGLE(ABCD)                      — rectangle with vertices A, B, C, D
+PARALLELOGRAM(ABCD)                  — parallelogram with vertices A, B, C, D
 
 -- 3D Polyhedrons & Round Solids --
 PYRAMID(S_ABCD)                      — pyramid with apex S and base ABCD (supports S_ABC, S_ABCD, S_ABCDE)
@@ -65,7 +68,7 @@ CONE(S_O, r, h)                      — cone with apex S, base center O, radius
 SPHERE(O, r)                         — sphere with center O and radius r
 
 -- 3D High-Level Spatial Relations --
-PERPENDICULAR_PLANE(SO, ABCD)        — line SO is perpendicular to plane ABCD (SO ⊥ base)
+PERPENDICULAR_PLANE(SA, ABCD)        — line SA is perpendicular to plane ABCD (SA ⊥ base)
 COPLANAR(A, B, C, D)                 — 4 points lie on the same plane
 POINT_ON_PLANE(P, ABC)               — point P lies on plane ABC
 
@@ -77,11 +80,16 @@ Output ONLY a JSON object with this EXACT structure (no markdown, no extra keys)
     "values": {"AB": 10, "SO": 15},
     "target_question": "Tính thể tích khối chóp S.ABCD",
     "analysis": "Tóm tắt bài toán ngắn gọn bằng tiếng Việt.",
-    "geometry_dsl": "PYRAMID(S_ABCD)\\nLENGTH(AB, 10)\\nLENGTH(SO, 15)\\nPERPENDICULAR_PLANE(SO, ABCD)"
+    "geometry_dsl": "PYRAMID(S_ABCD)\\nSQUARE(ABCD)\\nLENGTH(AB, 4)\\nLENGTH(SA, 5)\\nPERPENDICULAR_PLANE(SA, ABCD)"
 }
 
 === RULES ===
-1. If the problem specifies a 3D pyramid (e.g. S.ABCD with square base 10, height SO=15), generate PYRAMID(S_ABCD), LENGTH(AB, 10), LENGTH(SO, 15), PERPENDICULAR_PLANE(SO, ABCD).
+1. If the problem specifies a 3D pyramid with a square or rectangle base (e.g. S.ABCD with square base ABCD side 4, height SA=5 with SA ⊥ đáy), generate:
+   PYRAMID(S_ABCD)
+   SQUARE(ABCD)
+   LENGTH(AB, 4)
+   LENGTH(SA, 5)
+   PERPENDICULAR_PLANE(SA, ABCD)
 2. If the problem mentions midpoints, auxiliary lines, include MIDPOINT(M, AB), SEGMENT(S, M), etc.
 3. Keep DSL commands clean, upper-case, and syntactically valid.
 """

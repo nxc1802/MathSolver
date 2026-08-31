@@ -421,6 +421,65 @@ class DSLParser:
                 logger.debug(f"[DSLParser]   + RAY: {p1}->{p2}")
                 continue
 
+            # SQUARE(ABCD)
+            m = re.match(r'SQUARE\(([^)]+)\)', line)
+            if m:
+                pts = _parse_point_tokens(m.group(1))
+                if len(pts) == 4:
+                    pA, pB, pC, pD = pts
+                    for p in pts: ensure_point(p)
+                    _add_poly_segments(pts, segments, constraints)
+                    if not polygon_order: polygon_order = list(pts)
+                    constraints.append(Constraint(type='perpendicular', targets=[pA, pB, pA, pD], value=0))
+                    constraints.append(Constraint(type='perpendicular', targets=[pB, pA, pB, pC], value=0))
+                    constraints.append(Constraint(type='parallel', targets=[pA, pB, pD, pC], value=0))
+                    constraints.append(Constraint(type='parallel', targets=[pA, pD, pB, pC], value=0))
+                    constraints.append(Constraint(type='length_equal', targets=[pA, pB, pB, pC], value=0))
+                    constraints.append(Constraint(type='length_equal', targets=[pB, pC, pC, pD], value=0))
+                    constraints.append(Constraint(type='length_equal', targets=[pC, pD, pD, pA], value=0))
+                    if is_3d:
+                        constraints.append(Constraint(type='coplanar', targets=[pA, pB, pC, pD], value=0))
+                    logger.debug(f"[DSLParser]   + SQUARE: {pts}")
+                    continue
+
+            # RECTANGLE(ABCD)
+            m = re.match(r'RECTANGLE\(([^)]+)\)', line)
+            if m:
+                pts = _parse_point_tokens(m.group(1))
+                if len(pts) == 4:
+                    pA, pB, pC, pD = pts
+                    for p in pts: ensure_point(p)
+                    _add_poly_segments(pts, segments, constraints)
+                    if not polygon_order: polygon_order = list(pts)
+                    constraints.append(Constraint(type='perpendicular', targets=[pA, pB, pA, pD], value=0))
+                    constraints.append(Constraint(type='perpendicular', targets=[pB, pA, pB, pC], value=0))
+                    constraints.append(Constraint(type='parallel', targets=[pA, pB, pD, pC], value=0))
+                    constraints.append(Constraint(type='parallel', targets=[pA, pD, pB, pC], value=0))
+                    constraints.append(Constraint(type='length_equal', targets=[pA, pB, pD, pC], value=0))
+                    constraints.append(Constraint(type='length_equal', targets=[pA, pD, pB, pC], value=0))
+                    if is_3d:
+                        constraints.append(Constraint(type='coplanar', targets=[pA, pB, pC, pD], value=0))
+                    logger.debug(f"[DSLParser]   + RECTANGLE: {pts}")
+                    continue
+
+            # PARALLELOGRAM(ABCD)
+            m = re.match(r'PARALLELOGRAM\(([^)]+)\)', line)
+            if m:
+                pts = _parse_point_tokens(m.group(1))
+                if len(pts) == 4:
+                    pA, pB, pC, pD = pts
+                    for p in pts: ensure_point(p)
+                    _add_poly_segments(pts, segments, constraints)
+                    if not polygon_order: polygon_order = list(pts)
+                    constraints.append(Constraint(type='parallel', targets=[pA, pB, pD, pC], value=0))
+                    constraints.append(Constraint(type='parallel', targets=[pA, pD, pB, pC], value=0))
+                    constraints.append(Constraint(type='length_equal', targets=[pA, pB, pD, pC], value=0))
+                    constraints.append(Constraint(type='length_equal', targets=[pA, pD, pB, pC], value=0))
+                    if is_3d:
+                        constraints.append(Constraint(type='coplanar', targets=[pA, pB, pC, pD], value=0))
+                    logger.debug(f"[DSLParser]   + PARALLELOGRAM: {pts}")
+                    continue
+
             # TRIANGLE(ABC) / PYRAMID(S_ABCD) / PRISM(ABC_DEF)
             m = re.match(r'(TRIANGLE|PYRAMID|PRISM)\(([^)]+)\)', line)
             if m:

@@ -49,6 +49,35 @@ def test_solve_square_pyramid():
     assert coords["S"][1] == pytest.approx(5.0)
     assert abs(coords["S"][2]) == pytest.approx(15.0)
 
+def test_solve_pyramid_sa_perp_base():
+    """
+    Test square pyramid S.ABCD with SA perpendicular to base (SA ⊥ ABCD).
+    Square base ABCD with AB=4, SA=5.
+    """
+    dsl = """
+    PYRAMID(S_ABCD)
+    SQUARE(ABCD)
+    LENGTH(AB, 4)
+    LENGTH(SA, 5)
+    PERPENDICULAR_PLANE(SA, ABCD)
+    """
+    parser = DSLParser()
+    engine = GeometryEngine()
+    points, constraints, is_3d = parser.parse(dsl)
+    result = engine.solve(points, constraints, is_3d)
+
+    assert result is not None
+    coords = result["coordinates"]
+    # Base ABCD should form a 4x4 square in z=0 plane
+    assert coords["A"] == pytest.approx([0.0, 0.0, 0.0], abs=1e-2)
+    assert coords["B"] == pytest.approx([4.0, 0.0, 0.0], abs=1e-2)
+    assert coords["C"] == pytest.approx([4.0, 4.0, 0.0], abs=1e-2)
+    assert coords["D"] == pytest.approx([0.0, 4.0, 0.0], abs=1e-2)
+    # Apex S should be directly above A at height 5
+    assert coords["S"][0] == pytest.approx(0.0, abs=1e-2)
+    assert coords["S"][1] == pytest.approx(0.0, abs=1e-2)
+    assert abs(coords["S"][2]) == pytest.approx(5.0, abs=1e-2)
+
 def test_solve_prism():
     """
     Triangular prism ABC_DEF.

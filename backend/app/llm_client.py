@@ -15,16 +15,24 @@ from app.url_utils import openai_compatible_api_key, sanitize_env
 
 class MultiLayerLLMClient:
     def __init__(self):
-        # 1. Models sequence loading
         self.models = []
+        self.client = None
+        self._current_key = None
+        self._current_base_url = None
+        self._ensure_client()
+
+    def _ensure_client(self):
+        # 1. Models sequence loading
+        models = []
         for i in range(1, 4):
             model = os.getenv(f"OPENROUTER_MODEL_{i}") or os.getenv(f"MODEL_{i}")
             if model:
-                self.models.append(model)
+                models.append(model)
 
-        if not self.models:
+        if not models:
             legacy_model = os.getenv("LLM_MODEL") or os.getenv("OPENROUTER_MODEL") or "gemma-4-31b-it"
-            self.models = [legacy_model, "gemma-4-31b-it"]
+            models = [legacy_model, "gemma-4-31b-it"]
+        self.models = models
 
         # 2. Key selection & Base URL configuration
         api_key = (
@@ -41,20 +49,27 @@ class MultiLayerLLMClient:
         elif not base_url:
             base_url = "https://openrouter.ai/api/v1"
 
-        if not api_key:
-            logger.error("[LLM] No API key found in environment.")
-            self.client = None
-        else:
-            logger.info(f"[LLM] Initializing LLM client with base_url={base_url}")
-            self.client = AsyncOpenAI(
-                api_key=openai_compatible_api_key(api_key),
-                base_url=base_url,
-                timeout=60.0,
-                default_headers={
-                    "HTTP-Referer": "https://mathsolver.ai",
-                    "X-Title": "MathSolver Backend",
-                }
-            )
+        if self.client is None or self._current_key != api_key or self._current_base_url != base_url:
+            self._current_key = api_key
+            self._current_base_url = base_url
+            if not api_key:
+                logger.warning("[LLM] No API key found in environment yet. Placeholder configured.")
+                self.client = AsyncOpenAI(
+                    api_key=openai_compatible_api_key(""),
+                    base_url=base_url,
+                    timeout=60.0,
+                )
+            else:
+                logger.info(f"[LLM] Initializing LLM client with base_url={base_url}")
+                self.client = AsyncOpenAI(
+                    api_key=openai_compatible_api_key(api_key),
+                    base_url=base_url,
+                    timeout=60.0,
+                    default_headers={
+                        "HTTP-Referer": "https://mathsolver.ai",
+                        "X-Title": "MathSolver Backend",
+                    }
+                )
 
     async def chat_completions_create(
         self,
@@ -65,8 +80,9 @@ class MultiLayerLLMClient:
         """
         Implements Model Fallback Sequence with thought tag stripping for thinking models (Gemma 4).
         """
-        if not self.client:
-            raise ValueError("No API client configured. Check your API keys in .env.")
+        self._ensure_client()
+        if not self._current_key:
+            raise ValueError("No API key configured. Check your GOOGLE_API_KEY or GEMINI_API_KEY in environment/secrets.")
 
         MAX_ATTEMPTS = len(self.models)
         RETRY_DELAY = 1.0

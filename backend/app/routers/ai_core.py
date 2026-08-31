@@ -17,10 +17,31 @@ from vision_ocr.canonical_schema import CanonicalOCRResult
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/ai", tags=["AI Core (Standalone)"])
 
-# Shared in-memory instances
-_orchestrator = Orchestrator()
-_ocr_agent = OCRAgent()
-_manim_client = ManimClient()
+# Shared in-memory instances (lazy initialized)
+_orchestrator = None
+_ocr_agent = None
+_manim_client = None
+
+
+def _get_orchestrator() -> Orchestrator:
+    global _orchestrator
+    if _orchestrator is None:
+        _orchestrator = Orchestrator()
+    return _orchestrator
+
+
+def _get_ocr_agent() -> OCRAgent:
+    global _ocr_agent
+    if _ocr_agent is None:
+        _ocr_agent = OCRAgent()
+    return _ocr_agent
+
+
+def _get_manim_client() -> ManimClient:
+    global _manim_client
+    if _manim_client is None:
+        _manim_client = ManimClient()
+    return _manim_client
 
 
 class AISolveRequest(BaseModel):
@@ -47,13 +68,14 @@ async def ocr_direct_ai(request: AIOCRRequest) -> CanonicalOCRResult:
     - reading_order: Document reading sequence
     - confidence: Extraction accuracy confidence
     """
+    ocr_agent = _get_ocr_agent()
     if request.image_url:
         logger.info("==[AI Core OCR] Processing image_url: %s==", request.image_url)
-        return await _ocr_agent.process_url_canonical(request.image_url)
+        return await ocr_agent.process_url_canonical(request.image_url)
 
     if request.image_path:
         logger.info("==[AI Core OCR] Processing local image_path: %s==", request.image_path)
-        return await _ocr_agent.process_image_canonical(request.image_path)
+        return await ocr_agent.process_image_canonical(request.image_path)
 
     if request.image_base64:
         logger.info("==[AI Core OCR] Processing image_base64==")
@@ -65,7 +87,7 @@ async def ocr_direct_ai(request: AIOCRRequest) -> CanonicalOCRResult:
             img_bytes = base64.b64decode(b64_data)
             with open(temp_path, "wb") as f:
                 f.write(img_bytes)
-            return await _ocr_agent.process_image_canonical(temp_path)
+            return await ocr_agent.process_image_canonical(temp_path)
         finally:
             if os.path.exists(temp_path):
                 try:
@@ -86,10 +108,12 @@ async def solve_direct_ai(request: AISolveRequest) -> Dict[str, Any]:
     """
     text = (request.text or "").strip()
     image_url = request.image_url
+    ocr_agent = _get_ocr_agent()
+    orchestrator = _get_orchestrator()
 
     if not text and request.image_path and os.path.exists(request.image_path):
         # Run OCR on local image directly
-        ocr_res = await _ocr_agent.process_image_canonical(request.image_path)
+        ocr_res = await ocr_agent.process_image_canonical(request.image_path)
         text = ocr_res.text
         logger.info("[AI Core Solve] Extracted OCR text from %s: '%s'", request.image_path, text[:80])
 
@@ -98,7 +122,7 @@ async def solve_direct_ai(request: AISolveRequest) -> Dict[str, Any]:
 
     logger.info("==[AI Core Direct Solve] Received problem: %s==", text[:80] if text else f"Image: {image_url}")
     try:
-        result = await _orchestrator.run(
+        result = await orchestrator.run(
             text=text,
             image_url=image_url,
             job_id="direct_ai_run",
@@ -117,5 +141,5 @@ async def get_visualization_job_status(job_id: str) -> MathRenderResponse:
     Proxies request to the Manim Video Generation Module.
     """
     logger.info(f"==[AI Core Visualization] Fetching status for job {job_id}==")
-    resp = await _manim_client.get_job_status(job_id)
+    resp = await _get_manim_client().get_job_status(job_id)
     return resp
