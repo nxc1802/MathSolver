@@ -291,6 +291,28 @@ class GeometryEngine:
                     equations.append(vE[i] - (vA[i] + k * (vC[i] - vA[i])))
                 logger.debug(f"[GeometryEngine]     -> Section eq (3D): {pE} = {pA} + {k}({pC}-{pA})")
 
+            elif c.type == 'point_on' and len(c.targets) == 3:
+                pP, pA, pB = c.targets
+                if all(t in point_vars for t in [pP, pA, pB]):
+                    vp, va, vb = point_vars[pP], point_vars[pA], point_vars[pB]
+                    v1 = [vp[i] - va[i] for i in range(3)]
+                    v2 = [vb[i] - va[i] for i in range(3)]
+                    equations.append(v1[1]*v2[2] - v1[2]*v2[1])
+                    equations.append(v1[2]*v2[0] - v1[0]*v2[2])
+                    equations.append(v1[0]*v2[1] - v1[1]*v2[0])
+                    logger.debug(f"[GeometryEngine]     -> PointOn eq (3D cross=0): {pP} on line {pA}{pB}")
+
+            elif c.type == 'center' and len(c.targets) >= 3:
+                pO = c.targets[0]
+                poly_pts = c.targets[1:]
+                if pO in point_vars and all(p in point_vars for p in poly_pts):
+                    vO = point_vars[pO]
+                    n_pts = len(poly_pts)
+                    for i in range(3):
+                        eq_center = n_pts * vO[i] - sum(point_vars[p][i] for p in poly_pts)
+                        equations.append(eq_center)
+                    logger.debug(f"[GeometryEngine]     -> Center eq: {pO} = mean({poly_pts})")
+
         all_vars = []
         for v in point_vars.values():
             all_vars.extend(v)
@@ -374,33 +396,46 @@ class GeometryEngine:
     def _try_lsq(self, equations, all_vars, point_vars, n_vars):
         logger.info("[GeometryEngine] Strategy 3 (scipy least-squares): minimizing residuals...")
         try:
-            from scipy.optimize import minimize
+            from scipy.optimize import least_squares, minimize
             eq_funcs = [sp.lambdify(all_vars, eq, 'numpy') for eq in equations]
 
+            def residuals(x):
+                return np.array([float(f(*x)) for f in eq_funcs], dtype=float)
+
             def objective(x):
-                return sum(float(f(*x))**2 for f in eq_funcs)
+                res = residuals(x)
+                return float(np.sum(res**2))
 
             best_res, best_val = None, float('inf')
             for i in range(12):
                 if i == 0:
-                    x0 = [1.0]*n_vars
+                    x0 = [1.0] * n_vars
                 elif i < 4:
-                    x0 = [np.random.uniform(-10, 10) for _ in range(n_vars)]
+                    x0 = [float(np.random.uniform(-10, 10)) for _ in range(n_vars)]
                 else:
-                    x0 = [np.random.uniform(-100, 100) for _ in range(n_vars)]
+                    x0 = [float(np.random.uniform(-50, 50)) for _ in range(n_vars)]
 
-                res = minimize(objective, x0, method='L-BFGS-B')
-                if res.fun < best_val:
-                    best_val, best_res = res.fun, res
-                if best_val < 1e-6:
-                    break
+                try:
+                    res = least_squares(residuals, x0, method='trf', ftol=1e-12, xtol=1e-12, gtol=1e-12, max_nfev=2000)
+                    cost = float(res.cost) * 2.0
+                    if cost < best_val:
+                        best_val, best_res = cost, res
+                    if best_val < 1e-8:
+                        break
+                except Exception:
+                    res = minimize(objective, x0, method='L-BFGS-B', options={'ftol': 1e-14, 'gtol': 1e-12})
+                    if res.fun < best_val:
+                        best_val, best_res = res.fun, res
+                    if best_val < 1e-8:
+                        break
 
             TOLERANCE = 1e-4
             logger.info(f"[GeometryEngine] Strategy 3: best residual = {best_val:.2e} (tol={TOLERANCE})")
-            if best_val < TOLERANCE:
-                res = {var: float(val) for var, val in zip(all_vars, best_res.x)}
+            if best_val < TOLERANCE and best_res is not None:
+                sol_x = best_res.x if hasattr(best_res, 'x') else best_res
+                res = {var: float(val) for var, val in zip(all_vars, sol_x)}
                 logger.info("[GeometryEngine] Strategy 3 (least-squares): SUCCESS.")
-                return {pid: [float(res.get(vx, 0)), float(res.get(vy, 0)), float(res.get(vz, 0))]
+                return {pid: [float(res.get(vx, 0.0)), float(res.get(vy, 0.0)), float(res.get(vz, 0.0))]
                         for pid, (vx, vy, vz) in point_vars.items()}
             else:
                 logger.warning(f"[GeometryEngine] Strategy 3 failed: residual {best_val:.2e} > {TOLERANCE}")
@@ -453,6 +488,22 @@ class GeometryEngine:
         Build structured result including drawing phases, faces and 3D solids for renderers.
         """
         all_ids = [p.id for p in pt_list]
+
+        # Ensure canonical positive orientation (y >= 0 for base vertices, z >= 0 for apexes)
+        has_explicit_pts = {p.id for p in pt_list if p.x is not None or p.y is not None or p.z is not None}
+        if not any(p.id in has_explicit_pts and (p.y is not None and p.y < -1e-4) for p in pt_list):
+            y_vals = [coords[pid][1] for pid in coords if pid in coords and pid not in has_explicit_pts]
+            if y_vals and sum(1 for y in y_vals if y < -1e-4) > sum(1 for y in y_vals if y > 1e-4):
+                for pid in coords:
+                    if pid not in has_explicit_pts:
+                        coords[pid][1] = -coords[pid][1]
+
+        if not any(p.id in has_explicit_pts and (p.z is not None and p.z < -1e-4) for p in pt_list):
+            z_vals = [coords[pid][2] for pid in coords if len(coords[pid]) >= 3 and pid not in has_explicit_pts]
+            if z_vals and sum(1 for z in z_vals if z < -1e-4) > sum(1 for z in z_vals if z > 1e-4):
+                for pid in coords:
+                    if len(coords[pid]) >= 3 and pid not in has_explicit_pts:
+                        coords[pid][2] = -coords[pid][2]
 
         if not polygon_order:
             base_pts = sorted(

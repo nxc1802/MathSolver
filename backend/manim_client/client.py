@@ -13,8 +13,10 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 from manim_client.schemas import (
+    ErrorCode,
     MathRenderRequest,
     MathRenderResponse,
+    StructuredError,
     VisualizationSpec,
 )
 
@@ -28,7 +30,7 @@ DEFAULT_INTERNAL_TOKEN = os.getenv(
 class ManimClient:
     """
     Client connecting MathSolver to the external Manim Video Generation Agent.
-    
+
     API Boundary:
     - POST /v1/math/generate: Submit VisualizationSpec
     - GET  /v1/math/jobs/{job_id}: Poll video rendering status and get video_url
@@ -82,24 +84,60 @@ class ManimClient:
 
                 if response.status_code in (200, 201, 202):
                     data = response.json()
+                    job_id = data.get("job_id")
+                    if not job_id:
+                        return MathRenderResponse(
+                            job_id="error",
+                            status="failed",
+                            error=StructuredError(
+                                code=ErrorCode.MANIM_REQUEST_FAILED,
+                                message="Manim service did not return a valid job_id.",
+                            ),
+                        )
                     logger.info(
-                        f"[ManimClient] Render job queued successfully: job_id={data.get('job_id')}, status={data.get('status')}"
+                        f"[ManimClient] Render job queued successfully: job_id={job_id}, status={data.get('status')}"
                     )
                     return MathRenderResponse.model_validate(data)
                 else:
-                    error_msg = f"HTTP {response.status_code}: {response.text}"
-                    logger.warning(f"[ManimClient] Error from Manim service: {error_msg}")
+                    error_msg = f"HTTP {response.status_code}: {response.text[:200]}"
+                    logger.warning(f"[ManimClient] Error response from Manim service: {error_msg}")
                     return MathRenderResponse(
                         job_id="error",
                         status="failed",
-                        error=error_msg,
+                        error=StructuredError(
+                            code=ErrorCode.MANIM_REQUEST_FAILED,
+                            message=f"Dịch vụ tạo video trả về mã lỗi HTTP {response.status_code}.",
+                        ),
                     )
-        except Exception as e:
-            logger.warning(f"[ManimClient] Could not connect to Manim service at {self.base_url}: {e}")
+        except (httpx.ConnectError, httpx.ConnectTimeout) as e:
+            logger.warning(f"[ManimClient] Connection to Manim service at {self.base_url} failed: {e}")
             return MathRenderResponse(
                 job_id="offline",
                 status="failed",
-                error=f"Manim service connection failed: {str(e)}",
+                error=StructuredError(
+                    code=ErrorCode.MANIM_UNAVAILABLE,
+                    message="Không thể kết nối đến dịch vụ tạo video Manim (máy chủ ngoại vi không khả dụng).",
+                ),
+            )
+        except httpx.TimeoutException as e:
+            logger.warning(f"[ManimClient] Request to Manim service timed out: {e}")
+            return MathRenderResponse(
+                job_id="timeout",
+                status="failed",
+                error=StructuredError(
+                    code=ErrorCode.MANIM_TIMEOUT,
+                    message="Yêu cầu gửi sang dịch vụ tạo video đã hết thời gian chờ (request timeout).",
+                ),
+            )
+        except Exception as e:
+            logger.exception(f"[ManimClient] Unexpected error submitting render job: {e}")
+            return MathRenderResponse(
+                job_id="error",
+                status="failed",
+                error=StructuredError(
+                    code=ErrorCode.INTERNAL_ERROR,
+                    message="Đã xảy ra lỗi không xác định khi yêu cầu tạo video.",
+                ),
             )
 
     async def get_job_status(self, job_id: Union[UUID, str]) -> MathRenderResponse:
@@ -115,39 +153,85 @@ class ManimClient:
                 response = await client.get(url, headers=self._headers())
                 if response.status_code == 200:
                     data = response.json()
-                    return MathRenderResponse.model_validate(data)
+                    resp = MathRenderResponse.model_validate(data)
+                    if resp.status == "failed" and not isinstance(resp.error, StructuredError):
+                        raw_err = resp.get_error_message() or "Animation rendering failed."
+                        resp.error = StructuredError(
+                            code=ErrorCode.MANIM_RENDER_FAILED,
+                            message=raw_err,
+                        )
+                    return resp
+                elif response.status_code == 404:
+                    return MathRenderResponse(
+                        job_id=job_id,
+                        status="failed",
+                        error=StructuredError(
+                            code=ErrorCode.JOB_NOT_FOUND,
+                            message=f"Không tìm thấy tiến trình render video với ID '{job_id}'.",
+                        ),
+                    )
                 else:
                     return MathRenderResponse(
                         job_id=job_id,
                         status="failed",
-                        error=f"HTTP {response.status_code}: {response.text}",
+                        error=StructuredError(
+                            code=ErrorCode.MANIM_REQUEST_FAILED,
+                            message=f"Lỗi kiểm tra tiến trình: HTTP {response.status_code}.",
+                        ),
                     )
+        except (httpx.ConnectError, httpx.ConnectTimeout) as e:
+            return MathRenderResponse(
+                job_id=job_id,
+                status="failed",
+                error=StructuredError(
+                    code=ErrorCode.MANIM_UNAVAILABLE,
+                    message="Không thể kết nối đến máy chủ render video để kiểm tra trạng thái.",
+                ),
+            )
         except Exception as e:
             return MathRenderResponse(
                 job_id=job_id,
                 status="failed",
-                error=f"Connection error: {str(e)}",
+                error=StructuredError(
+                    code=ErrorCode.INTERNAL_ERROR,
+                    message=f"Lỗi kiểm tra trạng thái: {str(e)}",
+                ),
             )
 
     async def poll_job_completion(
         self,
         job_id: Union[UUID, str],
-        timeout: float = 120.0,
+        timeout: float = 300.0,
         poll_interval: float = 3.0,
     ) -> MathRenderResponse:
         """
-        Asynchronously polls until the job reaches 'completed' or 'failed' status or times out.
+        Asynchronously polls until the job reaches a terminal status ('completed' or 'failed') or times out.
         """
         start_time = asyncio.get_event_loop().time()
         while True:
             resp = await self.get_job_status(job_id)
-            if resp.status_code_or_done() or resp.status in ("completed", "failed"):
+            if resp.is_terminal():
                 return resp
 
             elapsed = asyncio.get_event_loop().time() - start_time
             if elapsed >= timeout:
-                resp.status = "rendering"
-                resp.error = f"Polling timed out after {timeout}s"
-                return resp
+                logger.warning(f"[ManimClient] Polling for job {job_id} timed out after {timeout:.1f}s")
+                return MathRenderResponse(
+                    job_id=job_id,
+                    status="failed",
+                    error=StructuredError(
+                        code=ErrorCode.MANIM_TIMEOUT,
+                        message=f"Tiến trình dựng video đã vượt quá thời gian tối đa ({int(timeout)} giây).",
+                    ),
+                )
 
             await asyncio.sleep(poll_interval)
+
+    async def wait_for_completion(
+        self,
+        job_id: Union[UUID, str],
+        poll_interval: float = 3.0,
+        max_wait: float = 300.0,
+    ) -> MathRenderResponse:
+        """Alias for poll_job_completion for API compatibility."""
+        return await self.poll_job_completion(job_id=job_id, timeout=max_wait, poll_interval=poll_interval)

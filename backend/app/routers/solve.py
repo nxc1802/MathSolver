@@ -383,54 +383,122 @@ async def process_render_job(job_id: str, session_id: str, geometry_data: dict):
     """Tiến trình render video qua External Manim API."""
     from app.websocket_manager import notify_status
     from manim_client import ManimClient, build_visualization_spec
-    
+    from manim_client.schemas import ErrorCode
+    from app.errors import format_error_for_user
+
     await notify_status(job_id, {"status": "rendering_queued", "job_id": job_id})
     supabase = get_supabase()
-    
+
     try:
         manim_url = os.getenv("MANIM_SERVICE_URL", "https://cuong2004-manim-agent.hf.space")
         manim_token = os.getenv("MANIM_INTERNAL_TOKEN")
         client = ManimClient(base_url=manim_url, internal_token=manim_token)
-        
+
         vis_spec = build_visualization_spec(geometry_data)
-        logger.info(f"[RenderJob] Submitting job {job_id} to External Manim API ({manim_url})...")
-        
+        logger.info(f"[RenderJob] Submitting job {job_id} to External Manim API...")
+
         resp = await client.submit_render_job(vis_spec)
-        manim_job_id = resp.get("job_id")
-        
-        if not manim_job_id:
-            raise Exception(f"External Manim API did not return job_id: {resp}")
-            
-        await notify_status(job_id, {"status": "rendering", "job_id": job_id, "manim_job_id": manim_job_id})
-        
+        if resp.status == "failed":
+            err_code = resp.get_error_code() or ErrorCode.MANIM_REQUEST_FAILED
+            err_msg = resp.get_error_message() or "Không thể gửi yêu cầu tạo video tới máy chủ Manim."
+            if supabase:
+                supabase.table("jobs").update({
+                    "status": "error",
+                    "result": {"error": {"code": err_code, "message": err_msg}}
+                }).eq("id", job_id).execute()
+                if session_id:
+                    supabase.table("messages").insert({
+                        "session_id": session_id,
+                        "role": "assistant",
+                        "type": "error",
+                        "content": f"Không thể tạo video: {err_msg}",
+                        "metadata": {"job_id": job_id, "error_code": err_code},
+                    }).execute()
+            await notify_status(job_id, {"status": "error", "job_id": job_id, "error": err_msg, "error_code": err_code})
+            return
+
+        manim_job_id = resp.job_id
+        await notify_status(job_id, {"status": "rendering", "job_id": job_id, "manim_job_id": str(manim_job_id)})
+
         # Poll for completion
         status_resp = await client.wait_for_completion(manim_job_id, poll_interval=3.0, max_wait=300.0)
-        video_url = status_resp.get("video_url")
-        
-        if not video_url:
-            raise Exception(f"Manim rendering failed or returned empty video_url: {status_resp.get('error')}")
-            
+        video_url = status_resp.video_url
+
+        if status_resp.status == "failed" or not video_url:
+            err_code = status_resp.get_error_code() or ErrorCode.MANIM_RENDER_FAILED
+            err_msg = status_resp.get_error_message() or "Tiến trình dựng video Manim thất bại."
+            if supabase:
+                supabase.table("jobs").update({
+                    "status": "error",
+                    "result": {"error": {"code": err_code, "message": err_msg}}
+                }).eq("id", job_id).execute()
+                if session_id:
+                    supabase.table("messages").insert({
+                        "session_id": session_id,
+                        "role": "assistant",
+                        "type": "error",
+                        "content": f"Không thể tạo video: {err_msg}",
+                        "metadata": {"job_id": job_id, "error_code": err_code},
+                    }).execute()
+            await notify_status(job_id, {"status": "error", "job_id": job_id, "error": err_msg, "error_code": err_code})
+            return
+
         final_result = geometry_data.copy()
         final_result["video_url"] = video_url
-        final_result["manim_job_id"] = manim_job_id
-        
+        final_result["manim_job_id"] = str(manim_job_id)
+
         if supabase:
             supabase.table("jobs").update({
                 "status": "success",
                 "result": final_result
             }).eq("id", job_id).execute()
-            
+
+            if session_id:
+                supabase.table("messages").insert({
+                    "session_id": session_id,
+                    "role": "assistant",
+                    "type": "analysis",
+                    "content": geometry_data.get("semantic_analysis", "🎬 Video minh họa hình học đã hoàn tất."),
+                    "metadata": {
+                        "job_id": job_id,
+                        "video_url": video_url,
+                        "coordinates": geometry_data.get("coordinates"),
+                        "geometry_dsl": geometry_data.get("geometry_dsl"),
+                        "polygon_order": geometry_data.get("polygon_order", []),
+                        "drawing_phases": geometry_data.get("drawing_phases", []),
+                        "circles": geometry_data.get("circles", []),
+                        "solids": geometry_data.get("solids", []),
+                        "lines": geometry_data.get("lines", []),
+                        "rays": geometry_data.get("rays", []),
+                    },
+                }).execute()
+
         await notify_status(job_id, {
             "status": "success",
             "job_id": job_id,
             "result": final_result,
-            "video_url": video_url
+            "video_url": video_url,
         })
         logger.info(f"[RenderJob] SUCCESS for job {job_id}: video_url={video_url}")
-        
+
     except Exception as e:
-        logger.exception(f"[RenderJob] FAILED to render video via External Manim API: {e}")
+        logger.exception(f"[RenderJob] FAILED to render video: {e}")
+        safe_msg = format_error_for_user(e)
         if supabase:
-            supabase.table("jobs").update({"status": "error", "result": {"error": f"Render failed: {str(e)}"}}).eq("id", job_id).execute()
-        await notify_status(job_id, {"status": "error", "job_id": job_id, "error": str(e)})
+            try:
+                supabase.table("jobs").update({
+                    "status": "error",
+                    "result": {"error": {"code": ErrorCode.INTERNAL_ERROR, "message": safe_msg}}
+                }).eq("id", job_id).execute()
+                if session_id:
+                    supabase.table("messages").insert({
+                        "session_id": session_id,
+                        "role": "assistant",
+                        "type": "error",
+                        "content": f"Lỗi render video: {safe_msg}",
+                        "metadata": {"job_id": job_id, "error_code": ErrorCode.INTERNAL_ERROR},
+                    }).execute()
+            except Exception as db_e:
+                logger.error(f"Failed to record render error in DB: {db_e}")
+        await notify_status(job_id, {"status": "error", "job_id": job_id, "error": safe_msg, "error_code": ErrorCode.INTERNAL_ERROR})
 

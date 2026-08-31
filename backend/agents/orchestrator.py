@@ -11,6 +11,7 @@ from manim_client.client import ManimClient
 from manim_client.schemas import build_visualization_spec
 from solver.dsl_parser import DSLParser
 from solver.engine import GeometryEngine
+from solver.validator import GeometryValidator
 
 logger = logging.getLogger(__name__)
 
@@ -33,9 +34,10 @@ def _step_io(step: str, input_val: Any = None, output_val: Any = None) -> None:
 
 class Orchestrator:
     """
-    Refactored AI Core Orchestrator (v6.1 - Manim Video Module Integration):
+    Refactored AI Core Orchestrator (v6.2 - Manim Video Module & Validation Integration):
     - GeometryParserAgent (Merged semantic parser & DSL generator)
     - DSLParser & GeometryEngine (Deterministic coordinate & topology resolver)
+    - GeometryValidator (Strict invariant & constraint validation)
     - DeepMathSolverAgent (Program-Aided sandboxed SymPy mathematical solver)
     - ManimClient (Cross-service VisualizationSpec & Video Generation)
     """
@@ -46,6 +48,7 @@ class Orchestrator:
         self.ocr_agent = OCRAgent()
         self.solver_engine = GeometryEngine()
         self.dsl_parser = DSLParser()
+        self.geometry_validator = GeometryValidator()
         self.manim_client = ManimClient()
 
     def _generate_step_description(self, semantic_json: Dict[str, Any], engine_result: Dict[str, Any]) -> str:
@@ -170,16 +173,30 @@ class Orchestrator:
             if engine_result:
                 coordinates = engine_result.get("coordinates", {})
                 _step_io("step4_solve_geometry", input_val=None, output_val=coordinates)
-                logger.info(
-                    "[Orchestrator] geometry solved job_id=%s is_3d=%s n_coords=%d",
-                    job_id,
-                    is_3d,
-                    len(coordinates) if isinstance(coordinates, dict) else 0,
-                )
-                break
 
-            feedback = "Geometry solver failed to find a valid solution for the given constraints. Parallelism or lengths might be inconsistent."
-            _step_io("step4_solve_geometry", input_val=f"attempt {attempt + 1}", output_val=feedback)
+                # Validate geometry against mathematical invariants and constraints
+                val_res = self.geometry_validator.validate(engine_result, constraints, is_3d)
+                _step_io(
+                    "step4_validate_geometry",
+                    input_val=f"{val_res.checked_count} constraints checked",
+                    output_val={"is_valid": val_res.is_valid, "errors": val_res.errors[:3]},
+                )
+
+                if val_res.is_valid:
+                    logger.info(
+                        "[Orchestrator] geometry solved and validated job_id=%s is_3d=%s n_coords=%d",
+                        job_id,
+                        is_3d,
+                        len(coordinates) if isinstance(coordinates, dict) else 0,
+                    )
+                    break
+                else:
+                    feedback = f"Geometry validation failed: {val_res.error_summary}. Please correct the DSL to satisfy all constraints."
+                    _step_io("step4_validate_geometry", input_val=f"attempt {attempt + 1}", output_val=feedback)
+            else:
+                feedback = "Geometry solver failed to find a valid solution for the given constraints. Parallelism or lengths might be inconsistent."
+                _step_io("step4_solve_geometry", input_val=f"attempt {attempt + 1}", output_val=feedback)
+
             if attempt == MAX_RETRIES:
                 _step_io("orchestrate_abort", input_val=None, output_val="solver_exhausted_retries")
                 return {

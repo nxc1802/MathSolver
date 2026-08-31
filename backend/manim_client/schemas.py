@@ -7,6 +7,33 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 
+class ErrorCode:
+    GEOMETRY_INVALID = "GEOMETRY_INVALID"
+    GEOMETRY_VALIDATION_FAILED = "GEOMETRY_VALIDATION_FAILED"
+    MANIM_UNAVAILABLE = "MANIM_UNAVAILABLE"
+    MANIM_REQUEST_FAILED = "MANIM_REQUEST_FAILED"
+    MANIM_RENDER_FAILED = "MANIM_RENDER_FAILED"
+    MANIM_TIMEOUT = "MANIM_TIMEOUT"
+    JOB_NOT_FOUND = "JOB_NOT_FOUND"
+    INTERNAL_ERROR = "INTERNAL_ERROR"
+
+
+class StructuredError(BaseModel):
+    """Machine-readable and user-facing structured error format."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    code: str = Field(default=ErrorCode.INTERNAL_ERROR, description="Standard error code")
+    message: str = Field(default="An unexpected error occurred.", description="User-safe error message")
+    details: Optional[Dict[str, Any]] = Field(default=None, description="Safe additional error context")
+
+    def to_dict(self) -> Dict[str, Any]:
+        res: Dict[str, Any] = {"code": self.code, "message": self.message}
+        if self.details:
+            res["details"] = self.details
+        return res
+
+
 class GeometryObject(BaseModel):
     """A single geometric entity to be visualized in Manim."""
 
@@ -31,14 +58,32 @@ class AnimationDirective(BaseModel):
     duration_hint: Optional[float] = Field(default=None, description="Estimated duration in seconds")
 
 
+class VisualizationConfig(BaseModel):
+    """Configuration for presentation, camera framing, and visualization styling."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    show_axes: bool = Field(default=False, description="Whether to display coordinate axes in rendering")
+    is_3d: bool = Field(default=False, description="Whether rendering is in 3D perspective mode")
+    camera_position: Optional[List[float]] = Field(default=None, description="Camera coordinates [x, y, z]")
+    camera_orientation: Optional[Dict[str, float]] = Field(default=None, description="Camera orientation angles")
+    scale_factor: float = Field(default=1.0, description="Display scale factor for visualization zoom")
+    center_focus: Optional[List[float]] = Field(default=None, description="Center point of camera focus")
+    show_labels: bool = Field(default=True, description="Whether to show point/vertex labels")
+    quality: Literal["480p", "720p", "1080p"] = "720p"
+    format: Literal["mp4", "gif"] = "mp4"
+    language: str = Field(default="vi", description="Language code: vi, en, ...")
+
+
 class OutputConfig(BaseModel):
-    """Rendering and output configuration for the generated animation."""
+    """Legacy Output configuration kept for backward compatibility."""
 
     model_config = ConfigDict(extra="ignore")
 
     quality: Literal["480p", "720p", "1080p"] = "720p"
     format: Literal["mp4", "gif"] = "mp4"
     language: str = Field(default="vi", description="Language code: vi, en, ...")
+    show_axes: bool = False
 
 
 class VisualizationSpec(BaseModel):
@@ -59,11 +104,18 @@ class VisualizationSpec(BaseModel):
         default_factory=list,
         description="Animation directives and narration beats",
     )
+    config: VisualizationConfig = Field(default_factory=VisualizationConfig)
     output_config: OutputConfig = Field(default_factory=OutputConfig)
+
+    @property
+    def show_axes(self) -> bool:
+        return self.config.show_axes or self.output_config.show_axes
 
     def to_prompt(self) -> str:
         """Serializes the spec into a structured prompt for the Manim Agent."""
         parts = [f"Chủ đề / Đề bài: {self.problem}"]
+        if self.config.show_axes:
+            parts.append("Hiển thị hệ trục tọa độ: BẬT (show_axes=True)")
         if self.solution_steps:
             parts.append("Các bước giải thích / chứng minh chi tiết:")
             for idx, step in enumerate(self.solution_steps, 1):
@@ -102,9 +154,46 @@ class MathRenderResponse(BaseModel):
     status: Literal["queued", "generating", "rendering", "completed", "failed"] = "queued"
     video_url: Optional[str] = None
     duration: Optional[float] = None
-    error: Optional[str] = None
+    error: Optional[Union[StructuredError, Dict[str, Any], str]] = None
     created_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
+
+    def is_terminal(self) -> bool:
+        return self.status in ("completed", "failed")
+
+    def get_error_code(self) -> Optional[str]:
+        if isinstance(self.error, StructuredError):
+            return self.error.code
+        elif isinstance(self.error, dict):
+            return self.error.get("code")
+        elif isinstance(self.error, str):
+            return ErrorCode.INTERNAL_ERROR
+        return None
+
+    def get_error_message(self) -> Optional[str]:
+        if isinstance(self.error, StructuredError):
+            return self.error.message
+        elif isinstance(self.error, dict):
+            return self.error.get("message")
+        elif isinstance(self.error, str):
+            return self.error
+        return None
+
+    def get(self, key: str, default: Any = None) -> Any:
+        """Dict-like get access for backward compatibility."""
+        return getattr(self, key, default)
+
+    def __getitem__(self, key: str) -> Any:
+        """Dict-like bracket access for backward compatibility."""
+        if hasattr(self, key):
+            return getattr(self, key)
+        raise KeyError(key)
+
+    def to_dict(self) -> Dict[str, Any]:
+        data = self.model_dump(mode="json")
+        if isinstance(self.error, StructuredError):
+            data["error"] = self.error.to_dict()
+        return data
 
 
 def build_visualization_spec(
@@ -114,6 +203,7 @@ def build_visualization_spec(
     engine_result: Optional[Dict[str, Any]] = None,
     semantic_data: Optional[Dict[str, Any]] = None,
     is_3d: bool = False,
+    show_axes: bool = False,
     quality: Literal["480p", "720p", "1080p"] = "720p",
 ) -> VisualizationSpec:
     """
@@ -144,6 +234,9 @@ def build_visualization_spec(
         engine_result = data
         semantic_data = data.get("semantic") or data.get("semantic_data")
         is_3d = bool(data.get("is_3d", False))
+        show_axes = bool(data.get("show_axes", show_axes))
+        if "quality" in data and data["quality"] in ("480p", "720p", "1080p"):
+            quality = data["quality"]
 
     coords = coordinates or {}
     steps = solution_steps or []
@@ -151,7 +244,7 @@ def build_visualization_spec(
     geometry_objs: List[GeometryObject] = []
     animation_beats: List[AnimationDirective] = []
 
-    # 1. Add Point Objects with Solved Coordinates
+    # 1. Add Point Objects with Solved Coordinates (Mathematical geometry preserved)
     for pt_name, pt_coords in coords.items():
         geometry_objs.append(
             GeometryObject(
@@ -219,10 +312,25 @@ def build_visualization_spec(
             )
         )
 
+    vis_config = VisualizationConfig(
+        show_axes=show_axes,
+        is_3d=is_3d,
+        quality=quality,
+        format="mp4",
+        language="vi",
+    )
+    legacy_output = OutputConfig(
+        quality=quality,
+        format="mp4",
+        language="vi",
+        show_axes=show_axes,
+    )
+
     return VisualizationSpec(
         problem=problem_text,
         solution_steps=steps,
         geometry=geometry_objs,
         animations=animation_beats,
-        output_config=OutputConfig(quality=quality, format="mp4", language="vi"),
+        config=vis_config,
+        output_config=legacy_output,
     )

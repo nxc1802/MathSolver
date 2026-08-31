@@ -102,6 +102,90 @@ class DSLParser:
                     logger.debug(f"[DSLParser]   + LENGTH: {pts[:2]} = {val}")
                 continue
 
+            # LENGTH_EQUAL(AB, CD) or EQUAL_LENGTH(AB, CD)
+            m = re.match(r'(?:LENGTH_EQUAL|EQUAL_LENGTH)\(([^,]+),\s*([^)]+)\)', line)
+            if m:
+                seg1 = _parse_point_tokens(m.group(1))
+                seg2 = _parse_point_tokens(m.group(2))
+                if len(seg1) >= 2 and len(seg2) >= 2:
+                    for p in seg1[:2] + seg2[:2]: ensure_point(p)
+                    constraints.append(Constraint(type='length_equal', targets=seg1[:2] + seg2[:2], value=0))
+                    logger.debug(f"[DSLParser]   + LENGTH_EQUAL: {seg1[:2]} == {seg2[:2]}")
+                continue
+
+            # POINT_ON(P, AB) or POINT_ON(P, A, B) or ON_SEGMENT(P, AB) or POINT_ON_LINE(P, AB)
+            m = re.match(r'(?:POINT_ON|ON_SEGMENT|POINT_ON_LINE|POINT_ON_SEGMENT)\(([^,]+),\s*(?:([^,]+),\s*([^)]+)|([^)]+))\)', line)
+            if m:
+                target = m.group(1).strip()
+                if m.group(2) and m.group(3):
+                    p1, p2 = m.group(2).strip(), m.group(3).strip()
+                else:
+                    seg_pts = _parse_point_tokens(m.group(4))
+                    p1, p2 = seg_pts[0], seg_pts[1] if len(seg_pts) > 1 else 'B'
+                ensure_point(target)
+                ensure_point(p1)
+                ensure_point(p2)
+                constraints.append(Constraint(type='point_on', targets=[target, p1, p2], value=0))
+                logger.debug(f"[DSLParser]   + POINT_ON: {target} on ({p1}, {p2})")
+                continue
+
+            # CENTER(O, ABCD) or CENTER(O, ABC) or CENTROID(G, ABC)
+            m = re.match(r'(?:CENTER|CENTROID)\(([^,]+),\s*([^)]+)\)', line)
+            if m:
+                c_pt = m.group(1).strip()
+                poly_pts = _parse_point_tokens(m.group(2))
+                ensure_point(c_pt)
+                for p in poly_pts: ensure_point(p)
+                constraints.append(Constraint(type='center', targets=[c_pt] + poly_pts, value=0))
+                logger.debug(f"[DSLParser]   + CENTER: {c_pt} center of {poly_pts}")
+                continue
+
+            # RIGHT_TRIANGLE(ABC, B) or RIGHT_TRIANGLE(ABC)
+            m = re.match(r'RIGHT_TRIANGLE\(([^,)]+)(?:,\s*([^)]+))?\)', line)
+            if m:
+                pts = _parse_point_tokens(m.group(1))
+                if len(pts) == 3:
+                    for p in pts: ensure_point(p)
+                    _add_poly_segments(pts, segments, constraints)
+                    if not polygon_order: polygon_order = list(pts)
+                    right_v = m.group(2).strip() if m.group(2) else pts[1]
+                    other_v = [p for p in pts if p != right_v]
+                    if len(other_v) == 2:
+                        constraints.append(Constraint(type='perpendicular', targets=[right_v, other_v[0], right_v, other_v[1]], value=0))
+                    logger.debug(f"[DSLParser]   + RIGHT_TRIANGLE: {pts} right at {right_v}")
+                continue
+
+            # EQUILATERAL_TRIANGLE(ABC) or EQUILATERAL_TRIANGLE(ABC, a)
+            m = re.match(r'EQUILATERAL_TRIANGLE\(([^,)]+)(?:,\s*([\d\.]+))?\)', line)
+            if m:
+                pts = _parse_point_tokens(m.group(1))
+                side_val = float(m.group(2)) if m.group(2) else None
+                if len(pts) == 3:
+                    for p in pts: ensure_point(p)
+                    _add_poly_segments(pts, segments, constraints)
+                    if not polygon_order: polygon_order = list(pts)
+                    constraints.append(Constraint(type='length_equal', targets=[pts[0], pts[1], pts[1], pts[2]], value=0))
+                    constraints.append(Constraint(type='length_equal', targets=[pts[1], pts[2], pts[2], pts[0]], value=0))
+                    if side_val is not None:
+                        constraints.append(Constraint(type='length', targets=[pts[0], pts[1]], value=side_val))
+                    logger.debug(f"[DSLParser]   + EQUILATERAL_TRIANGLE: {pts}")
+                continue
+
+            # ISOSCELES_TRIANGLE(ABC, A) or ISOSCELES_TRIANGLE(ABC)
+            m = re.match(r'ISOSCELES_TRIANGLE\(([^,)]+)(?:,\s*([^)]+))?\)', line)
+            if m:
+                pts = _parse_point_tokens(m.group(1))
+                if len(pts) == 3:
+                    for p in pts: ensure_point(p)
+                    _add_poly_segments(pts, segments, constraints)
+                    if not polygon_order: polygon_order = list(pts)
+                    apex_v = m.group(2).strip() if m.group(2) else pts[0]
+                    base_v = [p for p in pts if p != apex_v]
+                    if len(base_v) == 2:
+                        constraints.append(Constraint(type='length_equal', targets=[apex_v, base_v[0], apex_v, base_v[1]], value=0))
+                    logger.debug(f"[DSLParser]   + ISOSCELES_TRIANGLE: {pts} apex at {apex_v}")
+                continue
+
             # ANGLE(A, 90) or ANGLE(A, B, C, 90) or ANGLE(ABC, 90deg)
             m = re.match(r'ANGLE\((.+)\)', line)
             if m:
@@ -310,6 +394,13 @@ class DSLParser:
                     if [p1, p2] not in segments and [p2, p1] not in segments:
                         segments.append([p1, p2])
                         constraints.append(Constraint(type='segment', targets=[p1, p2], value=0))
+                if len(b1) >= 2 and len(b2) >= 2:
+                    for i in range(1, len(b1)):
+                        constraints.append(Constraint(type='parallel', targets=[b1[0], b2[0], b1[i], b2[i]], value=0))
+                        constraints.append(Constraint(type='length_equal', targets=[b1[0], b2[0], b1[i], b2[i]], value=0))
+                    constraints.append(Constraint(type='perpendicular', targets=[b1[0], b2[0], b1[0], b1[1]], value=0))
+                    if len(b1) >= 3:
+                        constraints.append(Constraint(type='perpendicular', targets=[b1[0], b2[0], b1[0], b1[2]], value=0))
                 if side_val is not None:
                     for p1, p2 in zip(b1, b1[1:] + b1[:1]):
                         constraints.append(Constraint(type='length', targets=[p1, p2], value=side_val))
@@ -339,6 +430,13 @@ class DSLParser:
                     if [p1, p2] not in segments and [p2, p1] not in segments:
                         segments.append([p1, p2])
                         constraints.append(Constraint(type='segment', targets=[p1, p2], value=0))
+                if len(b1) >= 2 and len(b2) >= 2:
+                    for i in range(1, len(b1)):
+                        constraints.append(Constraint(type='parallel', targets=[b1[0], b2[0], b1[i], b2[i]], value=0))
+                        constraints.append(Constraint(type='length_equal', targets=[b1[0], b2[0], b1[i], b2[i]], value=0))
+                    constraints.append(Constraint(type='perpendicular', targets=[b1[0], b2[0], b1[0], b1[1]], value=0))
+                    if len(b1) >= 3:
+                        constraints.append(Constraint(type='perpendicular', targets=[b1[0], b2[0], b1[0], b1[2]], value=0))
                 if not polygon_order: polygon_order = list(b1)
                 solids.append({"type": "cuboid", "base1": b1, "base2": b2, "points": b1 + b2})
                 logger.debug(f"[DSLParser]   + CUBOID: base1={b1}, base2={b2}")
@@ -525,6 +623,13 @@ class DSLParser:
                             if [p1, p2] not in segments and [p2, p1] not in segments:
                                 segments.append([p1, p2])
                                 constraints.append(Constraint(type='segment', targets=[p1, p2], value=0))
+                        if len(b1) >= 2 and len(b2) >= 2:
+                            for i in range(1, len(b1)):
+                                constraints.append(Constraint(type='parallel', targets=[b1[0], b2[0], b1[i], b2[i]], value=0))
+                                constraints.append(Constraint(type='length_equal', targets=[b1[0], b2[0], b1[i], b2[i]], value=0))
+                            constraints.append(Constraint(type='perpendicular', targets=[b1[0], b2[0], b1[0], b1[1]], value=0))
+                            if len(b1) >= 3:
+                                constraints.append(Constraint(type='perpendicular', targets=[b1[0], b2[0], b1[0], b1[2]], value=0))
                         if not polygon_order: polygon_order = list(b1)
                         solids.append({"type": "prism", "base1": b1, "base2": b2, "points": b1 + b2})
                 logger.debug(f"[DSLParser]   + {pt_type}: {targets}")
