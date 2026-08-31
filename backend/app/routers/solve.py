@@ -418,6 +418,11 @@ async def process_render_job(job_id: str, session_id: str, geometry_data: dict):
             return
 
         manim_job_id = resp.job_id
+        if supabase:
+            supabase.table("jobs").update({
+                "status": "rendering",
+                "result": {"manim_job_id": str(manim_job_id)}
+            }).eq("id", job_id).execute()
         await notify_status(job_id, {"status": "rendering", "job_id": job_id, "manim_job_id": str(manim_job_id)})
 
         # Poll for completion
