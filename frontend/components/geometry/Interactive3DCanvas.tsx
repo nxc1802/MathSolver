@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls, Stars, Grid, Html, PerspectiveCamera, Center } from "@react-three/drei";
 import * as THREE from "three";
-import { RotateCcw, Move3D } from "lucide-react";
+import { RotateCcw } from "lucide-react";
 
 interface SolidMeta {
   type: string;
@@ -273,14 +273,6 @@ export default function Interactive3DCanvas({
             3D Spatial Engine
           </span>
         </div>
-      </div>
-
-      {/* Helper Bar */}
-      <div className="absolute bottom-3 left-3 flex items-center gap-2 px-3 py-1 bg-[var(--panel-glass)] border border-[var(--border)] rounded-full backdrop-blur-md z-20 pointer-events-none opacity-80">
-        <Move3D className="w-3 h-3 text-[var(--text-muted)]" />
-        <span className="text-[9px] font-mono text-[var(--text-muted)]">
-          Xoay chuột để quan sát • Cuộn để phóng to
-        </span>
       </div>
 
       {/* 3D Canvas Fiber Scene */}

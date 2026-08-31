@@ -3,7 +3,14 @@ import { getApiBaseUrl, getWsBaseUrl } from '@/lib/api-config';
 import { saveActiveJob, getActiveJob, clearActiveJob } from '@/lib/job-tracker';
 import { validateJobResult, type JobResult } from '@/lib/validators';
 
-export type SolverPhase = 'idle' | 'uploading' | 'ocr' | 'parsing' | 'solving' | 'rendering_queued' | 'rendering' | 'success' | 'error';
+export type SolverPhase =
+  | 'idle'
+  | 'uploading'
+  | 'ocr'
+  | 'parsing'
+  | 'solving'
+  | 'success'
+  | 'error';
 
 export interface JobState {
   phase: SolverPhase;
@@ -14,75 +21,144 @@ export interface JobState {
   jobId?: string;
 }
 
-const statusMessages: Record<string, string> = {
+export type VideoRenderStatus =
+  | 'idle'
+  | 'connecting'
+  | 'queued'
+  | 'generating'
+  | 'rendering'
+  | 'completed'
+  | 'failed';
+
+export interface VideoJobState {
+  status: VideoRenderStatus;
+  progress: number;
+  message: string;
+  videoUrl?: string | null;
+  error?: string | null;
+  jobId?: string;
+}
+
+const solveStatusMessages: Record<string, string> = {
   processing: "Đang xử lý bài toán...",
+  ocr: "Đang quét dữ liệu ảnh...",
+  parsing: "Đang phân tích cấu trúc hình học...",
   solving: "Đang giải hệ phương trình...",
-  rendering_queued: "Đã gửi yêu cầu render video...",
-  rendering: "Đang dựng animation Manim...",
   success: "Hoàn thành!",
   error: "Có lỗi xảy ra."
 };
 
-const statusToPhase: Record<string, SolverPhase> = {
+const solveStatusToPhase: Record<string, SolverPhase> = {
   processing: 'ocr',
+  ocr: 'ocr',
   parsing: 'parsing',
   solving: 'solving',
-  rendering_queued: 'rendering_queued',
-  rendering: 'rendering',
   success: 'success',
   error: 'error'
 };
 
-/** Normalize poll row (Supabase) or WS payload to { status, result }. */
-export function normalizeJobPayload(raw: unknown): { status?: string; result?: unknown } | null {
+const videoStatusMessages: Record<string, string> = {
+  connecting: "Đang kết nối với Animation Server...",
+  queued: "Đang chờ xử lý trong hàng đợi...",
+  rendering_queued: "Đang chờ xử lý trong hàng đợi...",
+  generating: "Đang tạo animation...",
+  rendering: "Đang render video...",
+  completed: "Hoàn thành video animation!",
+  success: "Hoàn thành video animation!",
+  failed: "Không thể tạo animation.",
+  error: "Không thể tạo animation."
+};
+
+/** Normalize poll row (Supabase) or WS payload to { status, result, error, video_url }. */
+export function normalizeJobPayload(raw: unknown): {
+  status?: string;
+  result?: unknown;
+  error?: string;
+  video_url?: string;
+} | null {
   if (!raw || typeof raw !== "object") return null;
   const o = raw as Record<string, unknown>;
   const status = typeof o.status === "string" ? o.status : undefined;
   const result = "result" in o ? o.result : undefined;
+  const error = typeof o.error === "string" ? o.error : undefined;
+  const video_url = typeof o.video_url === "string" ? o.video_url : undefined;
   if (!status) return null;
-  return { status, result };
+  return { status, result, error, video_url };
 }
 
 export function useSolverJob(sessionId: string, token?: string | null) {
   const [job, setJob] = useState<JobState>({ phase: 'idle', progress: 0, message: '' });
-  const socketRef = useRef<WebSocket | null>(null);
-  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const pollAttemptsRef = useRef(0);
-  const terminalRef = useRef(false);
+  const [videoJob, setVideoJob] = useState<VideoJobState>({
+    status: 'idle',
+    progress: 0,
+    message: '',
+    videoUrl: null,
+    error: null,
+  });
+
+  const solverSocketRef = useRef<WebSocket | null>(null);
+  const solverPollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const solverPollAttemptsRef = useRef(0);
+  const solverTerminalRef = useRef(false);
+
+  const videoSocketRef = useRef<WebSocket | null>(null);
+  const videoPollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const videoPollAttemptsRef = useRef(0);
+  const videoTerminalRef = useRef(false);
+
   const MAX_POLL_ATTEMPTS = 300;
 
-  const cleanup = useCallback(() => {
-    if (socketRef.current) {
-      socketRef.current.close();
-      socketRef.current = null;
+  // Cleanup solver subscriptions
+  const cleanupSolver = useCallback(() => {
+    if (solverSocketRef.current) {
+      solverSocketRef.current.close();
+      solverSocketRef.current = null;
     }
-    if (pollIntervalRef.current) {
-      clearInterval(pollIntervalRef.current);
-      pollIntervalRef.current = null;
+    if (solverPollIntervalRef.current) {
+      clearInterval(solverPollIntervalRef.current);
+      solverPollIntervalRef.current = null;
     }
-    pollAttemptsRef.current = 0;
+    solverPollAttemptsRef.current = 0;
   }, []);
 
-  const updateJobState = useCallback(
+  // Cleanup video subscriptions
+  const cleanupVideo = useCallback(() => {
+    if (videoSocketRef.current) {
+      videoSocketRef.current.close();
+      videoSocketRef.current = null;
+    }
+    if (videoPollIntervalRef.current) {
+      clearInterval(videoPollIntervalRef.current);
+      videoPollIntervalRef.current = null;
+    }
+    videoPollAttemptsRef.current = 0;
+  }, []);
+
+  const cleanupAll = useCallback(() => {
+    cleanupSolver();
+    cleanupVideo();
+  }, [cleanupSolver, cleanupVideo]);
+
+  // Solver updates handler
+  const updateSolverJobState = useCallback(
     (raw: unknown) => {
       const data = normalizeJobPayload(raw);
       if (!data?.status) return;
 
       setJob((prev) => {
-        const phase = statusToPhase[data.status!] || "solving";
+        const phase = solveStatusToPhase[data.status!] || "solving";
         let progress = prev.progress;
         if (phase === "ocr") progress = 30;
         else if (phase === "parsing") progress = 50;
-        else if (phase === "solving") progress = 70;
-        else if (phase === "rendering_queued") progress = 80;
-        else if (phase === "rendering") progress = 90;
+        else if (phase === "solving") progress = 75;
         else if (phase === "success") progress = 100;
 
         return {
           ...prev,
           phase,
           progress,
-          message: statusMessages[data.status!] || prev.message,
+          message: solveStatusMessages[data.status!] || prev.message,
+          error: data.error || prev.error,
           result:
             data.result !== undefined && data.result !== null
               ? validateJobResult(data.result)
@@ -90,79 +166,217 @@ export function useSolverJob(sessionId: string, token?: string | null) {
         };
       });
 
+      // Also check if result has video_url
+      if (data.status === "success" && data.result) {
+        const validated = validateJobResult(data.result);
+        if (validated?.video_url) {
+          setVideoJob({
+            status: 'completed',
+            progress: 100,
+            message: 'Đã hoàn thành video!',
+            videoUrl: validated.video_url,
+            error: null,
+          });
+        }
+      }
+
       if (data.status === "success" || data.status === "error") {
-        terminalRef.current = true;
-        cleanup();
+        solverTerminalRef.current = true;
+        cleanupSolver();
         clearActiveJob(sessionId);
       }
     },
-    [cleanup, sessionId]
+    [cleanupSolver, sessionId]
   );
 
-  const startPolling = useCallback((jobId: string) => {
-    if (pollIntervalRef.current) return;
-    
-    pollIntervalRef.current = setInterval(async () => {
-      pollAttemptsRef.current += 1;
-      if (pollAttemptsRef.current > MAX_POLL_ATTEMPTS) {
+  // Video updates handler
+  const updateVideoJobState = useCallback(
+    (raw: unknown) => {
+      const data = normalizeJobPayload(raw);
+      if (!data?.status) return;
+
+      const st = data.status.toLowerCase();
+      setVideoJob((prev) => {
+        let status: VideoRenderStatus = prev.status;
+        let progress = prev.progress;
+        let videoUrl = prev.videoUrl;
+        let error = prev.error;
+
+        if (st === "queued" || st === "rendering_queued") {
+          status = "queued";
+          progress = 30;
+        } else if (st === "generating") {
+          status = "generating";
+          progress = 60;
+        } else if (st === "rendering") {
+          status = "rendering";
+          progress = 85;
+        } else if (st === "completed" || st === "success") {
+          status = "completed";
+          progress = 100;
+          videoUrl = data.video_url || (data.result as Record<string, unknown>)?.video_url as string || prev.videoUrl;
+          error = null;
+        } else if (st === "failed" || st === "error") {
+          status = "failed";
+          progress = 0;
+          error = data.error || (data.result as Record<string, unknown>)?.error as string || "Không thể tạo animation.";
+        }
+
+        return {
+          ...prev,
+          status,
+          progress,
+          message: videoStatusMessages[st] || prev.message,
+          videoUrl,
+          error,
+        };
+      });
+
+      if (st === "completed" || st === "success" || st === "failed" || st === "error") {
+        videoTerminalRef.current = true;
+        cleanupVideo();
+      }
+    },
+    [cleanupVideo]
+  );
+
+  const startSolverPolling = useCallback((jobId: string) => {
+    if (solverPollIntervalRef.current) return;
+
+    solverPollIntervalRef.current = setInterval(async () => {
+      solverPollAttemptsRef.current += 1;
+      if (solverPollAttemptsRef.current > MAX_POLL_ATTEMPTS) {
         setJob(prev => ({ ...prev, phase: 'error', progress: 0, message: 'Time out', error: 'Quá thời gian xử lý' }));
-        cleanup();
+        cleanupSolver();
         clearActiveJob(sessionId);
         return;
       }
-      
+
       try {
         const headers: Record<string, string> = {};
         if (token) headers.Authorization = `Bearer ${token}`;
         const res = await fetch(`${getApiBaseUrl()}/api/v1/solve/${jobId}`, { headers });
         if (!res.ok) return;
         const data = await res.json();
-        updateJobState(data);
+        updateSolverJobState(data);
       } catch (err) {
-        console.error("Polling error:", err);
+        console.error("[SolverPolling] error:", err);
       }
     }, 1500);
-  }, [cleanup, sessionId, token, updateJobState]);
+  }, [cleanupSolver, sessionId, token, updateSolverJobState]);
 
-  const connectSocket = useCallback((jobId: string) => {
+  const startVideoPolling = useCallback((jobId: string) => {
+    if (videoPollIntervalRef.current) return;
+
+    videoPollIntervalRef.current = setInterval(async () => {
+      videoPollAttemptsRef.current += 1;
+      if (videoPollAttemptsRef.current > MAX_POLL_ATTEMPTS) {
+        setVideoJob(prev => ({
+          ...prev,
+          status: 'failed',
+          progress: 0,
+          message: 'Không thể tạo animation.',
+          error: 'Quá thời gian xử lý video',
+        }));
+        cleanupVideo();
+        return;
+      }
+
+      try {
+        const headers: Record<string, string> = {};
+        if (token) headers.Authorization = `Bearer ${token}`;
+        const res = await fetch(`${getApiBaseUrl()}/api/v1/solve/${jobId}`, { headers });
+        if (!res.ok) {
+          if (res.status === 404 || res.status >= 500) {
+            setVideoJob(prev => ({
+              ...prev,
+              status: 'failed',
+              error: `Server phản hồi lỗi HTTP ${res.status}`,
+            }));
+            cleanupVideo();
+          }
+          return;
+        }
+        const data = await res.json();
+        updateVideoJobState(data);
+      } catch (err) {
+        console.error("[VideoPolling] error:", err);
+      }
+    }, 1500);
+  }, [cleanupVideo, token, updateVideoJobState]);
+
+  const attachToSolverJob = useCallback((jobId: string) => {
+    cleanupSolver();
+    solverTerminalRef.current = false;
+    setJob({ phase: 'solving', progress: 20, message: 'Đang kết nối...', jobId });
+    saveActiveJob(sessionId, jobId);
+
     try {
       const ws = new WebSocket(`${getWsBaseUrl()}/ws/${jobId}`);
-      socketRef.current = ws;
+      solverSocketRef.current = ws;
 
       ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
-          updateJobState(data);
+          updateSolverJobState(data);
         } catch { /* ignore */ }
       };
 
       ws.onerror = () => {
-        console.error("WS closed/error, falling back to polling");
-        startPolling(jobId);
+        startSolverPolling(jobId);
       };
-      
+
       ws.onclose = () => {
-        if (terminalRef.current) return;
-        if (socketRef.current !== null && socketRef.current !== ws) return;
-        startPolling(jobId);
+        if (solverTerminalRef.current) return;
+        if (solverSocketRef.current !== null && solverSocketRef.current !== ws) return;
+        startSolverPolling(jobId);
       };
     } catch {
-       startPolling(jobId);
+      startSolverPolling(jobId);
     }
-  }, [startPolling, updateJobState]);
+  }, [cleanupSolver, sessionId, startSolverPolling, updateSolverJobState]);
 
-  const attachToJob = useCallback((jobId: string) => {
-    cleanup();
-    terminalRef.current = false;
-    setJob({ phase: 'solving', progress: 20, message: 'Đang kết nối...', jobId });
-    saveActiveJob(sessionId, jobId);
-    connectSocket(jobId);
-  }, [cleanup, sessionId, connectSocket]);
+  const attachToVideoJob = useCallback((jobId: string) => {
+    cleanupVideo();
+    videoTerminalRef.current = false;
+    setVideoJob(prev => ({
+      ...prev,
+      status: 'connecting',
+      progress: 20,
+      message: 'Đang kết nối với Animation Server...',
+      jobId,
+      error: null,
+    }));
 
-  const attachToJobRef = useRef(attachToJob);
+    try {
+      const ws = new WebSocket(`${getWsBaseUrl()}/ws/${jobId}`);
+      videoSocketRef.current = ws;
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          updateVideoJobState(data);
+        } catch { /* ignore */ }
+      };
+
+      ws.onerror = () => {
+        startVideoPolling(jobId);
+      };
+
+      ws.onclose = () => {
+        if (videoTerminalRef.current) return;
+        if (videoSocketRef.current !== null && videoSocketRef.current !== ws) return;
+        startVideoPolling(jobId);
+      };
+    } catch {
+      startVideoPolling(jobId);
+    }
+  }, [cleanupVideo, startVideoPolling, updateVideoJobState]);
+
+  const attachToSolverJobRef = useRef(attachToSolverJob);
   useLayoutEffect(() => {
-    attachToJobRef.current = attachToJob;
-  }, [attachToJob]);
+    attachToSolverJobRef.current = attachToSolverJob;
+  }, [attachToSolverJob]);
 
   const startSolve = useCallback(
     async (
@@ -170,51 +384,46 @@ export function useSolverJob(sessionId: string, token?: string | null) {
       requestVideo: boolean = false,
       imageUrl?: string | null
     ) => {
-    if (!token) return;
-    cleanup();
-    setJob({ phase: 'uploading', progress: 10, message: 'Đang gửi yêu cầu...', result: null, error: undefined });
-    
-    try {
-      const body: Record<string, unknown> = { text, request_video: requestVideo };
-      if (imageUrl) body.image_url = imageUrl;
-      const response = await fetch(`${getApiBaseUrl()}/api/v1/sessions/${sessionId}/solve`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(body),
-      });
+      if (!token) return;
+      cleanupSolver();
+      setJob({ phase: 'uploading', progress: 10, message: 'Đang gửi yêu cầu...', result: null, error: undefined });
 
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const data = await response.json();
-      if (!data.job_id) throw new Error("Missing job_id");
+      try {
+        const body: Record<string, unknown> = { text, request_video: requestVideo };
+        if (imageUrl) body.image_url = imageUrl;
+        const response = await fetch(`${getApiBaseUrl()}/api/v1/sessions/${sessionId}/solve`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(body),
+        });
 
-      attachToJob(data.job_id);
-    } catch (err) {
-      setJob(prev => ({ ...prev, phase: 'error', progress: 0, message: 'Lỗi khởi tạo', error: String(err) }));
-      cleanup();
-    }
-  }, [sessionId, token, attachToJob, cleanup]);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const data = await response.json();
+        if (!data.job_id) throw new Error("Missing job_id");
 
-  useEffect(() => {
-    if (!sessionId || sessionId.startsWith("temp-")) return;
-    const activeJobId = getActiveJob(sessionId);
-    if (activeJobId) attachToJobRef.current(activeJobId);
-    return cleanup;
-  }, [sessionId, cleanup]);
-
-  const resetJob = useCallback(() => {
-    cleanup();
-    terminalRef.current = false;
-    setJob({ phase: 'idle', progress: 0, message: '' });
-  }, [cleanup]);
+        attachToSolverJob(data.job_id);
+      } catch (err) {
+        setJob(prev => ({ ...prev, phase: 'error', progress: 0, message: 'Lỗi khởi tạo', error: String(err) }));
+        cleanupSolver();
+      }
+    },
+    [sessionId, token, attachToSolverJob, cleanupSolver]
+  );
 
   const startRenderVideo = useCallback(async (targetJobId?: string) => {
     if (!token) return;
-    cleanup();
-    setJob({ phase: 'rendering_queued', progress: 80, message: 'Đang gửi yêu cầu render...', result: null, error: undefined });
-    
+    cleanupVideo();
+    setVideoJob({
+      status: 'connecting',
+      progress: 15,
+      message: 'Đang kết nối với Animation Server...',
+      videoUrl: null,
+      error: null,
+    });
+
     try {
       const response = await fetch(`${getApiBaseUrl()}/api/v1/sessions/${sessionId}/render_video`, {
         method: "POST",
@@ -225,16 +434,69 @@ export function useSolverJob(sessionId: string, token?: string | null) {
         body: JSON.stringify({ job_id: targetJobId }),
       });
 
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      if (!response.ok) {
+        const errText = await response.text().catch(() => "");
+        let cleanErr = `HTTP ${response.status}`;
+        try {
+          const jsonErr = JSON.parse(errText);
+          if (jsonErr.detail) cleanErr = jsonErr.detail;
+          if (jsonErr.error) cleanErr = jsonErr.error;
+        } catch {
+          if (errText.includes("429")) cleanErr = "Server Manim đang quá tải (Rate limit 429). Vui lòng thử lại sau giây lát.";
+        }
+        throw new Error(cleanErr);
+      }
+
       const data = await response.json();
       if (!data.job_id) throw new Error("Missing job_id");
 
-      attachToJob(data.job_id);
-    } catch (err) {
-      setJob(prev => ({ ...prev, phase: 'error', progress: 0, message: 'Lỗi khởi tạo render', error: String(err) }));
-      cleanup();
-    }
-  }, [sessionId, token, attachToJob, cleanup]);
+      // If backend returned immediate completed video_url
+      if (data.status === "completed" && data.video_url) {
+        setVideoJob({
+          status: 'completed',
+          progress: 100,
+          message: 'Hoàn thành video animation!',
+          videoUrl: data.video_url,
+          error: null,
+          jobId: data.job_id,
+        });
+        return;
+      }
 
-  return { job, startSolve, startRenderVideo, attachToJob, resetJob };
+      attachToVideoJob(data.job_id);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setVideoJob({
+        status: 'failed',
+        progress: 0,
+        message: 'Không thể tạo animation.',
+        error: msg,
+      });
+      cleanupVideo();
+    }
+  }, [sessionId, token, attachToVideoJob, cleanupVideo]);
+
+  // Restore active job on session change
+  useEffect(() => {
+    if (!sessionId || sessionId.startsWith("temp-")) return;
+    const activeJobId = getActiveJob(sessionId);
+    if (activeJobId) attachToSolverJobRef.current(activeJobId);
+    return cleanupAll;
+  }, [sessionId, cleanupAll]);
+
+  const resetJob = useCallback(() => {
+    cleanupAll();
+    solverTerminalRef.current = false;
+    videoTerminalRef.current = false;
+    setJob({ phase: 'idle', progress: 0, message: '' });
+    setVideoJob({
+      status: 'idle',
+      progress: 0,
+      message: '',
+      videoUrl: null,
+      error: null,
+    });
+  }, [cleanupAll]);
+
+  return { job, videoJob, startSolve, startRenderVideo, attachToSolverJob, resetJob, setVideoJob };
 }

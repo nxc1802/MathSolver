@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useParams } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
-import { Film, Loader2 } from "lucide-react";
+import { Film } from "lucide-react";
 import useSWR from "swr";
 import { useAuth } from "@/lib/auth-context";
 import { getApiBaseUrl } from "@/lib/api-config";
@@ -131,7 +131,7 @@ export default function ChatSessionPage() {
   const prevRouteSessionIdRef = useRef<string | undefined>(undefined);
 
   // Job Hooks
-  const { job, startSolve, startRenderVideo, resetJob } = useSolverJob(
+  const { job, videoJob, startSolve, startRenderVideo, resetJob } = useSolverJob(
     sessionId,
     userSession?.access_token
   );
@@ -547,6 +547,12 @@ export default function ChatSessionPage() {
     });
   };
 
+  const hasVisualization = Boolean(
+    coordinates ||
+    videoUrl ||
+    (videoJob && videoJob.status !== "idle")
+  );
+
   return (
     <div
       ref={containerRef}
@@ -583,196 +589,192 @@ export default function ChatSessionPage() {
         <div className="flex-1 flex overflow-hidden">
           {/* Chat Column */}
           <div
-            className="flex flex-col border-r border-[var(--border)] min-w-0 bg-[var(--panel-bg)]"
-            style={{ width: `${mainSplitPercent}%` }}
+            className={`flex flex-col min-w-0 bg-[var(--panel-bg)] transition-all duration-300 ${
+              hasVisualization ? "border-r border-[var(--border)]" : "w-full flex-1"
+            }`}
+            style={hasVisualization ? { width: `${mainSplitPercent}%` } : undefined}
           >
-            {messages.length === 0 &&
-            pendingQueue.length === 0 &&
-            !historyLoadingRaw &&
-            ocrFlow.status === "idle" ? (
-              <HeroWelcome
-                onSuggestionClick={(text) => {
-                  setInputText(text);
-                }}
-              />
-            ) : (
-              <ChatMessageList
-                messages={messages}
-                historyLoading={historyLoadingRaw && !isTempSession}
-                isTempSession={isTempSession}
-                currentStatus={
-                  job.phase !== "idle" && job.phase !== "success" ? job.message : null
-                }
-                pendingQueue={pendingQueue}
-                editQueued={editQueued}
-                removeQueued={removeQueued}
-                messagesEndRef={messagesEndRef}
-              />
-            )}
-
-            {queueNotice && (
-              <div className="px-4 pt-2 max-w-3xl mx-auto w-full">
-                <p className="text-xs text-amber-300 bg-amber-500/10 border border-amber-500/20 rounded-xl px-3 py-2">
-                  {queueNotice}
-                </p>
-              </div>
-            )}
-
-            {ocrFlow.status !== "idle" && (
-              <div className="px-4 pb-2 shrink-0">
-                <OcrConfirmCard
-                  previewUrls={ocrFlow.attachments.map((a) => a.previewUrl)}
-                  combinedText={
-                    ocrFlow.status === "confirm" ? confirmEditText : ""
-                  }
-                  onChangeCombined={setConfirmEditText}
-                  ocrLoading={ocrFlow.status === "ocr_loading"}
-                  error={ocrFlowError}
-                  onConfirm={confirmOcrAndSolve}
-                  onCancel={cancelOcrFlow}
-                  onRetryOcr={handleRetryOcr}
+            <div className={`flex-1 flex flex-col min-w-0 overflow-hidden ${!hasVisualization ? "max-w-4xl w-full mx-auto" : ""}`}>
+              {messages.length === 0 &&
+              pendingQueue.length === 0 &&
+              !historyLoadingRaw &&
+              ocrFlow.status === "idle" ? (
+                <HeroWelcome
+                  onSuggestionClick={(text) => {
+                    setInputText(text);
+                  }}
                 />
-              </div>
-            )}
+              ) : (
+                <ChatMessageList
+                  messages={messages}
+                  historyLoading={historyLoadingRaw && !isTempSession}
+                  isTempSession={isTempSession}
+                  currentStatus={
+                    job.phase !== "idle" && job.phase !== "success" ? job.message : null
+                  }
+                  pendingQueue={pendingQueue}
+                  editQueued={editQueued}
+                  removeQueued={removeQueued}
+                  messagesEndRef={messagesEndRef}
+                />
+              )}
 
-            <ChatInput
-              inputText={inputText}
-              setInputText={setInputText}
-              queueFullBlock={queueFullBlock}
-              solveLoading={job.phase !== "idle"}
-              ocrLoading={ocrFlow.status === "ocr_loading"}
-              ocrPreviewBlocking={ocrPreviewBlocking}
-              pendingImages={pendingDraftImages}
-              onRemoveImage={removeDraftImage}
-              onAddImageFiles={addDraftImages}
-              onSolve={handleComposerSend}
-            />
-          </div>
+              {queueNotice && (
+                <div className="px-4 pt-2 max-w-3xl mx-auto w-full">
+                  <p className="text-xs text-amber-300 bg-amber-500/10 border border-amber-500/20 rounded-xl px-3 py-2">
+                    {queueNotice}
+                  </p>
+                </div>
+              )}
 
-          {/* Main Column Drag Resizer */}
-          <div
-            role="separator"
-            onMouseDown={() => {
-              draggingType.current = "main";
-              document.body.style.cursor = "col-resize";
-            }}
-            className="w-1 cursor-col-resize hover:bg-indigo-500/40 z-10 shrink-0 transition-colors"
-          />
+              {ocrFlow.status !== "idle" && (
+                <div className="px-4 pb-2 shrink-0">
+                  <OcrConfirmCard
+                    previewUrls={ocrFlow.attachments.map((a) => a.previewUrl)}
+                    combinedText={
+                      ocrFlow.status === "confirm" ? confirmEditText : ""
+                    }
+                    onChangeCombined={setConfirmEditText}
+                    ocrLoading={ocrFlow.status === "ocr_loading"}
+                    error={ocrFlowError}
+                    onConfirm={confirmOcrAndSolve}
+                    onCancel={cancelOcrFlow}
+                    onRetryOcr={handleRetryOcr}
+                  />
+                </div>
+              )}
 
-          {/* Geometry & Animation Workspace */}
-          <div className="flex-1 flex flex-col bg-black/30 overflow-hidden relative">
-            <div className="flex-1 flex flex-col p-4 md:p-6 space-y-4 overflow-hidden">
-              <AnimatePresence mode="popLayout">
-                {coordinates && (
-                  <motion.div
-                    key="static"
-                    initial={{ opacity: 0, scale: 0.98 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    className="flex-1 flex flex-col min-h-0 space-y-2.5"
-                  >
-                    <div className="flex items-center justify-between gap-2 px-1">
-                      <div className="flex items-center gap-2.5">
-                        <span className="text-[10px] font-mono font-semibold text-[var(--text-secondary)] uppercase tracking-wider">
-                          Mô hình Hình học {is3d ? "3D" : "2D"}
-                        </span>
-
-                        {coordinates && !videoUrl && (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              startRenderVideo(activeSnapshotJobId || undefined)
-                            }
-                            disabled={
-                              job.phase === "rendering" ||
-                              job.phase === "rendering_queued"
-                            }
-                            className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/25 text-[10px] font-mono font-semibold text-indigo-300 hover:bg-indigo-500/20 active:scale-95 transition-all disabled:opacity-50"
-                          >
-                            {job.phase === "rendering" ||
-                            job.phase === "rendering_queued" ? (
-                              <Loader2 className="w-3 h-3 animate-spin text-indigo-400" />
-                            ) : (
-                              <Film className="w-3 h-3 text-indigo-400" />
-                            )}
-                            Tạo Animation
-                          </button>
-                        )}
-                      </div>
-
-                      <VersionSwitcher
-                        currentVersion={videoVersion}
-                        totalVersions={geometrySnapshots.length}
-                        onPrev={() => {
-                          if (videoVersion > 1) {
-                            setVideoVersion((v) => v - 1);
-                            applyGeometryFromSnapshot(
-                              geometrySnapshots[videoVersion - 2]
-                                .metadata as Record<string, unknown>
-                            );
-                          }
-                        }}
-                        onNext={() => {
-                          if (videoVersion < geometrySnapshots.length) {
-                            setVideoVersion((v) => v + 1);
-                            applyGeometryFromSnapshot(
-                              geometrySnapshots[videoVersion]
-                                .metadata as Record<string, unknown>
-                            );
-                          }
-                        }}
-                      />
-                    </div>
-
-                    <div className="flex-1 min-h-0 relative overflow-hidden">
-                      {is3d ? (
-                        <Interactive3DCanvas
-                          coordinates={coordinates}
-                          drawingPhases={drawingPhases || []}
-                          faces={faces || []}
-                          solids={solids || []}
-                        />
-                      ) : (
-                        <StaticGeometryCanvas
-                          coordinates={
-                            coordinates as Record<string, [number, number]>
-                          }
-                          polygonOrder={polygonOrder || []}
-                          drawingPhases={drawingPhases || []}
-                          circles={[]}
-                          lines={[]}
-                          rays={[]}
-                        />
-                      )}
-                    </div>
-                  </motion.div>
-                )}
-
-                {(videoUrl ||
-                  job.phase === "rendering" ||
-                  job.phase === "rendering_queued") && (
-                  <motion.div
-                    key="animation"
-                    initial={{ opacity: 0, scale: 0.98 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    className="flex-1 flex flex-col min-h-0 space-y-2.5"
-                  >
-                    <div className="flex items-center justify-between px-1">
-                      <span className="text-[10px] font-mono font-semibold text-[var(--text-secondary)] uppercase tracking-wider">
-                        Animation Manim Video
-                      </span>
-                    </div>
-                    <AnimationPreview
-                      videoUrl={videoUrl || undefined}
-                      loading={
-                        job.phase === "rendering" ||
-                        job.phase === "rendering_queued"
-                      }
-                    />
-                  </motion.div>
-                )}
-              </AnimatePresence>
+              <ChatInput
+                inputText={inputText}
+                setInputText={setInputText}
+                queueFullBlock={queueFullBlock}
+                solveLoading={job.phase !== "idle"}
+                ocrLoading={ocrFlow.status === "ocr_loading"}
+                ocrPreviewBlocking={ocrPreviewBlocking}
+                pendingImages={pendingDraftImages}
+                onRemoveImage={removeDraftImage}
+                onAddImageFiles={addDraftImages}
+                onSolve={handleComposerSend}
+              />
             </div>
           </div>
+
+          {/* Main Column Drag Resizer & Workspace (Only rendered when hasVisualization is true) */}
+          {hasVisualization && (
+            <>
+              <div
+                role="separator"
+                onMouseDown={() => {
+                  draggingType.current = "main";
+                  document.body.style.cursor = "col-resize";
+                }}
+                className="w-1 cursor-col-resize hover:bg-indigo-500/40 z-10 shrink-0 transition-colors"
+              />
+
+              {/* Geometry & Animation Workspace */}
+              <div className="flex-1 flex flex-col bg-black/30 overflow-hidden relative">
+                <div className="flex-1 flex flex-col p-4 md:p-6 space-y-4 overflow-hidden">
+                  <AnimatePresence mode="popLayout">
+                    {coordinates && (
+                      <motion.div
+                        key="static"
+                        initial={{ opacity: 0, scale: 0.98 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="flex-1 flex flex-col min-h-0 space-y-2.5"
+                      >
+                        <div className="flex items-center justify-between gap-2 px-1">
+                          <div className="flex items-center gap-2.5">
+                            <span className="text-[10px] font-mono font-semibold text-[var(--text-secondary)] uppercase tracking-wider">
+                              Mô hình Hình học {is3d ? "3D" : "2D"}
+                            </span>
+
+                            {coordinates && !videoUrl && videoJob.status === "idle" && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  startRenderVideo(activeSnapshotJobId || undefined)
+                                }
+                                className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/25 text-[10px] font-mono font-semibold text-indigo-300 hover:bg-indigo-500/20 active:scale-95 transition-all"
+                              >
+                                <Film className="w-3 h-3 text-indigo-400" />
+                                Tạo Animation
+                              </button>
+                            )}
+                          </div>
+
+                          <VersionSwitcher
+                            currentVersion={videoVersion}
+                            totalVersions={geometrySnapshots.length}
+                            onPrev={() => {
+                              if (videoVersion > 1) {
+                                setVideoVersion((v) => v - 1);
+                                applyGeometryFromSnapshot(
+                                  geometrySnapshots[videoVersion - 2]
+                                    .metadata as Record<string, unknown>
+                                );
+                              }
+                            }}
+                            onNext={() => {
+                              if (videoVersion < geometrySnapshots.length) {
+                                setVideoVersion((v) => v + 1);
+                                applyGeometryFromSnapshot(
+                                  geometrySnapshots[videoVersion]
+                                    .metadata as Record<string, unknown>
+                                );
+                              }
+                            }}
+                          />
+                        </div>
+
+                        <div className="flex-1 min-h-0 relative overflow-hidden">
+                          {is3d ? (
+                            <Interactive3DCanvas
+                              coordinates={coordinates}
+                              drawingPhases={drawingPhases || []}
+                              faces={faces || []}
+                              solids={solids || []}
+                            />
+                          ) : (
+                            <StaticGeometryCanvas
+                              coordinates={
+                                coordinates as Record<string, [number, number]>
+                              }
+                              polygonOrder={polygonOrder || []}
+                              drawingPhases={drawingPhases || []}
+                              circles={[]}
+                              lines={[]}
+                              rays={[]}
+                            />
+                          )}
+                        </div>
+                      </motion.div>
+                    )}
+
+                    {(videoUrl || videoJob.status !== "idle") && (
+                      <motion.div
+                        key="animation"
+                        initial={{ opacity: 0, scale: 0.98 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="flex-1 flex flex-col min-h-0 space-y-2.5"
+                      >
+                        <div className="flex items-center justify-between px-1">
+                          <span className="text-[10px] font-mono font-semibold text-[var(--text-secondary)] uppercase tracking-wider">
+                            Animation Manim Video
+                          </span>
+                        </div>
+                        <AnimationPreview
+                          videoUrl={videoUrl || videoJob.videoUrl || undefined}
+                          videoState={videoJob}
+                          onRetry={() => startRenderVideo(activeSnapshotJobId || undefined)}
+                          onRequestRender={() => startRenderVideo(activeSnapshotJobId || undefined)}
+                        />
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>

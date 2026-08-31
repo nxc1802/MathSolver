@@ -2,7 +2,7 @@
 
 import { motion } from "framer-motion";
 import { useMemo, useState, useRef } from "react";
-import { ZoomIn, ZoomOut, RotateCcw, Move } from "lucide-react";
+import { ZoomIn, ZoomOut, RotateCcw } from "lucide-react";
 
 interface StaticGeometryCanvasProps {
   coordinates?: Record<string, [number, number]>;
@@ -243,14 +243,6 @@ export default function StaticGeometryCanvas({
             2D Geometry Canvas
           </span>
         </div>
-      </div>
-
-      {/* Navigation Help Bar */}
-      <div className="absolute bottom-3 left-3 flex items-center gap-2 px-3 py-1 bg-[var(--panel-glass)] border border-[var(--border)] rounded-full backdrop-blur-md z-20 pointer-events-none opacity-80">
-        <Move className="w-3 h-3 text-[var(--text-muted)]" />
-        <span className="text-[9px] font-mono text-[var(--text-muted)]">
-          Kéo để di chuyển • Ctrl + Cuộn để phóng to
-        </span>
       </div>
 
       {/* Main SVG Geometry */}

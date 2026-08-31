@@ -194,19 +194,6 @@ export default function ChatInput({
             </button>
           </div>
         </div>
-
-        {/* Keyboard hints footer */}
-        <div className="flex items-center justify-between px-2 text-[10px] font-mono text-[var(--text-muted)] opacity-70">
-          <div className="flex items-center gap-3">
-            <span className="flex items-center gap-1">
-              <kbd className="px-1 py-0.5 rounded bg-white/5 border border-white/10 text-[9px]">Enter</kbd> gửi
-            </span>
-            <span className="flex items-center gap-1">
-              <kbd className="px-1 py-0.5 rounded bg-white/5 border border-white/10 text-[9px]">Shift+Enter</kbd> xuống dòng
-            </span>
-          </div>
-          <span>Dán ảnh trực tiếp từ Clipboard</span>
-        </div>
       </div>
     </div>
   );
