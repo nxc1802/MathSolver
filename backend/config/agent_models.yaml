@@ -22,9 +22,13 @@ agents:
     name: input_analyzer
     description: "Analyze input and extract mathematical structure, entities, and constraints"
     tiers:
+      - model: gemini/gemini-3.7-flash
+        max_attempts: 1
+      - model: gemini/gemini-3.6-flash
+        max_attempts: 1
+      - model: gemini/gemini-3.5-flash
+        max_attempts: 1
       - model: gemini/gemini-2.5-flash
-        max_attempts: 2
-      - model: gemini/gemini-2.5-pro
         max_attempts: 1
     temperature: 0.1
     max_tokens: 4096
@@ -33,9 +37,13 @@ agents:
     name: analyzer
     description: "Alias for input_analyzer"
     tiers:
+      - model: gemini/gemini-3.7-flash
+        max_attempts: 1
+      - model: gemini/gemini-3.6-flash
+        max_attempts: 1
+      - model: gemini/gemini-3.5-flash
+        max_attempts: 1
       - model: gemini/gemini-2.5-flash
-        max_attempts: 2
-      - model: gemini/gemini-2.5-pro
         max_attempts: 1
     temperature: 0.1
     max_tokens: 4096
@@ -44,9 +52,13 @@ agents:
     name: problem_parser
     description: "Parse problem text into structured mathematical AST"
     tiers:
+      - model: gemini/gemini-3.7-flash
+        max_attempts: 1
+      - model: gemini/gemini-3.6-flash
+        max_attempts: 1
+      - model: gemini/gemini-3.5-flash
+        max_attempts: 1
       - model: gemini/gemini-2.5-flash
-        max_attempts: 2
-      - model: gemini/gemini-2.5-pro
         max_attempts: 1
     temperature: 0.1
     max_tokens: 8192
@@ -55,9 +67,13 @@ agents:
     name: parser
     description: "Alias for problem_parser"
     tiers:
+      - model: gemini/gemini-3.7-flash
+        max_attempts: 1
+      - model: gemini/gemini-3.6-flash
+        max_attempts: 1
+      - model: gemini/gemini-3.5-flash
+        max_attempts: 1
       - model: gemini/gemini-2.5-flash
-        max_attempts: 2
-      - model: gemini/gemini-2.5-pro
         max_attempts: 1
     temperature: 0.1
     max_tokens: 8192
@@ -66,8 +82,12 @@ agents:
     name: geometry_parser
     description: "Generate geometric DSL, points, faces, solids, and spatial constraints"
     tiers:
-      - model: gemini/gemini-2.5-pro
-        max_attempts: 2
+      - model: gemini/gemini-3.7-flash
+        max_attempts: 1
+      - model: gemini/gemini-3.6-flash
+        max_attempts: 1
+      - model: gemini/gemini-3.5-flash
+        max_attempts: 1
       - model: gemini/gemini-2.5-flash
         max_attempts: 1
     temperature: 0.1
@@ -77,8 +97,12 @@ agents:
     name: geometry
     description: "Alias for geometry_parser"
     tiers:
-      - model: gemini/gemini-2.5-pro
-        max_attempts: 2
+      - model: gemini/gemini-3.7-flash
+        max_attempts: 1
+      - model: gemini/gemini-3.6-flash
+        max_attempts: 1
+      - model: gemini/gemini-3.5-flash
+        max_attempts: 1
       - model: gemini/gemini-2.5-flash
         max_attempts: 1
     temperature: 0.1
@@ -88,8 +112,12 @@ agents:
     name: reasoning_solver
     description: "Program-aided SymPy and analytical symbolic step-by-step reasoning"
     tiers:
-      - model: gemini/gemini-2.5-pro
-        max_attempts: 2
+      - model: gemini/gemini-3.7-flash
+        max_attempts: 1
+      - model: gemini/gemini-3.6-flash
+        max_attempts: 1
+      - model: gemini/gemini-3.5-flash
+        max_attempts: 1
       - model: gemini/gemini-2.5-flash
         max_attempts: 1
     temperature: 0.2
@@ -100,8 +128,12 @@ agents:
     name: solver
     description: "Alias for reasoning_solver"
     tiers:
-      - model: gemini/gemini-2.5-pro
-        max_attempts: 2
+      - model: gemini/gemini-3.7-flash
+        max_attempts: 1
+      - model: gemini/gemini-3.6-flash
+        max_attempts: 1
+      - model: gemini/gemini-3.5-flash
+        max_attempts: 1
       - model: gemini/gemini-2.5-flash
         max_attempts: 1
     temperature: 0.2
@@ -112,9 +144,13 @@ agents:
     name: visualization_planner
     description: "Plan 2D/3D camera viewpoints, highlights, annotations, and camera angles"
     tiers:
+      - model: gemini/gemini-3.7-flash
+        max_attempts: 1
+      - model: gemini/gemini-3.6-flash
+        max_attempts: 1
+      - model: gemini/gemini-3.5-flash
+        max_attempts: 1
       - model: gemini/gemini-2.5-flash
-        max_attempts: 2
-      - model: gemini/gemini-2.5-pro
         max_attempts: 1
     temperature: 0.1
     max_tokens: 8192
@@ -123,8 +159,12 @@ agents:
     name: code_generator
     description: "Generate executable Manim and Python animation scripts"
     tiers:
-      - model: gemini/gemini-2.5-pro
-        max_attempts: 2
+      - model: gemini/gemini-3.7-flash
+        max_attempts: 1
+      - model: gemini/gemini-3.6-flash
+        max_attempts: 1
+      - model: gemini/gemini-3.5-flash
+        max_attempts: 1
       - model: gemini/gemini-2.5-flash
         max_attempts: 1
     temperature: 0.1
@@ -134,7 +174,11 @@ agents:
     name: reviewer
     description: "Review mathematical correctness and visual geometry consistency"
     tiers:
-      - model: gemini/gemini-2.5-pro
+      - model: gemini/gemini-3.7-flash
+        max_attempts: 1
+      - model: gemini/gemini-3.6-flash
+        max_attempts: 1
+      - model: gemini/gemini-3.5-flash
         max_attempts: 1
       - model: gemini/gemini-2.5-flash
         max_attempts: 1

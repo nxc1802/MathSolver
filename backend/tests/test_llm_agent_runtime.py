@@ -67,13 +67,13 @@ async def test_key_pool_round_robin_and_cooldown():
 
 @pytest.mark.asyncio
 async def test_agent_runtime_validator_cascade():
-    """Simulates Tier 1 (flash) failing validation and Tier 2 (pro) succeeding validation on analyzer."""
+    """Simulates Tier 1 (3.7-flash) failing validation and Tier 2 (3.6-flash) succeeding validation on analyzer."""
     call_history = []
 
     class MockLLMService:
         async def acomplete(self, model: str, messages: list, **kwargs) -> str:
             call_history.append(model)
-            if "flash" in model:
+            if "3.7" in model:
                 return "INVALID_OUTPUT_FROM_TIER_1"
             return '{"type": "pyramid", "analysis": "Valid analysis from Tier 2"}'
 
@@ -92,6 +92,6 @@ async def test_agent_runtime_validator_cascade():
     )
 
     assert res["valid"] is True
-    # Verify that Tier 1 (flash) was attempted and escalated to Tier 2 (pro)
-    assert any("flash" in m for m in call_history)
-    assert any("pro" in m for m in call_history)
+    # Verify that Tier 1 (3.7) was attempted and escalated to Tier 2 (3.6)
+    assert any("3.7" in m for m in call_history)
+    assert any("3.6" in m for m in call_history)

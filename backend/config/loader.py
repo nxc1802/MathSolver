@@ -49,8 +49,10 @@ class AgentConfigResolver:
                 name=agent_name,
                 description=f"Auto-generated fallback config for {agent_name}",
                 tiers=[
-                    ModelTier(model="gemini/gemini-2.5-flash", max_attempts=2),
-                    ModelTier(model="gemini/gemini-2.5-pro", max_attempts=1),
+                    ModelTier(model="gemini/gemini-3.7-flash", max_attempts=1),
+                    ModelTier(model="gemini/gemini-3.6-flash", max_attempts=1),
+                    ModelTier(model="gemini/gemini-3.5-flash", max_attempts=1),
+                    ModelTier(model="gemini/gemini-2.5-flash", max_attempts=1),
                 ],
                 temperature=0.2,
                 max_tokens=8192,

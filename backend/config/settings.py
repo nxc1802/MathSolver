@@ -34,7 +34,7 @@ class Settings(BaseModel):
     redis_url: str = Field(default_factory=lambda: os.getenv("REDIS_URL", "redis://localhost:6379/0"))
     llm_timeout_seconds: int = Field(default_factory=lambda: int(os.getenv("LLM_TIMEOUT_SECONDS", "120")))
     llm_cooldown_seconds: int = Field(default_factory=lambda: int(os.getenv("LLM_COOLDOWN_SECONDS", "60")))
-    default_chat_model: str = Field(default_factory=lambda: os.getenv("DEFAULT_CHAT_MODEL", "gemini/gemini-2.5-flash"))
+    default_chat_model: str = Field(default_factory=lambda: os.getenv("DEFAULT_CHAT_MODEL", "gemini/gemini-3.7-flash"))
 
     def get_provider_credentials(self) -> Dict[str, ProviderCredentials]:
         """Parses API keys for all supported providers from environment variables."""
