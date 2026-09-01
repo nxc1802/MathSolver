@@ -4,7 +4,7 @@ import React, { useMemo, useState } from "react";
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls, Stars, Grid, Html, PerspectiveCamera, Center } from "@react-three/drei";
 import * as THREE from "three";
-import { RotateCcw, Eye, Layers, Compass } from "lucide-react";
+import { RotateCcw, Eye, EyeOff, Layers, Compass } from "lucide-react";
 import type {
   VisualizationGraph,
   VisAuxiliaryConstruction,
@@ -489,11 +489,11 @@ export default function Interactive3DCanvas({
   auxiliary,
 }: Interactive3DCanvasProps) {
   const [resetKey, setResetKey] = useState(0);
-  const [opacityMode, setOpacityMode] = useState<"frosted" | "translucent" | "wireframe">("frosted");
+  const [opacityMode, setOpacityMode] = useState<"frosted" | "solid" | "wireframe">("frosted");
   const [showAuxiliary, setShowAuxiliary] = useState(true);
   const [showLabels, setShowLabels] = useState(true);
 
-  const faceOpacity = opacityMode === "frosted" ? 0.2 : opacityMode === "translucent" ? 0.38 : 0.0;
+  const faceOpacity = opacityMode === "frosted" ? 0.22 : opacityMode === "solid" ? 0.55 : 0.0;
 
   const parsedCoordinates = useMemo(() => {
     return coordinates ?? {};
@@ -523,9 +523,30 @@ export default function Interactive3DCanvas({
     }));
   }, [visualizationGraph, parsedCoordinates]);
 
+  // Filtered vertices based on auxiliary toggle
+  const visibleVertices = useMemo(() => {
+    if (showAuxiliary) return vertices;
+    return vertices.filter(
+      (v) =>
+        v.kind !== "AUXILIARY" &&
+        v.role !== "foot" &&
+        v.role !== "projection" &&
+        v.role !== "midpoint"
+    );
+  }, [vertices, showAuxiliary]);
+
   // Extract edges (combining visualization_graph and drawing_phases)
   const edges = useMemo(() => {
-    const edgeMap = new Map<string, { start: THREE.Vector3; end: THREE.Vector3; role: string; isAuxiliary: boolean; forceDashed: boolean }>();
+    const edgeMap = new Map<
+      string,
+      {
+        start: THREE.Vector3;
+        end: THREE.Vector3;
+        role: string;
+        isAuxiliary: boolean;
+        forceDashed: boolean;
+      }
+    >();
 
     // 1. From Visualization Graph (if available)
     if (visualizationGraph?.edges && Object.keys(visualizationGraph.edges).length > 0) {
@@ -538,7 +559,14 @@ export default function Interactive3DCanvas({
             start: toVector3(c1),
             end: toVector3(c2),
             role: e.role,
-            isAuxiliary: e.kind === "AUXILIARY" || e.role === "altitude" || e.role === "median" || e.role === "projection" || e.role === "diagonal",
+            isAuxiliary:
+              e.kind === "AUXILIARY" ||
+              e.role === "altitude" ||
+              e.role === "height" ||
+              e.role === "median" ||
+              e.role === "projection" ||
+              e.role === "diagonal" ||
+              e.role === "auxiliary",
             forceDashed: e.style === "dashed" || Boolean(e.is_hidden),
           });
         }
@@ -571,14 +599,59 @@ export default function Interactive3DCanvas({
     return Array.from(edgeMap.values());
   }, [visualizationGraph, drawingPhases, parsedCoordinates]);
 
-  // Extract faces
+  // Filtered edges based on auxiliary toggle
+  const visibleEdges = useMemo(() => {
+    if (showAuxiliary) return edges;
+    return edges.filter((e) => !e.isAuxiliary);
+  }, [edges, showAuxiliary]);
+
+  // Extract faces (with solid topology fallback derivation)
   const effectiveFaces = useMemo(() => {
     if (faces && faces.length > 0) return faces;
     if (visualizationGraph?.faces && Object.keys(visualizationGraph.faces).length > 0) {
       return Object.values(visualizationGraph.faces).map((f) => f.vertices);
     }
+    // Fallback: derive faces from solids
+    if (solids && solids.length > 0) {
+      const derived: string[][] = [];
+      solids.forEach((solid) => {
+        if (solid.type === "pyramid" && solid.apex && solid.base && solid.base.length >= 3) {
+          derived.push(solid.base);
+          for (let i = 0; i < solid.base.length; i++) {
+            const p1 = solid.base[i];
+            const p2 = solid.base[(i + 1) % solid.base.length];
+            derived.push([solid.apex, p1, p2]);
+          }
+        } else if (solid.type === "prism" && solid.base1 && solid.base2 && solid.base1.length === solid.base2.length) {
+          derived.push(solid.base1);
+          derived.push(solid.base2);
+          for (let i = 0; i < solid.base1.length; i++) {
+            const p1 = solid.base1[i];
+            const p2 = solid.base1[(i + 1) % solid.base1.length];
+            const q2 = solid.base2[(i + 1) % solid.base2.length];
+            const q1 = solid.base2[i];
+            derived.push([p1, p2, q2, q1]);
+          }
+        }
+      });
+      if (derived.length > 0) return derived;
+    }
+    // Fallback: detect base and apex from parsed coordinates
+    const pointKeys = Object.keys(parsedCoordinates);
+    const baseKeys = pointKeys.filter((k) => Math.abs(parsedCoordinates[k]?.[2] || 0) < 0.05);
+    const apexKeys = pointKeys.filter((k) => Math.abs(parsedCoordinates[k]?.[2] || 0) >= 0.05);
+    if (baseKeys.length >= 3 && apexKeys.length === 1) {
+      const apex = apexKeys[0];
+      const derived: string[][] = [baseKeys];
+      for (let i = 0; i < baseKeys.length; i++) {
+        const p1 = baseKeys[i];
+        const p2 = baseKeys[(i + 1) % baseKeys.length];
+        derived.push([apex, p1, p2]);
+      }
+      return derived;
+    }
     return [];
-  }, [faces, visualizationGraph]);
+  }, [faces, visualizationGraph, solids, parsedCoordinates]);
 
   // Extract perpendicular marks
   const perpendicularMarks = useMemo(() => {
@@ -624,57 +697,77 @@ export default function Interactive3DCanvas({
     <div className="bg-[var(--card-bg)] border border-[var(--border)] rounded-2xl overflow-hidden w-full h-full flex-1 min-h-0 relative select-none shadow-inner">
       {/* Floating HUD Controls */}
       <div className="absolute top-3 right-3 flex items-center gap-1.5 z-20">
+        {/* 1. Opacity Mode Toggle (Mặt mờ / Mặt đặc / Khung dây) */}
         <button
           type="button"
           onClick={() =>
-            setOpacityMode((m) => (m === "frosted" ? "translucent" : m === "translucent" ? "wireframe" : "frosted"))
+            setOpacityMode((m) =>
+              m === "frosted" ? "solid" : m === "solid" ? "wireframe" : "frosted"
+            )
           }
-          className={`p-2 border rounded-xl backdrop-blur-md shadow-sm active:scale-95 transition-all flex items-center gap-1.5 text-xs font-medium ${
+          className={`px-2.5 py-1.5 border rounded-xl backdrop-blur-md shadow-sm active:scale-95 transition-all flex items-center gap-1.5 text-xs font-medium ${
             opacityMode === "wireframe"
-              ? "bg-zinc-800/80 text-zinc-400 border-zinc-700"
-              : opacityMode === "translucent"
-              ? "bg-indigo-950/80 text-indigo-300 border-indigo-500/40"
-              : "bg-[var(--panel-glass)] text-zinc-200 hover:text-white border-[var(--border)]"
+              ? "bg-zinc-800/90 text-zinc-400 border-zinc-700 hover:border-zinc-500"
+              : opacityMode === "solid"
+              ? "bg-indigo-600/30 text-indigo-200 border-indigo-500/50 shadow-indigo-500/10 shadow-lg"
+              : "bg-indigo-950/80 text-indigo-300 border-indigo-500/30 hover:border-indigo-400/50"
           }`}
-          title={`Chế độ mặt khối: ${opacityMode === "frosted" ? "Mờ nhẹ" : opacityMode === "translucent" ? "Đậm" : "Khung dây"}`}
+          title={`Chuyển chế độ hiển thị mặt khối: ${
+            opacityMode === "frosted"
+              ? "Mặt mờ (Frosted)"
+              : opacityMode === "solid"
+              ? "Mặt đặc (Solid)"
+              : "Khung dây (Wireframe)"
+          }`}
         >
-          <Eye className="w-3.5 h-3.5" />
-          <span className="text-[10px] hidden sm:inline">
-            {opacityMode === "frosted" ? "Mặt mờ" : opacityMode === "translucent" ? "Mặt đậm" : "Khung dây"}
+          {opacityMode === "wireframe" ? (
+            <EyeOff className="w-3.5 h-3.5 text-zinc-400" />
+          ) : (
+            <Eye className="w-3.5 h-3.5 text-indigo-300" />
+          )}
+          <span className="text-[11px] font-medium hidden sm:inline">
+            {opacityMode === "frosted"
+              ? "Mặt mờ"
+              : opacityMode === "solid"
+              ? "Mặt đặc"
+              : "Khung dây"}
           </span>
         </button>
 
+        {/* 2. Auxiliary Toggle (Ẩn/Hiện đường phụ trợ & ký hiệu) */}
         <button
           type="button"
           onClick={() => setShowAuxiliary((s) => !s)}
-          className={`p-2 border rounded-xl backdrop-blur-md shadow-sm active:scale-95 transition-all text-xs ${
+          className={`p-2 border rounded-xl backdrop-blur-md shadow-sm active:scale-95 transition-all text-xs flex items-center gap-1 ${
             showAuxiliary
-              ? "bg-[var(--panel-glass)] text-zinc-200 hover:text-white border-[var(--border)]"
-              : "bg-zinc-800/80 text-zinc-500 border-zinc-700"
+              ? "bg-indigo-950/80 text-amber-300 border-amber-500/40 shadow-sm"
+              : "bg-zinc-800/90 text-zinc-500 border-zinc-700 hover:border-zinc-500"
           }`}
-          title={showAuxiliary ? "Ẩn đường phụ trợ & góc" : "Hiện đường phụ trợ & góc"}
+          title={showAuxiliary ? "Ẩn đường phụ trợ & ký hiệu" : "Hiện đường phụ trợ & ký hiệu"}
         >
-          <Layers className="w-3.5 h-3.5" />
+          <Layers className={`w-3.5 h-3.5 ${showAuxiliary ? "text-amber-400" : "text-zinc-500"}`} />
         </button>
 
+        {/* 3. Labels Toggle (Ẩn/Hiện nhãn điểm) */}
         <button
           type="button"
           onClick={() => setShowLabels((s) => !s)}
-          className={`p-2 border rounded-xl backdrop-blur-md shadow-sm active:scale-95 transition-all text-xs ${
+          className={`p-2 border rounded-xl backdrop-blur-md shadow-sm active:scale-95 transition-all text-xs flex items-center gap-1 ${
             showLabels
-              ? "bg-[var(--panel-glass)] text-zinc-200 hover:text-white border-[var(--border)]"
-              : "bg-zinc-800/80 text-zinc-500 border-zinc-700"
+              ? "bg-indigo-950/80 text-indigo-300 border-indigo-500/40 shadow-sm"
+              : "bg-zinc-800/90 text-zinc-500 border-zinc-700 hover:border-zinc-500"
           }`}
-          title={showLabels ? "Ẩn nhãn điểm" : "Hiện nhãn điểm"}
+          title={showLabels ? "Ẩn nhãn điểm (Labels)" : "Hiện nhãn điểm (Labels)"}
         >
-          <Compass className="w-3.5 h-3.5" />
+          <Compass className={`w-3.5 h-3.5 ${showLabels ? "text-indigo-400" : "text-zinc-500"}`} />
         </button>
 
+        {/* 4. Reset Camera View */}
         <button
           type="button"
           onClick={() => setResetKey((k) => k + 1)}
           className="p-2 bg-[var(--panel-glass)] hover:bg-white/10 border border-[var(--border)] rounded-xl text-zinc-300 hover:text-white backdrop-blur-md shadow-sm active:scale-95 transition-all"
-          title="Đặt lại góc nhìn 3D"
+          title="Đặt lại góc nhìn 3D ban đầu"
         >
           <RotateCcw className="w-3.5 h-3.5" />
         </button>
@@ -728,7 +821,7 @@ export default function Interactive3DCanvas({
             )}
 
             {/* 2. Dual-Depth Dynamic Hidden-Line Edges */}
-            {edges.map((edge, idx) => (
+            {visibleEdges.map((edge, idx) => (
               <DualDepthEdge
                 key={`edge-${idx}`}
                 start={edge.start}
@@ -761,7 +854,7 @@ export default function Interactive3DCanvas({
             )}
 
             {/* 6. Vertices and Labels */}
-            {vertices.map((v) => (
+            {visibleVertices.map((v) => (
               <Point3D
                 key={v.id}
                 position={v.position}
