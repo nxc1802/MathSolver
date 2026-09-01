@@ -382,7 +382,8 @@ export function useSolverJob(sessionId: string, token?: string | null) {
     async (
       text: string,
       requestVideo: boolean = false,
-      imageUrl?: string | null
+      imageUrl?: string | null,
+      clientMessageId?: string | null
     ) => {
       if (!token) return;
       cleanupSolver();
@@ -391,6 +392,7 @@ export function useSolverJob(sessionId: string, token?: string | null) {
       try {
         const body: Record<string, unknown> = { text, request_video: requestVideo };
         if (imageUrl) body.image_url = imageUrl;
+        if (clientMessageId) body.client_message_id = clientMessageId;
         const response = await fetch(`${getApiBaseUrl()}/api/v1/sessions/${sessionId}/solve`, {
           method: "POST",
           headers: {
@@ -476,13 +478,39 @@ export function useSolverJob(sessionId: string, token?: string | null) {
     }
   }, [sessionId, token, attachToVideoJob, cleanupVideo]);
 
-  // Restore active job on session change
+  // Restore active job on session change - verify with DB first
   useEffect(() => {
     if (!sessionId || sessionId.startsWith("temp-")) return;
     const activeJobId = getActiveJob(sessionId);
-    if (activeJobId) attachToSolverJobRef.current(activeJobId);
+    if (!activeJobId) return;
+
+    let cancelled = false;
+    const verifyAndAttach = async () => {
+      try {
+        const headers: Record<string, string> = {};
+        if (token) headers.Authorization = `Bearer ${token}`;
+        const res = await fetch(`${getApiBaseUrl()}/api/v1/solve/${activeJobId}`, { headers });
+        if (cancelled) return;
+        if (!res.ok) {
+          clearActiveJob(sessionId);
+          return;
+        }
+        const data = await res.json();
+        const payload = normalizeJobPayload(data);
+        if (!payload || payload.status === "success" || payload.status === "error") {
+          clearActiveJob(sessionId);
+          return;
+        }
+        attachToSolverJobRef.current(activeJobId);
+      } catch (err) {
+        console.warn("[useSolverJob] Error verifying active job:", err);
+      }
+    };
+
+    void verifyAndAttach();
+
     return cleanupAll;
-  }, [sessionId, cleanupAll]);
+  }, [sessionId, token, cleanupAll]);
 
   const resetJob = useCallback(() => {
     cleanupAll();

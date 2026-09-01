@@ -54,6 +54,7 @@ class Message(MessageBase):
 class SolveRequest(BaseModel):
     text: str
     image_url: Optional[str] = None
+    client_message_id: Optional[str] = None
 
     @field_validator("image_url", mode="before")
     @classmethod

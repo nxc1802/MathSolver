@@ -296,9 +296,23 @@ export default function ChatSessionPage() {
         if (!isTempSession) savePendingQueue(sessionId, n);
         return n;
       });
-      startSolve(next.text);
+      const clientMessageId = crypto.randomUUID();
+      void mutateMessages(
+        (prev) => [
+          ...(prev || []),
+          {
+            id: clientMessageId,
+            role: "user",
+            type: "text",
+            content: next.text,
+            timestamp: Date.now(),
+          },
+        ],
+        { revalidate: false }
+      );
+      startSolve(next.text, false, null, clientMessageId);
     }
-  }, [job.phase, pendingQueue, startSolve, sessionId, isTempSession]);
+  }, [job.phase, pendingQueue, startSolve, sessionId, isTempSession, mutateMessages]);
 
   // Layout dragging
   useEffect(() => {
@@ -454,11 +468,12 @@ export default function ChatSessionPage() {
     setOcrFlow({ status: "idle" });
     setConfirmEditText("");
     setOcrFlowError(null);
+    const clientMessageId = crypto.randomUUID();
     await mutateMessages(
       (prev) => [
         ...(prev || []),
         {
-          id: "temp",
+          id: clientMessageId,
           role: "user",
           type: "text",
           content: text,
@@ -467,7 +482,7 @@ export default function ChatSessionPage() {
       ],
       { revalidate: false }
     );
-    startSolve(text, false);
+    startSolve(text, false, null, clientMessageId);
   };
 
   const handleComposerSend = async (text?: string) => {
@@ -530,11 +545,12 @@ export default function ChatSessionPage() {
     }
 
     if (text === undefined) setInputText("");
+    const clientMessageId = crypto.randomUUID();
     await mutateMessages(
       (prev) => [
         ...(prev || []),
         {
-          id: "temp",
+          id: clientMessageId,
           role: "user",
           type: "text",
           content: payloadTrim,
@@ -543,7 +559,7 @@ export default function ChatSessionPage() {
       ],
       { revalidate: false }
     );
-    startSolve(payloadTrim);
+    startSolve(payloadTrim, false, null, clientMessageId);
   };
 
   const editQueued = (id: string, text: string) => {

@@ -5,42 +5,11 @@ from fastapi import HTTPException
 
 from app.chat_image_upload import cleanup_session_storage, validate_chat_image_bytes
 from app.session_cache import (
-    _session_list,
     _session_owner,
-    get_sessions_list_cached,
-    invalidate_for_user,
     invalidate_session_owner,
     session_owned_by_user,
 )
 from app.websocket_manager import active_connections, notify_status
-
-
-def test_session_cache_ttl_and_invalidation():
-    user_id = str(uuid.uuid4())
-    session_id = str(uuid.uuid4())
-
-    fetch_called = 0
-
-    def mock_fetch():
-        nonlocal fetch_called
-        fetch_called += 1
-        return [{"id": session_id, "title": "Test Session"}]
-
-    # 1. First fetch (miss)
-    res1 = get_sessions_list_cached(user_id, mock_fetch)
-    assert len(res1) == 1
-    assert fetch_called == 1
-
-    # 2. Second fetch (hit)
-    res2 = get_sessions_list_cached(user_id, mock_fetch)
-    assert len(res2) == 1
-    assert fetch_called == 1
-
-    # 3. Invalidate
-    invalidate_for_user(user_id)
-    res3 = get_sessions_list_cached(user_id, mock_fetch)
-    assert len(res3) == 1
-    assert fetch_called == 2
 
 
 def test_session_owner_cache():

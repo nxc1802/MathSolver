@@ -55,6 +55,7 @@ type SessionListProps = {
 export default function SessionList({ compact = false }: SessionListProps) {
   const [creating, setCreating] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const { user } = useAuth();
   const { mutate: globalMutate } = useSWRConfig();
   const router = useRouter();
@@ -67,12 +68,32 @@ export default function SessionList({ compact = false }: SessionListProps) {
     { revalidateOnFocus: false, dedupingInterval: 2000 }
   );
 
+  const showErrorToast = (msg: string) => {
+    setErrorMessage(msg);
+    setTimeout(() => setErrorMessage(null), 4000);
+  };
+
   const handleCreateSession = async () => {
     if (creating) return;
     const token = await getAccessToken();
     if (!token) return;
+
     setCreating(true);
 
+    // 1. Instant optimistic creation & navigation (P0.2)
+    const tempId = `temp-${crypto.randomUUID()}`;
+    const tempSession: Session = {
+      id: tempId,
+      title: "Bài toán mới",
+      created_at: new Date().toISOString(),
+    };
+
+    // Optimistically update SWR cache
+    await mutate((prev) => [tempSession, ...(prev ?? [])], { revalidate: false });
+    // Navigate immediately - 0 latency feel
+    router.replace(`/chat/${tempId}`);
+
+    // 2. Perform server creation in background
     try {
       const res = await fetchWithTimeout(
         `${getApiBaseUrl()}/api/v1/sessions`,
@@ -92,17 +113,23 @@ export default function SessionList({ compact = false }: SessionListProps) {
         await globalMutate([messagesUrl, token], [], { revalidate: false });
         await globalMutate([assetsUrl, token], [], { revalidate: false });
 
+        // Replace temp session with real session in SWR cache
         await mutate((prev) => {
           const list = prev ?? [];
-          if (list.some((s) => s.id === realSession.id)) return list;
-          return [realSession, ...list];
+          return list.map((s) => (s.id === tempId ? realSession : s));
         }, { revalidate: false });
+
+        // Update URL to real ID
         router.replace(`/chat/${realSession.id}`);
       } else {
-        throw new Error("Failed to create session on backend");
+        throw new Error("Không thể tạo phiên trên server");
       }
     } catch (err) {
       console.error("Create session error:", err);
+      // Rollback on failure
+      await mutate((prev) => (prev ?? []).filter((s) => s.id !== tempId), { revalidate: false });
+      showErrorToast("Không thể tạo bài toán mới. Vui lòng thử lại.");
+      router.replace("/");
     } finally {
       setCreating(false);
     }
@@ -123,11 +150,11 @@ export default function SessionList({ compact = false }: SessionListProps) {
     const wasCurrent = currentSessionId === id;
     const remaining = listBefore.filter((s) => s.id !== id);
 
-    // Optimistic update
+    // 1. Instant optimistic removal from UI (P0.3)
     mutate(remaining, { revalidate: false });
     setDeletingId(null);
 
-    // If current, navigate away
+    // 2. Instant optimistic navigation if deleting active session
     if (wasCurrent) {
       const next = remaining[0];
       if (next) {
@@ -137,32 +164,22 @@ export default function SessionList({ compact = false }: SessionListProps) {
       }
     }
 
+    // 3. Perform server deletion in background with proper rollback
     try {
       const res = await fetch(`${getApiBaseUrl()}/api/v1/sessions/${id}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       });
       
-      if (!res.ok) throw new Error("delete failed");
-      
-      if (wasCurrent && remaining.length === 0) {
-        const createRes = await fetchWithTimeout(
-          `${getApiBaseUrl()}/api/v1/sessions`,
-          {
-            method: "POST",
-            headers: { Authorization: `Bearer ${token}` },
-          },
-          FETCH_TIMEOUT_MS
-        );
-        if (createRes.ok) {
-          const newSession = (await createRes.json()) as Session;
-          await mutate([newSession], { revalidate: false });
-          router.replace(`/chat/${newSession.id}`);
-        }
-      }
+      if (!res.ok) throw new Error("Server deletion failed");
     } catch (err) {
       console.error("Delete session error:", err);
-      await mutate();
+      // Rollback UI to prior state
+      await mutate(listBefore, { revalidate: false });
+      if (wasCurrent) {
+        router.replace(`/chat/${id}`);
+      }
+      showErrorToast("Không thể xoá bài toán. Dữ liệu đã được khôi phục.");
     }
   };
 
@@ -255,6 +272,12 @@ export default function SessionList({ compact = false }: SessionListProps) {
           Tạo bài toán mới
         </button>
       </div>
+
+      {errorMessage && (
+        <div className="mx-3 mb-2 p-2 text-[10px] text-red-300 bg-red-500/10 border border-red-500/20 rounded-lg animate-in fade-in">
+          {errorMessage}
+        </div>
+      )}
 
       <div className="flex-1 overflow-y-auto px-2 py-1 space-y-1 scrollbar-thin">
         {isLoading ? (

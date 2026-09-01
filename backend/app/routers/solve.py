@@ -20,7 +20,7 @@ from app.models.schemas import (
     SolveResponse,
 )
 from app.ocr_text_merge import build_combined_ocr_preview_draft
-from app.session_cache import invalidate_for_user, session_owned_by_user
+from app.session_cache import session_owned_by_user
 from app.supabase_client import get_supabase
 
 logger = logging.getLogger(__name__)
@@ -67,15 +67,45 @@ def _enqueue_solve_common(
     job_id: str,
 ) -> SolveResponse:
     """Insert user message, job row, enqueue pipeline; update title when first message."""
-    supabase.table("messages").insert(
-        {
-            "session_id": session_id,
-            "role": "user",
-            "type": "text",
-            "content": request.text,
-            "metadata": message_metadata,
-        }
-    ).execute()
+    client_msg_id = getattr(request, "client_message_id", None)
+    if client_msg_id:
+        message_metadata["client_message_id"] = client_msg_id
+
+    # Check for idempotency if client_message_id is provided
+    if client_msg_id:
+        try:
+            existing = (
+                supabase.table("messages")
+                .select("id")
+                .eq("session_id", session_id)
+                .eq("client_message_id", client_msg_id)
+                .execute()
+            )
+            if existing.data and len(existing.data) > 0:
+                logger.info(
+                    "Duplicate request detected for client_message_id=%s in session %s",
+                    client_msg_id,
+                    session_id,
+                )
+                return SolveResponse(job_id=job_id, status="processing")
+        except Exception:
+            pass
+
+    msg_insert = {
+        "session_id": session_id,
+        "role": "user",
+        "type": "text",
+        "content": request.text,
+        "metadata": message_metadata,
+    }
+    if client_msg_id:
+        try:
+            supabase.table("messages").insert({**msg_insert, "client_message_id": client_msg_id}).execute()
+        except Exception:
+            supabase.table("messages").insert(msg_insert).execute()
+    else:
+        supabase.table("messages").insert(msg_insert).execute()
+
     log_step("db_insert", table="messages", op="user_message", session_id=session_id)
 
     supabase.table("jobs").insert(
@@ -96,7 +126,6 @@ def _enqueue_solve_common(
         new_title = request.text[:50] + ("..." if len(request.text) > 50 else "")
         supabase.table("sessions").update({"title": new_title}).eq("id", session_id).execute()
         log_step("db_update", table="sessions", op="title_from_first_message")
-        invalidate_for_user(uid)
 
     log_pipeline_success("solve_accepted", job_id=job_id, session_id=session_id)
     return SolveResponse(job_id=job_id, status="processing")
@@ -191,6 +220,7 @@ async def solve_multipart(
     user_id=Depends(get_current_user_id),
     text: str = Form(...),
     file: UploadFile = File(...),
+    client_message_id: str | None = Form(None),
 ):
     """
     Gửi text + file ảnh trong một request multipart: validate, upload bucket `image`,
@@ -223,7 +253,7 @@ async def solve_multipart(
             "session_asset_id": up.get("session_asset_id"),
         },
     }
-    request = SolveRequest(text=t, image_url=public_url)
+    request = SolveRequest(text=t, image_url=public_url, client_message_id=client_message_id)
     return _enqueue_solve_common(
         supabase,
         background_tasks,

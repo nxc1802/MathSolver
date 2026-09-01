@@ -1,23 +1,25 @@
 /**
  * job-tracker.ts
  * 
- * Persistent (localStorage) mapping of sessionId -> { jobId, timestamp }.
- * Used to "re-attach" to a running solve if the user switches sessions.
+ * Persistent (localStorage) mapping of sessionId -> { jobId, timestamp }
+ * and sessionId -> pendingQueue.
+ * Separated to ensure active job lifecycle and pending queue lifecycle
+ * do not interfere with each other.
  */
 
 interface ActiveJob {
   jobId: string;
   timestamp: number;
-  pendingQueue?: { id: string; text: string }[];
 }
 
-const STORAGE_KEY = "mathsolver_active_jobs";
+const ACTIVE_JOBS_KEY = "mathsolver_active_jobs";
+const PENDING_QUEUES_KEY = "mathsolver_pending_queues";
 const MAX_STALE_MS = 30 * 60 * 1000; // 30 minutes
 
 function getAllJobs(): Record<string, ActiveJob> {
   if (typeof window === "undefined") return {};
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(ACTIVE_JOBS_KEY);
     return raw ? JSON.parse(raw) : {};
   } catch {
     return {};
@@ -27,7 +29,26 @@ function getAllJobs(): Record<string, ActiveJob> {
 function saveAllJobs(jobs: Record<string, ActiveJob>) {
   if (typeof window === "undefined") return;
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(jobs));
+    localStorage.setItem(ACTIVE_JOBS_KEY, JSON.stringify(jobs));
+  } catch {
+    // ignore
+  }
+}
+
+function getAllQueues(): Record<string, { id: string; text: string }[]> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = localStorage.getItem(PENDING_QUEUES_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveAllQueues(queues: Record<string, { id: string; text: string }[]>) {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(PENDING_QUEUES_KEY, JSON.stringify(queues));
   } catch {
     // ignore
   }
@@ -74,31 +95,30 @@ export function clearActiveJob(sessionId: string) {
  * Save the pending queue for a session.
  */
 export function savePendingQueue(sessionId: string, queue: { id: string; text: string }[]) {
-  const jobs = getAllJobs();
-  if (!jobs[sessionId]) {
-    // If no active job, we still want to save the queue
-    jobs[sessionId] = { jobId: "", timestamp: Date.now(), pendingQueue: queue };
+  const queues = getAllQueues();
+  if (queue.length === 0) {
+    delete queues[sessionId];
   } else {
-    jobs[sessionId].pendingQueue = queue;
+    queues[sessionId] = queue;
   }
-  saveAllJobs(jobs);
+  saveAllQueues(queues);
 }
 
 /**
  * Get the pending queue for a session.
  */
 export function getPendingQueue(sessionId: string): { id: string; text: string }[] {
-  const jobs = getAllJobs();
-  return jobs[sessionId]?.pendingQueue || [];
+  const queues = getAllQueues();
+  return queues[sessionId] || [];
 }
 
 /**
  * Clear the pending queue for a session.
  */
 export function clearPendingQueue(sessionId: string) {
-  const jobs = getAllJobs();
-  if (jobs[sessionId]) {
-    delete jobs[sessionId].pendingQueue;
-    saveAllJobs(jobs);
+  const queues = getAllQueues();
+  if (queues[sessionId]) {
+    delete queues[sessionId];
+    saveAllQueues(queues);
   }
 }

@@ -130,45 +130,64 @@ def upload_session_chat_image(
     supabase = get_supabase()
     bucket_name = os.getenv("SUPABASE_IMAGE_BUCKET", "image")
     raw_ext = ext_with_dot.lstrip(".").lower()
-    version = _get_next_image_version(session_id)
-    file_name = f"image_v{version}_{job_id}.{raw_ext}"
-    storage_path = f"sessions/{session_id}/{file_name}"
 
-    supabase.storage.from_(bucket_name).upload(
-        path=storage_path,
-        file=file_bytes,
-        file_options={"content-type": content_type},
+    max_retries = 3
+    last_err = None
+    for attempt in range(max_retries):
+        version = _get_next_image_version(session_id) + attempt
+        file_name = f"image_v{version}_{job_id}.{raw_ext}"
+        storage_path = f"sessions/{session_id}/{file_name}"
+
+        try:
+            supabase.storage.from_(bucket_name).upload(
+                path=storage_path,
+                file=file_bytes,
+                file_options={"content-type": content_type, "upsert": "true"},
+            )
+            public_url = supabase.storage.from_(bucket_name).get_public_url(storage_path)
+            if isinstance(public_url, dict):
+                public_url = public_url.get("publicUrl") or public_url.get("public_url") or str(public_url)
+
+            row = {
+                "session_id": session_id,
+                "job_id": job_id,
+                "asset_type": "image",
+                "storage_path": storage_path,
+                "public_url": public_url,
+                "version": version,
+            }
+            ins = supabase.table("session_assets").insert(row).select("id").execute()
+            asset_id = None
+            if ins.data and len(ins.data) > 0:
+                asset_id = ins.data[0].get("id")
+
+            log_data = {
+                "public_url": public_url,
+                "storage_path": storage_path,
+                "version": version,
+                "session_asset_id": str(asset_id) if asset_id else None,
+            }
+            logger.info("Uploaded chat image: %s", log_data)
+            return {
+                "public_url": public_url,
+                "storage_path": storage_path,
+                "version": version,
+                "session_asset_id": str(asset_id) if asset_id else None,
+            }
+        except Exception as e:
+            last_err = e
+            logger.warning(
+                "Retry uploading chat image for session %s (attempt %d/%d): %s",
+                session_id,
+                attempt + 1,
+                max_retries,
+                e,
+            )
+
+    raise HTTPException(
+        status_code=500,
+        detail=f"Failed to upload image after {max_retries} attempts: {last_err}",
     )
-    public_url = supabase.storage.from_(bucket_name).get_public_url(storage_path)
-    if isinstance(public_url, dict):
-        public_url = public_url.get("publicUrl") or public_url.get("public_url") or str(public_url)
-
-    row = {
-        "session_id": session_id,
-        "job_id": job_id,
-        "asset_type": "image",
-        "storage_path": storage_path,
-        "public_url": public_url,
-        "version": version,
-    }
-    ins = supabase.table("session_assets").insert(row).select("id").execute()
-    asset_id = None
-    if ins.data and len(ins.data) > 0:
-        asset_id = ins.data[0].get("id")
-
-    log_data = {
-        "public_url": public_url,
-        "storage_path": storage_path,
-        "version": version,
-        "session_asset_id": str(asset_id) if asset_id else None,
-    }
-    logger.info("Uploaded chat image: %s", log_data)
-    return {
-        "public_url": public_url,
-        "storage_path": storage_path,
-        "version": version,
-        "session_asset_id": str(asset_id) if asset_id else None,
-    }
 
 
 def upload_ephemeral_ocr_blob(

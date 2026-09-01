@@ -4,13 +4,12 @@ import logging
 import time
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 
+from app.chat_image_upload import cleanup_session_storage
 from app.dependencies import get_current_user_id
 from app.logutil import log_step
 from app.session_cache import (
-    get_sessions_list_cached,
-    invalidate_for_user,
     invalidate_session_owner,
     session_owned_by_user,
 )
@@ -24,20 +23,18 @@ logger = logging.getLogger(__name__)
 async def list_sessions(user_id=Depends(get_current_user_id)):
     """Danh sách các phiên chat của người dùng (List user's chat sessions)"""
     supabase = get_supabase()
+    if not supabase:
+        raise HTTPException(status_code=503, detail="Database service currently unavailable.")
     t0 = time.perf_counter()
-
-    def fetch() -> list:
-        res = (
-            supabase.table("sessions")
-            .select("id, user_id, title, created_at, updated_at")
-            .eq("user_id", user_id)
-            .order("updated_at", desc=True)
-            .execute()
-        )
-        log_step("db_select", table="sessions", op="list", user_id=str(user_id))
-        return res.data
-
-    out = get_sessions_list_cached(str(user_id), fetch)
+    res = (
+        supabase.table("sessions")
+        .select("id, user_id, title, created_at, updated_at")
+        .eq("user_id", user_id)
+        .order("updated_at", desc=True)
+        .execute()
+    )
+    log_step("db_select", table="sessions", op="list", user_id=str(user_id))
+    out = res.data or []
     logger.info(
         "sessions.list user=%s count=%d %.1fms",
         user_id,
@@ -46,8 +43,6 @@ async def list_sessions(user_id=Depends(get_current_user_id)):
     )
     return out
 
-
-from app.chat_image_upload import cleanup_session_storage
 
 @router.post("", response_model=dict)
 async def create_session(user_id=Depends(get_current_user_id)):
@@ -60,7 +55,6 @@ async def create_session(user_id=Depends(get_current_user_id)):
         {"user_id": user_id, "title": "Bài toán mới"}
     ).execute()
     log_step("db_insert", table="sessions", op="create")
-    invalidate_for_user(str(user_id))
     if not res.data:
         raise HTTPException(status_code=500, detail="Failed to create session.")
     row = res.data[0]
@@ -108,7 +102,11 @@ async def get_session_messages(session_id: str, user_id=Depends(get_current_user
 
 
 @router.delete("/{session_id}")
-async def delete_session(session_id: str, user_id=Depends(get_current_user_id)):
+async def delete_session(
+    session_id: str,
+    background_tasks: BackgroundTasks,
+    user_id=Depends(get_current_user_id),
+):
     """Xóa một phiên chat và toàn bộ tài nguyên liên quan (Delete a chat session & associated assets)"""
     supabase = get_supabase()
     if not supabase:
@@ -129,13 +127,7 @@ async def delete_session(session_id: str, user_id=Depends(get_current_user_id)):
             status_code=403, detail="Forbidden: You do not own this session."
         )
 
-    # 1. Clean up physical storage files in both image & video buckets
-    try:
-        cleanup_session_storage(session_id)
-    except Exception as e:
-        logger.warning("Error cleaning up storage for session %s: %s", session_id, e)
-
-    # 2. Clear dependent rows (jobs, session_assets, messages) before session
+    # 1. Authoritative DB deletion first (dependent rows before session)
     try:
         supabase.table("session_assets").delete().eq("session_id", session_id).execute()
         log_step("db_delete", table="session_assets", op="by_session", session_id=session_id)
@@ -155,8 +147,11 @@ async def delete_session(session_id: str, user_id=Depends(get_current_user_id)):
         .execute()
     )
     log_step("db_delete", table="sessions", session_id=session_id)
-    invalidate_for_user(str(user_id))
     invalidate_session_owner(session_id, str(user_id))
+
+    # 2. Async / non-blocking storage cleanup AFTER DB deletion succeeds
+    background_tasks.add_task(cleanup_session_storage, session_id)
+
     return {"status": "ok", "deleted_id": session_id}
 
 
@@ -177,7 +172,6 @@ async def update_session_title(title: str, session_id: str, user_id=Depends(get_
     if not res.data:
         raise HTTPException(status_code=404, detail="Session not found or not owned by user.")
     log_step("db_update", table="sessions", op="title", session_id=session_id)
-    invalidate_for_user(str(user_id))
     return res.data[0]
 
 
