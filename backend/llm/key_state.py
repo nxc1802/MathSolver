@@ -77,19 +77,26 @@ class RedisKeyStateStore(BaseKeyStateStore):
     def __init__(self, redis_url: str):
         self.redis_url = redis_url
         self._redis = None
+        self._redis_disabled = False
         self._memory_fallback = MemoryKeyStateStore()
         self._prefix = "mathsolver:llm:key:"
 
     def _get_redis(self):
+        if self._redis_disabled:
+            return None
         if self._redis is None:
             try:
                 import redis.asyncio as aioredis
-                self._redis = aioredis.from_url(self.redis_url, decode_responses=True)
+                self._redis = aioredis.from_url(self.redis_url, decode_responses=True, socket_connect_timeout=2.0)
             except Exception as e:
-                logger.warning(f"[RedisKeyStateStore] Redis connection failed: {e}. Using in-memory fallback.")
+                self._redis_disabled = True
+                logger.info(f"[RedisKeyStateStore] Redis unavailable ({e}). Using in-memory fallback store.")
         return self._redis
 
     async def get_state(self, key_hash: str) -> KeyMetadata:
+        if self._redis_disabled:
+            return await self._memory_fallback.get_state(key_hash)
+
         r = self._get_redis()
         if not r:
             return await self._memory_fallback.get_state(key_hash)
@@ -111,11 +118,16 @@ class RedisKeyStateStore(BaseKeyStateStore):
                 await self.set_state(key_hash, meta)
             return meta
         except Exception as e:
-            logger.warning(f"[RedisKeyStateStore] get_state error: {e}. Falling back to memory.")
+            self._redis_disabled = True
+            logger.info(f"[RedisKeyStateStore] Redis connection failed ({e}). Switching to in-memory store.")
             return await self._memory_fallback.get_state(key_hash)
 
     async def set_state(self, key_hash: str, metadata: KeyMetadata, ttl_seconds: Optional[int] = None) -> None:
         metadata.updated_at = time.time()
+        if self._redis_disabled:
+            await self._memory_fallback.set_state(key_hash, metadata, ttl_seconds)
+            return
+
         r = self._get_redis()
         if not r:
             await self._memory_fallback.set_state(key_hash, metadata, ttl_seconds)
@@ -129,5 +141,6 @@ class RedisKeyStateStore(BaseKeyStateStore):
             else:
                 await r.set(r_key, payload)
         except Exception as e:
-            logger.warning(f"[RedisKeyStateStore] set_state error: {e}. Falling back to memory.")
+            self._redis_disabled = True
             await self._memory_fallback.set_state(key_hash, metadata, ttl_seconds)
+

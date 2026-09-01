@@ -1,7 +1,7 @@
 version: 1
 
 defaults:
-  temperature: 0.2
+  temperature: 1.0
   max_tokens: 8192
   timeout_seconds: 120
   reasoning_effort: medium
@@ -30,7 +30,7 @@ agents:
         max_attempts: 1
       - model: gemini/gemini-2.5-flash
         max_attempts: 1
-    temperature: 0.1
+    temperature: 1.0
     max_tokens: 4096
 
   analyzer:
@@ -45,7 +45,7 @@ agents:
         max_attempts: 1
       - model: gemini/gemini-2.5-flash
         max_attempts: 1
-    temperature: 0.1
+    temperature: 1.0
     max_tokens: 4096
 
   problem_parser:
@@ -60,7 +60,7 @@ agents:
         max_attempts: 1
       - model: gemini/gemini-2.5-flash
         max_attempts: 1
-    temperature: 0.1
+    temperature: 1.0
     max_tokens: 8192
 
   parser:
@@ -75,7 +75,7 @@ agents:
         max_attempts: 1
       - model: gemini/gemini-2.5-flash
         max_attempts: 1
-    temperature: 0.1
+    temperature: 1.0
     max_tokens: 8192
 
   geometry_parser:
@@ -90,7 +90,7 @@ agents:
         max_attempts: 1
       - model: gemini/gemini-2.5-flash
         max_attempts: 1
-    temperature: 0.1
+    temperature: 1.0
     max_tokens: 16384
 
   geometry:
@@ -105,7 +105,7 @@ agents:
         max_attempts: 1
       - model: gemini/gemini-2.5-flash
         max_attempts: 1
-    temperature: 0.1
+    temperature: 1.0
     max_tokens: 16384
 
   reasoning_solver:
@@ -120,7 +120,7 @@ agents:
         max_attempts: 1
       - model: gemini/gemini-2.5-flash
         max_attempts: 1
-    temperature: 0.2
+    temperature: 1.0
     max_tokens: 16384
     reasoning_effort: high
 
@@ -136,7 +136,7 @@ agents:
         max_attempts: 1
       - model: gemini/gemini-2.5-flash
         max_attempts: 1
-    temperature: 0.2
+    temperature: 1.0
     max_tokens: 16384
     reasoning_effort: high
 
@@ -152,7 +152,7 @@ agents:
         max_attempts: 1
       - model: gemini/gemini-2.5-flash
         max_attempts: 1
-    temperature: 0.1
+    temperature: 1.0
     max_tokens: 8192
 
   code_generator:
@@ -167,7 +167,7 @@ agents:
         max_attempts: 1
       - model: gemini/gemini-2.5-flash
         max_attempts: 1
-    temperature: 0.1
+    temperature: 1.0
     max_tokens: 16384
 
   reviewer:
@@ -182,5 +182,5 @@ agents:
         max_attempts: 1
       - model: gemini/gemini-2.5-flash
         max_attempts: 1
-    temperature: 0.0
+    temperature: 1.0
     max_tokens: 8192

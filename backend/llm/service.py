@@ -73,10 +73,13 @@ class LLMService:
 
             start_time = time.time()
             try:
+                # For Gemini 3.x models, Google AI Studio recommends temperature=1.0 for optimal reasoning
+                eff_temperature = 1.0 if ("gemini-3" in model_name and temperature < 1.0) else temperature
+
                 litellm_kwargs: Dict[str, Any] = {
                     "model": model_name,
                     "messages": messages,
-                    "temperature": temperature,
+                    "temperature": eff_temperature,
                     "max_tokens": max_tokens,
                     "timeout": timeout,
                     "api_key": api_key,
