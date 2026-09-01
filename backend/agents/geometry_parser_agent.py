@@ -1,24 +1,51 @@
 import json
 import logging
 import re
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Tuple
 from dotenv import load_dotenv
 
 load_dotenv()
 logger = logging.getLogger(__name__)
 
-from app.llm_client import get_llm_client
+from agents.runtime import get_agent_runtime, AgentRuntime
 
 
 class GeometryParserAgent:
     """
-    Unified Geometry Parser Agent (v6.0):
+    Unified Geometry Parser Agent (v7.0 - Agent Runtime & Cascading Controller):
     Directly extracts semantic entities, dimensions, target question,
     and generates high-precision Geometry DSL in a single, high-fidelity LLM inference step.
     """
 
-    def __init__(self):
-        self.llm = get_llm_client()
+    def __init__(self, runtime: Optional[AgentRuntime] = None):
+        self.runtime = runtime or get_agent_runtime()
+
+    def _clean_json(self, raw: str) -> str:
+        s = raw.strip()
+        json_match = re.search(r"```(?:json)?(.*?)```", s, re.DOTALL)
+        if json_match:
+            return json_match.group(1).strip()
+        brace_match = re.search(r"(\{.*\})", s, re.DOTALL)
+        if brace_match:
+            return brace_match.group(1).strip()
+        return s.strip()
+
+    def _validate_parser_output(self, raw: str) -> Tuple[bool, Any]:
+        """Validates JSON structure and extracts DSL."""
+        try:
+            cleaned = self._clean_json(raw)
+            data = json.loads(cleaned)
+            if not isinstance(data, dict):
+                return False, "Output must be a JSON object"
+            if "type" not in data and "geometry_dsl" not in data:
+                return False, "Missing required 'type' or 'geometry_dsl' fields"
+            dsl = data.get("geometry_dsl", "")
+            if isinstance(dsl, list):
+                dsl = "\n".join(dsl)
+            data["geometry_dsl"] = dsl.strip()
+            return True, data
+        except Exception as e:
+            return False, f"JSON parse error: {e}"
 
     async def process(
         self,
@@ -26,7 +53,7 @@ class GeometryParserAgent:
         feedback: Optional[str] = None,
         context: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        logger.info(f"==[GeometryParserAgent] Parsing problem & generating DSL (len={len(text)}) (v6.0)==")
+        logger.info(f"==[GeometryParserAgent] Parsing problem & generating DSL (len={len(text)}) (v7.0)==")
         if feedback:
             logger.warning(f"[GeometryParserAgent] Feedback from previous attempt: {feedback}")
         if context:
@@ -101,20 +128,20 @@ Output ONLY a JSON object with this EXACT structure (no markdown, no extra keys)
         if feedback:
             user_content += f"\n\nPhản hồi từ lần chạy trước: {feedback}. Vui lòng sửa lại DSL và ràng buộc chính xác."
 
-        logger.debug("[GeometryParserAgent] Calling LLM...")
-        raw = await self.llm.chat_completions_create(
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_content},
-            ],
-            temperature=0.1,
-        )
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_content},
+        ]
 
         try:
-            cleaned = self._clean_json(raw)
-            data = json.loads(cleaned)
+            data = await self.runtime.run(
+                agent="geometry_parser",
+                messages=messages,
+                validator=self._validate_parser_output,
+                temperature_override=0.1,
+            )
         except Exception as e:
-            logger.warning(f"[GeometryParserAgent] JSON parse failed: {e}. Raw: {raw[:300]}")
+            logger.warning(f"[GeometryParserAgent] Agent runtime cascade failed: {e}. Using fallback structure.")
             data = {
                 "type": "general",
                 "entities": [],
@@ -124,7 +151,6 @@ Output ONLY a JSON object with this EXACT structure (no markdown, no extra keys)
                 "geometry_dsl": "",
             }
 
-        # Normalize DSL field
         dsl = data.get("geometry_dsl", "")
         if isinstance(dsl, list):
             dsl = "\n".join(dsl)
@@ -132,14 +158,3 @@ Output ONLY a JSON object with this EXACT structure (no markdown, no extra keys)
 
         logger.info(f"[GeometryParserAgent] Success: type={data.get('type')}, dsl_lines={len(data['geometry_dsl'].splitlines())}")
         return data
-
-    def _clean_json(self, raw: str) -> str:
-        s = raw.strip()
-        json_match = re.search(r"```(?:json)?(.*?)```", s, re.DOTALL)
-        if json_match:
-            return json_match.group(1).strip()
-        # Fallback: search for first { and last }
-        brace_match = re.search(r"(\{.*\})", s, re.DOTALL)
-        if brace_match:
-            return brace_match.group(1).strip()
-        return s.strip()

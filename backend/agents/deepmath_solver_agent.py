@@ -9,20 +9,20 @@ from dotenv import load_dotenv
 load_dotenv()
 logger = logging.getLogger(__name__)
 
-from app.llm_client import get_llm_client
+from agents.runtime import get_agent_runtime, AgentRuntime
 
 
 class DeepMathSolverAgent:
     """
-    DeepMath Solver Agent (v6.1 - Deterministic Execution Guaranteed):
+    DeepMath Solver Agent (v7.0 - Agent Runtime & Cascading Controller):
     Implements a strict Program-Aided Mathematical Reasoning architecture.
     1. Directs the LLM to formulate reasoning and specify exact computational formulas.
     2. ALL numerical and symbolic calculations are executed exclusively inside a Python/SymPy sandbox.
     3. Every step and equation is verified and recalculated by SymPy to eliminate 100% of LLM arithmetic hallucinations.
     """
 
-    def __init__(self):
-        self.llm = get_llm_client()
+    def __init__(self, runtime: Optional[AgentRuntime] = None):
+        self.runtime = runtime or get_agent_runtime()
 
     async def solve(
         self,
@@ -32,7 +32,7 @@ class DeepMathSolverAgent:
         geometry_context: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         target = target_question or (semantic_data.get("target_question") if semantic_data else None) or problem_text
-        logger.info(f"==[DeepMathSolverAgent] Solving deterministically for target: '{target}' (v6.1)==")
+        logger.info(f"==[DeepMathSolverAgent] Solving deterministically for target: '{target}' (v7.0)==")
 
         system_prompt = """You are DeepMath, an expert Mathematical & Geometric Reasoning Agent.
 Your task is to provide a rigorous, step-by-step solution to the given Vietnamese geometry problem.
@@ -79,16 +79,26 @@ Output your complete explanation, followed by a structured JSON block enclosed i
             pt_summary = {k: v for k, v in list(geometry_context["points"].items())[:8]}
             user_content += f"\n\nTọa độ các đỉnh (tham khảo): {json.dumps(pt_summary, ensure_ascii=False)}"
 
-        logger.debug("[DeepMathSolverAgent] Calling LLM with Program-Aided prompt...")
-        raw_response = await self.llm.chat_completions_create(
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_content},
-            ],
-            temperature=0.1,
-        )
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_content},
+        ]
 
-        return self._process_and_execute(raw_response, target)
+        def _validator(raw_response: str) -> Tuple[bool, Any]:
+            try:
+                res = self._process_and_execute(raw_response, target)
+                if res and (res.get("answer") or res.get("steps")):
+                    return True, res
+                return False, "Failed to calculate a valid mathematical answer"
+            except Exception as e:
+                return False, f"DeepMath execution error: {e}"
+
+        return await self.runtime.run(
+            agent="reasoning_solver",
+            messages=messages,
+            validator=_validator,
+            temperature_override=0.1,
+        )
 
     def _process_and_execute(self, raw_text: str, target: str) -> Dict[str, Any]:
         """
