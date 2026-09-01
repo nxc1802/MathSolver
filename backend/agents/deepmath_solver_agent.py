@@ -161,8 +161,9 @@ Output your complete explanation, followed by a structured JSON block enclosed i
                         sandbox[name] = val
                         evaluated_vars[name] = str(val)
                         
-                        # Formulate verified step string
-                        step_line = f"Bước {idx+1}: {desc}. Áp dụng công thức: {name} = {formula_str} = {val}."
+                        # Formulate verified step string with clean LaTeX math notation
+                        latex_eq = self._formula_to_latex(name, formula_str, val)
+                        step_line = f"Bước {idx+1}: {desc}. Áp dụng công thức: {latex_eq}."
                         verified_calc_steps.append(step_line)
                     except Exception as e:
                         logger.warning(f"[DeepMathSolverAgent] Failed to evaluate calc {name}: {e}")
@@ -221,6 +222,41 @@ Output your complete explanation, followed by a structured JSON block enclosed i
             "raw_text": raw_text,
         }
 
+    def _formula_to_latex(self, name: str, formula_str: str, val: Any = None) -> str:
+        """Converts raw Python/SymPy formulas and variable names into clean mathematical LaTeX."""
+        def format_var(var: str) -> str:
+            var = re.sub(r"V_([A-Za-z]+)_prime_([A-Za-z]+)", r"V_{\1'.\2}", var)
+            var = re.sub(r"([A-Za-z]+)_prime", r"\1'", var)
+            var = re.sub(r"V_([A-Z])([A-Z]+)", r"V_{\1.\2}", var)
+            var = re.sub(r"S_([A-Za-z0-9]+)", r"S_{\1}", var)
+            var = re.sub(r"h_([A-Za-z0-9]+)", r"h_{\1}", var)
+            var = re.sub(r"r_([A-Za-z0-9]+)", r"r_{\1}", var)
+            var = var.replace("_{day}", "_{\\text{đáy}}").replace("_{xq}", "_{\\text{xq}}").replace("_{tp}", "_{\\text{tp}}")
+            return var
+
+        latex_name = format_var(name)
+        f = str(formula_str).strip()
+        f = re.sub(r"(?:sp\.)?Rational\((\d+),\s*(\d+)\)", r"\\frac{\1}{\2}", f)
+        f = re.sub(r"(?:sp\.)?sqrt\(([^)]+)\)", r"\\sqrt{\1}", f)
+        f = f.replace("**", "^")
+        f = re.sub(r"\s*\*\s*", r" \\cdot ", f)
+        f = re.sub(r"([A-Za-z]+)_prime", r"\1'", f)
+        f = re.sub(r"S_([A-Za-z0-9]+)", r"S_{\1}", f)
+        f = re.sub(r"h_([A-Za-z0-9]+)", r"h_{\1}", f)
+        f = re.sub(r"r_([A-Za-z0-9]+)", r"r_{\1}", f)
+        f = f.replace("_{day}", "_{\\text{đáy}}").replace("_{xq}", "_{\\text{xq}}").replace("_{tp}", "_{\\text{tp}}")
+
+        val_latex = ""
+        if val is not None:
+            try:
+                val_latex = sp.latex(val if isinstance(val, sp.Basic) else sp.sympify(str(val)))
+            except Exception:
+                val_latex = str(val)
+
+        if val_latex:
+            return f"${latex_name} = {f} = {val_latex}$"
+        return f"${latex_name} = {f}$"
+
     def _recalculate_step_equations(
         self,
         step_text: str,
@@ -228,7 +264,7 @@ Output your complete explanation, followed by a structured JSON block enclosed i
         evaluated_vars: Dict[str, Any],
     ) -> str:
         """
-        Scans mathematical equations inside a step string and enforces exact SymPy computation.
+        Scans mathematical equations inside a step string and enforces exact SymPy computation with LaTeX.
         Example: 'S = 10^2 = 100' or 'V = (1/3) * 100 * 15 = 500'
         """
         # Find equations with equality signs
@@ -249,7 +285,7 @@ Output your complete explanation, followed by a structured JSON block enclosed i
                 if var_name:
                     sandbox[var_name] = exact_val
                     evaluated_vars[var_name] = str(exact_val)
-                return f"{lhs} = {expr_str} = {exact_val}"
+                return self._formula_to_latex(lhs, expr_str, exact_val)
             except Exception:
                 return match.group(0)
 

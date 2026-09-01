@@ -20,6 +20,8 @@ import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import { useState } from "react";
 
+import { formatMathMarkdown } from "@/lib/math-format";
+
 interface ChatMessageProps {
   message: ChatMessageType;
 }
@@ -75,7 +77,7 @@ export default function ChatMessageComponent({ message }: ChatMessageProps) {
             remarkPlugins={[remarkGfm, remarkMath]}
             rehypePlugins={[rehypeKatex]}
           >
-            {solution.answer}
+            {formatMathMarkdown(solution.answer || "")}
           </ReactMarkdown>
         </div>
 
@@ -89,26 +91,29 @@ export default function ChatMessageComponent({ message }: ChatMessageProps) {
                 exit={{ height: 0, opacity: 0 }}
                 className="overflow-hidden space-y-2 pt-1"
               >
-                {solution.steps.map((step, idx) => (
-                  <div
-                    key={idx}
-                    className="p-3 rounded-xl bg-[var(--card-bg)] border border-[var(--border)] text-xs text-[var(--text-secondary)] leading-relaxed space-y-1"
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="text-[9px] font-mono font-semibold px-1.5 py-0.5 rounded bg-indigo-500/10 border border-indigo-500/20 text-indigo-400">
-                        BƯỚC {idx + 1}
-                      </span>
+                {solution.steps.map((step, idx) => {
+                  const cleanedStep = step.replace(/^(?:Bước\s*\d+|Step\s*\d+)[:.]\s*/i, "");
+                  return (
+                    <div
+                      key={idx}
+                      className="p-3 rounded-xl bg-[var(--card-bg)] border border-[var(--border)] text-xs text-[var(--text-secondary)] leading-relaxed space-y-1.5"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-[9px] font-mono font-semibold px-1.5 py-0.5 rounded bg-indigo-500/10 border border-indigo-500/20 text-indigo-400">
+                          BƯỚC {idx + 1}
+                        </span>
+                      </div>
+                      <div className="pt-0.5 text-[var(--text-primary)]">
+                        <ReactMarkdown
+                          remarkPlugins={[remarkGfm, remarkMath]}
+                          rehypePlugins={[rehypeKatex]}
+                        >
+                          {formatMathMarkdown(cleanedStep)}
+                        </ReactMarkdown>
+                      </div>
                     </div>
-                    <div className="pt-1 text-[var(--text-primary)]">
-                      <ReactMarkdown
-                        remarkPlugins={[remarkGfm, remarkMath]}
-                        rehypePlugins={[rehypeKatex]}
-                      >
-                        {step}
-                      </ReactMarkdown>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </motion.div>
             )}
           </AnimatePresence>
@@ -210,7 +215,7 @@ export default function ChatMessageComponent({ message }: ChatMessageProps) {
                 remarkPlugins={[remarkGfm, remarkMath]}
                 rehypePlugins={[rehypeKatex]}
               >
-                {message.content}
+                {formatMathMarkdown(message.content)}
               </ReactMarkdown>
             </div>
             {renderSolutionBlock()}
@@ -268,7 +273,7 @@ export default function ChatMessageComponent({ message }: ChatMessageProps) {
                     remarkPlugins={[remarkGfm, remarkMath]}
                     rehypePlugins={[rehypeKatex]}
                   >
-                    {message.metadata.semantic_analysis}
+                    {formatMathMarkdown(message.metadata.semantic_analysis)}
                   </ReactMarkdown>
                 </div>
               </div>
@@ -280,7 +285,7 @@ export default function ChatMessageComponent({ message }: ChatMessageProps) {
                 remarkPlugins={[remarkGfm, remarkMath]}
                 rehypePlugins={[rehypeKatex]}
               >
-                {message.content}
+                {formatMathMarkdown(message.content)}
               </ReactMarkdown>
             </div>
 

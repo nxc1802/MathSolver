@@ -60,10 +60,13 @@ class Orchestrator:
         steps = ["\n\n**Các bước dựng hình:**"]
         drawing_phases = engine_result.get("drawing_phases", [])
 
+        def clean_pt(p: str) -> str:
+            return str(p).replace("_prime", "'")
+
         for phase in drawing_phases:
             label = phase.get("label", f"Giai đoạn {phase['phase']}")
-            points = ", ".join(phase.get("points", []))
-            segments = ", ".join([f"{s[0]}{s[1]}" for s in phase.get("segments", [])])
+            points = ", ".join([clean_pt(p) for p in phase.get("points", [])])
+            segments = ", ".join([f"{clean_pt(s[0])}{clean_pt(s[1])}" for s in phase.get("segments", [])])
 
             step_text = f"- **{label}**:"
             if points:
@@ -74,7 +77,7 @@ class Orchestrator:
 
         circles = engine_result.get("circles", [])
         for c in circles:
-            steps.append(f"- **Đường tròn**: Vẽ đường tròn tâm {c['center']} bán kính {c['radius']}.")
+            steps.append(f"- **Đường tròn**: Vẽ đường tròn tâm {clean_pt(c['center'])} bán kính {c['radius']}.")
 
         return analysis + "\n".join(steps)
 
