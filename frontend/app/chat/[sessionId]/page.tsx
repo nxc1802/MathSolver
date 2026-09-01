@@ -156,10 +156,20 @@ export default function ChatSessionPage() {
   const queueFullBlock = job.phase !== "idle" && isQueueFull;
   const ocrPreviewBlocking = ocrFlow.status !== "idle";
 
-  const applyGeometryFromSnapshot = (meta: Record<string, unknown> | null | undefined) => {
+  const authoritativeJobIdRef = useRef<string | null>(null);
+  const authoritativeResultRef = useRef<Record<string, unknown> | null>(null);
+
+  const applyGeometryFromSnapshot = (
+    meta: Record<string, unknown> | null | undefined,
+    options?: { isExplicitSwitch?: boolean }
+  ) => {
     if (!meta) return;
     logGeometryDebug("applyGeometryFromSnapshot", meta);
     const rawCoords = (meta.coordinates || {}) as Record<string, unknown>;
+    if (Object.keys(rawCoords).length === 0 && !options?.isExplicitSwitch) {
+      return;
+    }
+
     const mode = pickCanvasMode({
       is_3d: meta.is_3d as boolean | undefined,
       is3d: meta.is3d as boolean | undefined,
@@ -179,21 +189,99 @@ export default function ChatSessionPage() {
       setCoordinates(projectCoordinates2D(rawCoords));
       setIs3d(false);
     }
-    setPolygonOrder((meta.polygon_order as string[]) || (meta.polygonOrder as string[]) || null);
-    setDrawingPhases(
+
+    const isExplicit = options?.isExplicitSwitch;
+
+    // 1. Polygon Order (Merge or reset on explicit switch)
+    const metaPolygonOrder = (meta.polygon_order as string[]) || (meta.polygonOrder as string[]) || null;
+    if (metaPolygonOrder && metaPolygonOrder.length > 0) {
+      setPolygonOrder(metaPolygonOrder);
+    } else if (isExplicit) {
+      setPolygonOrder(null);
+    }
+
+    // 2. Drawing Phases
+    const metaPhases =
       (meta.drawing_phases as Array<{ phase: number; label: string; points: string[]; segments: string[][] }>) ||
-        (meta.drawingPhases as Array<{ phase: number; label: string; points: string[]; segments: string[][] }>) ||
-        null
-    );
-    setFaces((meta.faces as string[][]) || null);
-    setSolids((meta.solids as Array<{ type: string; [key: string]: unknown }>) || null);
-    setCircles((meta.circles as Array<{ center: string; radius: number }>) || null);
-    setLines((meta.lines as Array<[string, string]>) || null);
-    setRays((meta.rays as Array<[string, string]>) || null);
-    setVisGraph((meta.visualization_graph as import("@/types/geometry").VisualizationGraph) || (meta.visualizationGraph as import("@/types/geometry").VisualizationGraph) || null);
-    setAuxiliary((meta.auxiliary as import("@/types/geometry").VisAuxiliaryConstruction[]) || null);
-    setVideoUrl((meta.video_url as string) || (meta.videoUrl as string) || null);
-    setActiveSnapshotJobId((meta.job_id as string) || (meta.jobId as string) || null);
+      (meta.drawingPhases as Array<{ phase: number; label: string; points: string[]; segments: string[][] }>) ||
+      null;
+    if (metaPhases && metaPhases.length > 0) {
+      setDrawingPhases(metaPhases);
+    } else if (isExplicit) {
+      setDrawingPhases(null);
+    }
+
+    // 3. Faces (Preserve topology instead of resetting to null)
+    const metaFaces = (meta.faces as string[][]) || null;
+    if (metaFaces && metaFaces.length > 0) {
+      setFaces(metaFaces);
+    } else if (isExplicit) {
+      setFaces(null);
+    }
+
+    // 4. Solids
+    const metaSolids = (meta.solids as Array<{ type: string; [key: string]: unknown }>) || null;
+    if (metaSolids && metaSolids.length > 0) {
+      setSolids(metaSolids);
+    } else if (isExplicit) {
+      setSolids(null);
+    }
+
+    // 5. Circles
+    const metaCircles = (meta.circles as Array<{ center: string; radius: number }>) || null;
+    if (metaCircles && metaCircles.length > 0) {
+      setCircles(metaCircles);
+    } else if (isExplicit) {
+      setCircles(null);
+    }
+
+    // 6. Lines
+    const metaLines = (meta.lines as Array<[string, string]>) || null;
+    if (metaLines && metaLines.length > 0) {
+      setLines(metaLines);
+    } else if (isExplicit) {
+      setLines(null);
+    }
+
+    // 7. Rays
+    const metaRays = (meta.rays as Array<[string, string]>) || null;
+    if (metaRays && metaRays.length > 0) {
+      setRays(metaRays);
+    } else if (isExplicit) {
+      setRays(null);
+    }
+
+    // 8. Visualization Graph
+    const metaVisGraph =
+      (meta.visualization_graph as import("@/types/geometry").VisualizationGraph) ||
+      (meta.visualizationGraph as import("@/types/geometry").VisualizationGraph) ||
+      null;
+    if (metaVisGraph && Object.keys(metaVisGraph).length > 0) {
+      setVisGraph(metaVisGraph);
+    } else if (isExplicit) {
+      setVisGraph(null);
+    }
+
+    // 9. Auxiliary
+    const metaAux = (meta.auxiliary as import("@/types/geometry").VisAuxiliaryConstruction[]) || null;
+    if (metaAux && metaAux.length > 0) {
+      setAuxiliary(metaAux);
+    } else if (isExplicit) {
+      setAuxiliary(null);
+    }
+
+    // 10. Video URL & Job ID
+    const metaVideoUrl = (meta.video_url as string) || (meta.videoUrl as string) || null;
+    if (metaVideoUrl) {
+      setVideoUrl(metaVideoUrl);
+    } else if (isExplicit) {
+      setVideoUrl(null);
+    }
+
+    const metaJobId = (meta.job_id as string) || (meta.jobId as string) || null;
+    if (metaJobId) {
+      setActiveSnapshotJobId(metaJobId);
+    }
   };
 
   // Restore cache on session change
@@ -206,7 +294,7 @@ export default function ChatSessionPage() {
 
     if (tempToReal) {
       const cached = loadGeometryState(sessionId);
-      if (cached) applyGeometryFromSnapshot(cached as unknown as Record<string, unknown>);
+      if (cached) applyGeometryFromSnapshot(cached as unknown as Record<string, unknown>, { isExplicitSwitch: true });
       else {
         setCoordinates(null);
         setIs3d(false);
@@ -233,26 +321,65 @@ export default function ChatSessionPage() {
     if (isTempSession) return;
     const cached = loadGeometryState(sessionId);
     if (cached) {
-      applyGeometryFromSnapshot(cached as unknown as Record<string, unknown>);
+      applyGeometryFromSnapshot(cached as unknown as Record<string, unknown>, { isExplicitSwitch: true });
     }
     setPendingQueue(getPendingQueue(sessionId));
   }, [sessionId, isTempSession]);
 
-  // Sync latest snapshots
+  // Sync latest snapshots from messages (SWR) with authoritative result guard
   useEffect(() => {
     if (geometrySnapshots.length > prevSnapshotsCountRef.current) {
       setVideoVersion(geometrySnapshots.length);
-      applyGeometryFromSnapshot(
-        geometrySnapshots[geometrySnapshots.length - 1].metadata as Record<string, unknown>
-      );
+      const latestSnapshot = geometrySnapshots[geometrySnapshots.length - 1];
+      const meta = (latestSnapshot?.metadata as Record<string, unknown>) || {};
+      const snapJobId = (meta.job_id as string) || (meta.jobId as string);
+
+      // If we have authoritative result for this job from job.success, merge onto it
+      if (authoritativeJobIdRef.current && snapJobId === authoritativeJobIdRef.current && authoritativeResultRef.current) {
+        applyGeometryFromSnapshot({
+          ...meta,
+          ...authoritativeResultRef.current,
+        });
+      } else {
+        applyGeometryFromSnapshot(meta);
+      }
     }
     prevSnapshotsCountRef.current = geometrySnapshots.length;
   }, [geometrySnapshots]);
 
+  // Handle job completion with authoritative solver result
   useEffect(() => {
     if (job.phase !== "success" && job.phase !== "error") return;
     const resultSnap = job.result;
     let cancelled = false;
+
+    if (resultSnap) {
+      const jobId = (resultSnap.job_id as string) || (resultSnap.jobId as string) || job.jobId || null;
+      if (jobId) {
+        authoritativeJobIdRef.current = jobId;
+      }
+      authoritativeResultRef.current = resultSnap as unknown as Record<string, unknown>;
+
+      // Apply authoritative geometry immediately with full topology
+      applyGeometryFromSnapshot(resultSnap as unknown as Record<string, unknown>);
+
+      if (!isTempSession) {
+        saveGeometryState(sessionId, {
+          coordinates: resultSnap.coordinates,
+          polygonOrder: resultSnap.polygon_order,
+          drawingPhases: resultSnap.drawing_phases,
+          faces: resultSnap.faces,
+          solids: resultSnap.solids,
+          lines: resultSnap.lines,
+          rays: resultSnap.rays,
+          visualizationGraph: resultSnap.visualization_graph,
+          auxiliary: resultSnap.auxiliary,
+          is_3d: resultSnap.is_3d,
+          videoUrl: resultSnap.video_url,
+        } as GeometryState);
+      }
+    }
+
     const run = async () => {
       try {
         await mutateMessages(undefined, { revalidate: true });
@@ -260,24 +387,6 @@ export default function ChatSessionPage() {
         console.error("Revalidate messages after job:", e);
       } finally {
         if (cancelled) return;
-        if (resultSnap) {
-          applyGeometryFromSnapshot(resultSnap as unknown as Record<string, unknown>);
-          if (!isTempSession) {
-            saveGeometryState(sessionId, {
-              coordinates: resultSnap.coordinates,
-              polygonOrder: resultSnap.polygon_order,
-              drawingPhases: resultSnap.drawing_phases,
-              faces: resultSnap.faces,
-              solids: resultSnap.solids,
-              lines: resultSnap.lines,
-              rays: resultSnap.rays,
-              visualizationGraph: resultSnap.visualization_graph,
-              auxiliary: resultSnap.auxiliary,
-              is_3d: resultSnap.is_3d,
-              videoUrl: resultSnap.video_url,
-            } as GeometryState);
-          }
-        }
         setTimeout(resetJob, 1000);
       }
     };
@@ -285,7 +394,7 @@ export default function ChatSessionPage() {
     return () => {
       cancelled = true;
     };
-  }, [job.phase, job.result, mutateMessages, resetJob, sessionId, isTempSession]);
+  }, [job.phase, job.result, job.jobId, mutateMessages, resetJob, sessionId, isTempSession]);
 
   // Queue Processing
   useEffect(() => {
@@ -742,7 +851,8 @@ export default function ChatSessionPage() {
                                 setVideoVersion((v) => v - 1);
                                 applyGeometryFromSnapshot(
                                   geometrySnapshots[videoVersion - 2]
-                                    .metadata as Record<string, unknown>
+                                    .metadata as Record<string, unknown>,
+                                  { isExplicitSwitch: true }
                                 );
                               }
                             }}
@@ -751,7 +861,8 @@ export default function ChatSessionPage() {
                                 setVideoVersion((v) => v + 1);
                                 applyGeometryFromSnapshot(
                                   geometrySnapshots[videoVersion]
-                                    .metadata as Record<string, unknown>
+                                    .metadata as Record<string, unknown>,
+                                  { isExplicitSwitch: true }
                                 );
                               }
                             }}
