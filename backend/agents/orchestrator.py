@@ -201,11 +201,31 @@ class Orchestrator:
                 _step_io("step4_solve_geometry", input_val=f"attempt {attempt + 1}", output_val=feedback)
 
             if attempt == MAX_RETRIES:
-                _step_io("orchestrate_abort", input_val=None, output_val="solver_exhausted_retries")
-                return {
-                    "error": "Solver failed after multiple attempts.",
-                    "last_dsl": dsl_code,
-                }
+                # 1. If engine_result produced valid non-empty coordinates, accept them gracefully on final attempt
+                if engine_result and coordinates and len(coordinates) >= 3:
+                    logger.warning("[Orchestrator] Proceeding with solved coordinates on final attempt despite minor validation warnings")
+                    break
+
+                # 2. If engine_result is empty, attempt a relaxed solver pass with primary constraints only
+                if points and constraints:
+                    relaxed_constraints = [
+                        c for c in constraints
+                        if c.get("kind") != "AUXILIARY" and c.get("type") in ("length", "polygon", "point", "perpendicular_to_base", "pyramid", "prism", "cube", "tetrahedron")
+                    ]
+                    try:
+                        relaxed_result = await anyio.to_thread.run_sync(self.solver_engine.solve, points, relaxed_constraints, is_3d)
+                        if relaxed_result and relaxed_result.get("coordinates"):
+                            engine_result = relaxed_result
+                            coordinates = relaxed_result.get("coordinates", {})
+                            logger.info("[Orchestrator] Relaxed constraint solve succeeded as fallback")
+                            break
+                    except Exception as e:
+                        logger.warning(f"[Orchestrator] Relaxed solve attempt warning: {e}")
+
+                # 3. If geometry coordinates still cannot be solved, proceed to DeepMath solver so the user still gets the math steps & answer
+                logger.warning("[Orchestrator] Geometry engine exhausted attempts; proceeding with semantic data for DeepMath solve")
+                engine_result = engine_result or {"coordinates": {}, "is_3d": is_3d, "drawing_phases": []}
+                break
 
         # 5. DeepMath Solver (Program-Aided Sandboxed SymPy Reasoning)
         solution = None

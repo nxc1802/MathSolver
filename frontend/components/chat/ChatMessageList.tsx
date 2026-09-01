@@ -12,6 +12,7 @@ interface ChatMessageListProps {
   pendingQueue: { id: string; text: string }[];
   editQueued: (id: string, text: string) => void;
   removeQueued: (id: string) => void;
+  onRetry?: (message: ChatMessage) => void;
   messagesEndRef: React.RefObject<HTMLDivElement | null>;
 }
 
@@ -23,6 +24,7 @@ export default function ChatMessageList({
   pendingQueue,
   editQueued,
   removeQueued,
+  onRetry,
   messagesEndRef,
 }: ChatMessageListProps) {
   return (
@@ -35,7 +37,7 @@ export default function ChatMessageList({
       )}
 
       {messages.map((msg) => (
-        <ChatMessageComponent key={msg.id} message={msg} />
+        <ChatMessageComponent key={msg.id} message={msg} onRetry={onRetry} />
       ))}
 
       {/* Active Solving Status Shimmer Card */}

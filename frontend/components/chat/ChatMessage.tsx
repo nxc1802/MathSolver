@@ -12,6 +12,7 @@ import {
   ChevronDown,
   ChevronUp,
   CheckCircle2,
+  RotateCcw,
 } from "lucide-react";
 import type { ChatMessage as ChatMessageType } from "@/types/chat";
 import ReactMarkdown from "react-markdown";
@@ -24,6 +25,7 @@ import { formatMathMarkdown } from "@/lib/math-format";
 
 interface ChatMessageProps {
   message: ChatMessageType;
+  onRetry?: (message: ChatMessageType) => void;
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -35,7 +37,7 @@ const STATUS_LABELS: Record<string, string> = {
   error: "Xảy ra lỗi trong quá trình xử lý",
 };
 
-export default function ChatMessageComponent({ message }: ChatMessageProps) {
+export default function ChatMessageComponent({ message, onRetry }: ChatMessageProps) {
   const isUser = message.role === "user";
   const isSystem = message.role === "system";
   const [showSteps, setShowSteps] = useState(true);
@@ -195,9 +197,25 @@ export default function ChatMessageComponent({ message }: ChatMessageProps) {
 
         {/* Error Indicator */}
         {message.type === "error" && (
-          <div className="flex items-start gap-2.5 text-xs text-red-300 bg-red-500/10 border border-red-500/20 p-3 rounded-xl">
-            <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5 text-red-400" />
-            <span>{message.content}</span>
+          <div className="space-y-2.5">
+            <div className="flex items-start gap-2.5 text-xs text-red-300 bg-red-500/10 border border-red-500/20 p-3 rounded-xl">
+              <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5 text-red-400" />
+              <div className="space-y-1">
+                <p className="font-semibold text-red-200">Không thể giải bài toán</p>
+                <p className="text-red-300/90 leading-relaxed">{message.content}</p>
+              </div>
+            </div>
+
+            {onRetry && (
+              <button
+                type="button"
+                onClick={() => onRetry(message)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600/20 hover:bg-indigo-600/35 border border-indigo-500/35 text-xs font-semibold text-indigo-300 hover:text-white transition-all active:scale-95 shadow-sm"
+              >
+                <RotateCcw className="w-3.5 h-3.5 text-indigo-400" />
+                <span>Tái tư duy / Thử lại</span>
+              </button>
+            )}
           </div>
         )}
 

@@ -688,6 +688,36 @@ export default function ChatSessionPage() {
     });
   };
 
+  const handleRetryMessage = (errorMsg: ChatMessage) => {
+    // Find the relevant user message prompt before this error
+    const msgIdx = messages.findIndex((m) => m.id === errorMsg.id);
+    let userPrompt = "";
+    let userImageUrl: string | undefined = undefined;
+
+    if (msgIdx > 0) {
+      for (let i = msgIdx - 1; i >= 0; i--) {
+        if (messages[i].role === "user") {
+          userPrompt = messages[i].content;
+          userImageUrl = messages[i].metadata?.image_url;
+          break;
+        }
+      }
+    }
+
+    if (!userPrompt && messages.length > 0) {
+      const userMsg = [...messages].reverse().find((m) => m.role === "user");
+      if (userMsg) {
+        userPrompt = userMsg.content;
+        userImageUrl = userMsg.metadata?.image_url;
+      }
+    }
+
+    if (userPrompt) {
+      const clientMessageId = crypto.randomUUID();
+      startSolve(userPrompt, false, userImageUrl || null, clientMessageId);
+    }
+  };
+
   const hasVisualization = Boolean(
     coordinates ||
     videoUrl ||
@@ -756,6 +786,7 @@ export default function ChatSessionPage() {
                   pendingQueue={pendingQueue}
                   editQueued={editQueued}
                   removeQueued={removeQueued}
+                  onRetry={handleRetryMessage}
                   messagesEndRef={messagesEndRef}
                 />
               )}

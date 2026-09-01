@@ -60,8 +60,9 @@ export function formatFormulaToLatex(formula: string): string {
 
 /**
  * Formats a full text line, step description, or markdown content:
- * - Detects formulas like "S_ABCD = a**2 = 36" or "h_prime = sp.Rational(1, 2) * SO = 6"
- *   and wraps them with proper $ ... $ LaTeX delimiters.
+ * - Detects equations like "S_ABCD = a**2 = 36", "a^2 = 36", "SO = 12"
+ * - Converts standalone powers like "a^2", "AB^2" outside equations
+ * - Formats angles "60°" -> "$60^\circ$"
  * - Replaces raw point names like S_prime, SS_prime in text.
  */
 export function formatMathMarkdown(text: string): string {
@@ -69,39 +70,107 @@ export function formatMathMarkdown(text: string): string {
 
   let result = text;
 
-  // 1. Convert geometric point references in text (e.g. S_prime -> S', SS_prime -> SS', S_primeB -> S'B)
+  // 1. Geometric point references in text (e.g. S_prime -> S', SS_prime -> SS', S_primeB -> S'B)
   result = result.replace(/\b([A-Z])_prime([A-Z])\b/g, "$1'$2");
   result = result.replace(/\b([A-Z])([A-Z])_prime\b/g, "$1$2'");
   result = result.replace(/\b([A-Z])_prime\b/g, "$1'");
 
-  // 2. Pattern to detect equality formulas: e.g. "S_ABCD = a**2 = 36" or "V = sp.Rational(1, 3) * S * h = 144"
-  // Match "Áp dụng công thức: X = Y = Z" or standalone equations
+  const mathBlocks: string[] = [];
+
+  // 2. Extract existing $...$ math blocks
+  result = result.replace(/\$([^$]+)\$/g, (_match, inner) => {
+    const idx = mathBlocks.length;
+    mathBlocks.push(`$${formatFormulaToLatex(inner)}$`);
+    return `___MATH_BLOCK_${idx}___`;
+  });
+
+  // 3. Extract multi-part equality equations: "S_ABCD = a**2 = 36" or "AC'^2 = AC^2 + CC'^2 = 25 + 5^2 = 50"
   result = result.replace(
-    /(?:Áp dụng công thức:\s*)?([A-Za-z0-9_'\.\{\}\\]+)\s*=\s*([^=;\n]+?)\s*=\s*([0-9\.\+\-\*\/\\sqrt\{\}a-zA-Z_'\^]+)(?=[,\.\s]|$)/g,
-    (match, lhs, expr, val) => {
-      // If already wrapped in $, skip
-      if (match.startsWith("$") && match.endsWith("$")) return match;
-      const formattedLhs = formatVariableName(lhs);
+    /(?:Áp dụng công thức:\s*)?([A-Za-z0-9_'\.\{\}\\\^\(\)]+)\s*=\s*([^=;\n]+?)\s*=\s*([0-9\.\+\-\*\/\\sqrt\{\}a-zA-Z_'\^\s\(\)]+)(?=[,\.\s]|$)/g,
+    (_match, lhs, expr, val) => {
+      const formattedLhs = formatFormulaToLatex(lhs);
       const formattedExpr = formatFormulaToLatex(expr);
       const formattedVal = formatFormulaToLatex(val);
-      return `$${formattedLhs} = ${formattedExpr} = ${formattedVal}$`;
+      const idx = mathBlocks.length;
+      mathBlocks.push(`$${formattedLhs} = ${formattedExpr} = ${formattedVal}$`);
+      return `___MATH_BLOCK_${idx}___`;
     }
   );
 
-  // 3. Catch remaining two-part equations: "X = Y" with mathematical operators
+  // 4. Extract two-part equality equations: "V = (1/3) * S_day * h", "a^2 = 36", "SO = 12", "AC' = sqrt(50)"
   result = result.replace(
-    /(?:Áp dụng công thức:\s*)?([A-Za-z0-9_'\.\{\}\\]+)\s*=\s*([^=;\n]+(?:\*|\/|\^|Rational|sqrt|\\frac|\\sqrt)[^=;\n]*)(?=[,\.\s]|$)/g,
-    (match, lhs, expr) => {
-      if (match.startsWith("$") && match.endsWith("$")) return match;
-      const formattedLhs = formatVariableName(lhs);
+    /(?:Áp dụng công thức:\s*)?([A-Za-z0-9_'\.\{\}\\\^\(\)]+)\s*=\s*([0-9\.\+\-\*\/\\sqrt\{\}a-zA-Z_'\^\s\(\)]+)(?=[,\.\s]|$)/g,
+    (_match, lhs, expr) => {
+      const formattedLhs = formatFormulaToLatex(lhs);
       const formattedExpr = formatFormulaToLatex(expr);
-      return `$${formattedLhs} = ${formattedExpr}$`;
+      const idx = mathBlocks.length;
+      mathBlocks.push(`$${formattedLhs} = ${formattedExpr}$`);
+      return `___MATH_BLOCK_${idx}___`;
     }
   );
 
-  // 4. Standalone Python fragments like sp.Rational(1, 3) in text
-  result = result.replace(/(?:sp\.)?Rational\((\d+),\s*(\d+)\)/g, "$\\frac{$1}{$2}$");
-  result = result.replace(/(?:sp\.)?sqrt\(([^)]+)\)/g, "$\\sqrt{$1}$");
+  // 5. In plain text, format standalone power terms: "a^2", "AB^2", "4^2", "SO^2", "x^3"
+  result = result.replace(
+    /\b([a-zA-Z][a-zA-Z0-9']{0,3}|\d+)\^(\d+|[a-zA-Z]+)\b/g,
+    (_match, p1, p2) => {
+      const idx = mathBlocks.length;
+      mathBlocks.push(`$${p1}^{${p2}}$`);
+      return `___MATH_BLOCK_${idx}___`;
+    }
+  );
+  result = result.replace(
+    /\b([a-zA-Z][a-zA-Z0-9']{0,3}|\d+)\*\*(\d+)\b/g,
+    (_match, p1, p2) => {
+      const idx = mathBlocks.length;
+      mathBlocks.push(`$${p1}^{${p2}}$`);
+      return `___MATH_BLOCK_${idx}___`;
+    }
+  );
+
+  // 6. In plain text, format standalone subscripts: "S_ABCD", "V_SABCD", "h_prime"
+  result = result.replace(
+    /\b([A-Z])_([A-Za-z0-9]+)\b/g,
+    (_match, p1, p2) => {
+      const idx = mathBlocks.length;
+      mathBlocks.push(`$${p1}_{${p2}}$`);
+      return `___MATH_BLOCK_${idx}___`;
+    }
+  );
+  result = result.replace(
+    /\b([a-z])_prime\b/g,
+    (_match, p1) => {
+      const idx = mathBlocks.length;
+      mathBlocks.push(`$${p1}'$`);
+      return `___MATH_BLOCK_${idx}___`;
+    }
+  );
+
+  // 7. In plain text, format angles: "60°", "30^\circ"
+  result = result.replace(
+    /(?:\b|\s)(\d+)\s*(?:\^\\circ|\\circ|°)/g,
+    (_match, p1) => {
+      const idx = mathBlocks.length;
+      mathBlocks.push(`$${p1}^\\circ$`);
+      return ` ___MATH_BLOCK_${idx}___`;
+    }
+  );
+
+  // 8. In plain text, format standalone LaTeX commands: "\sqrt{50}", "\frac{1}{2}"
+  result = result.replace(/\\sqrt\{([^}]+)\}/g, (_match, p1) => {
+    const idx = mathBlocks.length;
+    mathBlocks.push(`$\\sqrt{${p1}}$`);
+    return `___MATH_BLOCK_${idx}___`;
+  });
+  result = result.replace(/\\frac\{([^}]+)\}\{([^}]+)\}/g, (_match, p1, p2) => {
+    const idx = mathBlocks.length;
+    mathBlocks.push(`$\\frac{${p1}}{${p2}}$`);
+    return `___MATH_BLOCK_${idx}___`;
+  });
+
+  // 9. Restore all math blocks
+  result = result.replace(/___MATH_BLOCK_(\d+)___/g, (match, idx) => {
+    return mathBlocks[Number(idx)] || match;
+  });
 
   return result;
 }
