@@ -523,6 +523,126 @@ class VisualizationPlanner:
                         style=EdgeStyle.DASHED if is_3d else EdgeStyle.SOLID,
                     )
 
+            # -------------------------------------------------------------
+            # PERPENDICULAR TO PLANE: PERPENDICULAR_PLANE(SA, ABC)
+            # -------------------------------------------------------------
+            elif c_type in ("perpendicular_plane", "perp_plane"):
+                # E.g. targets = ["S", "A", "A", "B", "C"] or ["SA", "ABC"]
+                line_pts: List[str] = []
+                plane_pts: List[str] = []
+                if len(targets) == 2:
+                    line_pts = list(targets[0].strip())
+                    plane_pts = list(targets[1].strip())
+                elif len(targets) >= 4:
+                    line_pts = targets[:2]
+                    plane_pts = targets[2:]
+
+                if len(line_pts) >= 2:
+                    p_apex, p_foot = line_pts[0], line_pts[1]
+                    # Check if p_foot is in plane
+                    if p_foot in graph.vertices:
+                        graph.vertices[p_foot].role = "foot"
+                    if p_apex in graph.vertices:
+                        graph.vertices[p_apex].role = "apex"
+
+                    # Edge from apex to foot is an altitude
+                    edge_alt = graph.add_edge(
+                        p1=p_apex,
+                        p2=p_foot,
+                        role="altitude",
+                        tier=ImportanceTier.REQUIRED,
+                        kind=EntityKind.PRIMARY,
+                        style=EdgeStyle.DASHED if is_3d else EdgeStyle.SOLID,
+                        is_hidden=is_3d,
+                    )
+
+                    # Add perpendicular marks between (p_apex -> p_foot) and base edges incident to p_foot
+                    base_neighbors = [p for p in plane_pts if p != p_foot]
+                    for b_pt in base_neighbors[:2]:
+                        p_mark = {"vertex": p_foot, "lines": [p_apex, b_pt]}
+                        graph.perpendicular_marks.append(p_mark)
+
+                    graph.auxiliary.append(
+                        VisAuxiliaryConstruction(
+                            id=f"perp_plane_{p_apex}_{p_foot}",
+                            type="height",
+                            source_entity=p_apex,
+                            target_entity=p_foot,
+                            created_vertices=[p_foot],
+                            created_edges=[edge_alt.id],
+                            perpendicular_marks=[{"vertex": p_foot, "lines": [p_apex, b]} for b in base_neighbors[:2]],
+                            tier=ImportanceTier.REQUIRED,
+                        )
+                    )
+
+            # -------------------------------------------------------------
+            # PERPENDICULAR / RIGHT ANGLE: PERPENDICULAR(AB, BC) or ANGLE(B, 90)
+            # -------------------------------------------------------------
+            elif c_type in ("perpendicular", "perp", "right_angle"):
+                if len(targets) == 4:
+                    p1, p2, p3, p4 = targets
+                    common = set([p1, p2]).intersection([p3, p4])
+                    if common:
+                        v = common.pop()
+                        l1 = p2 if p1 == v else p1
+                        l2 = p4 if p3 == v else p3
+                        graph.perpendicular_marks.append({"vertex": v, "lines": [l1, l2]})
+                    else:
+                        graph.perpendicular_marks.append({"vertex": p2, "lines": [p1, p4]})
+                elif len(targets) == 3:
+                    graph.perpendicular_marks.append({"vertex": targets[1], "lines": [targets[0], targets[2]]})
+
+            # -------------------------------------------------------------
+            # ANGLE: ANGLE(B, 90) or ANGLE(A, B, C, 60) or ANGLE(B, 60)
+            # -------------------------------------------------------------
+            elif c_type == "angle":
+                deg_val = getattr(c, "value", None)
+                if len(targets) == 1:
+                    v_label = targets[0]
+                    # Find neighbors in edges
+                    adj = []
+                    for e in graph.edges.values():
+                        if e.source == v_label: adj.append(e.target)
+                        elif e.target == v_label: adj.append(e.source)
+                    if len(adj) >= 2:
+                        if deg_val == 90 or (deg_val is not None and abs(deg_val - 90) < 1e-2):
+                            graph.perpendicular_marks.append({"vertex": v_label, "lines": [adj[0], adj[1]]})
+                        elif deg_val is not None and deg_val > 0:
+                            graph.angle_marks.append({
+                                "vertex": v_label,
+                                "lines": [adj[0], adj[1]],
+                                "degrees": deg_val,
+                                "label": f"{int(deg_val) if deg_val == int(deg_val) else deg_val}°"
+                            })
+                elif len(targets) == 3:
+                    p1, v_label, p2 = targets[0], targets[1], targets[2]
+                    if deg_val == 90 or (deg_val is not None and abs(deg_val - 90) < 1e-2):
+                        graph.perpendicular_marks.append({"vertex": v_label, "lines": [p1, p2]})
+                    elif deg_val is not None and deg_val > 0:
+                        graph.angle_marks.append({
+                            "vertex": v_label,
+                            "lines": [p1, p2],
+                            "degrees": deg_val,
+                            "label": f"{int(deg_val) if deg_val == int(deg_val) else deg_val}°"
+                        })
+
+            # -------------------------------------------------------------
+            # EQUAL LENGTH / EQUILATERAL: LENGTH_EQUAL(AB, CD)
+            # -------------------------------------------------------------
+            elif c_type in ("length_equal", "equal_length") and len(targets) >= 4:
+                seg1 = [targets[0], targets[1]]
+                seg2 = [targets[2], targets[3]]
+                graph.equal_ticks.append({"segment": seg1, "ticks": 1})
+                graph.equal_ticks.append({"segment": seg2, "ticks": 1})
+
+            # -------------------------------------------------------------
+            # PARALLEL: PARALLEL(AB, CD)
+            # -------------------------------------------------------------
+            elif c_type == "parallel" and len(targets) >= 4:
+                seg1 = [targets[0], targets[1]]
+                seg2 = [targets[2], targets[3]]
+                graph.parallel_marks.append({"segments": [seg1, seg2], "arrows": 1})
+
         # ---------------------------------------------------------------------
         # 6. Derive 3D Hidden vs Visible Edges (Canonical Perspective)
         # ---------------------------------------------------------------------
@@ -532,16 +652,21 @@ class VisualizationPlanner:
                 v1 = graph.vertices.get(edge.source)
                 v2 = graph.vertices.get(edge.target)
                 if v1 and v2 and len(v1.coordinates) >= 3 and len(v2.coordinates) >= 3:
-                    # Interior altitude or diagonal
+                    # Interior altitude, projection, or diagonal
                     if edge.role in ("altitude", "projection", "diagonal"):
                         edge.style = EdgeStyle.DASHED
                         edge.is_hidden = True
-                    # Rear base edges: if both vertices are near back-left in standard view
+
+                    # Rear vertices in standard 3D coordinate system (A or D near y=0, z=0)
                     elif edge.role == "base_edge":
-                        z1, z2 = v1.coordinates[2], v2.coordinates[2]
-                        y1, y2 = v1.coordinates[1], v2.coordinates[1]
-                        if abs(z1) < 1e-3 and abs(z2) < 1e-3:
-                            # If edge lies along the back/left boundary of base
+                        # If edge connects to A (when SA is altitude or A is back-left corner)
+                        has_sa_alt = any(aux.type == "height" and (aux.target_entity == "A" or aux.source_entity == "A") for aux in graph.auxiliary)
+                        if has_sa_alt:
+                            if "A" in (v1.id, v2.id) and "S" not in (v1.id, v2.id):
+                                edge.style = EdgeStyle.DASHED
+                                edge.is_hidden = True
+                        else:
+                            # Standard rear-left edge (e.g. D connects to A and C in ABCD)
                             if (v1.id == "D" and v2.id in ("A", "C")) or (v1.id == "A" and v2.id == "D"):
                                 edge.style = EdgeStyle.DASHED
                                 edge.is_hidden = True
@@ -584,7 +709,9 @@ class VisualizationPlanner:
             f"[VisualizationPlanner] Planned Visualization Graph: "
             f"{len(graph.vertices)} vertices, {len(graph.edges)} edges, "
             f"{len(graph.faces)} faces, {len(graph.solids)} solids, "
-            f"{len(graph.auxiliary)} auxiliary constructions."
+            f"{len(graph.auxiliary)} auxiliary constructions, "
+            f"{len(graph.perpendicular_marks)} right-angle marks, "
+            f"{len(graph.angle_marks)} angle arcs."
         )
 
         return graph

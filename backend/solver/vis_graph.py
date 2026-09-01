@@ -116,6 +116,9 @@ class VisAuxiliaryConstruction(BaseModel):
     created_vertices: List[str] = Field(default_factory=list)
     created_edges: List[str] = Field(default_factory=list)
     perpendicular_marks: List[Dict[str, Any]] = Field(default_factory=list)
+    angle_marks: List[Dict[str, Any]] = Field(default_factory=list)
+    equal_ticks: List[Dict[str, Any]] = Field(default_factory=list)
+    parallel_marks: List[Dict[str, Any]] = Field(default_factory=list)
     tier: ImportanceTier = ImportanceTier.REQUIRED
 
     def to_dict(self) -> Dict[str, Any]:
@@ -134,6 +137,10 @@ class VisualizationGraph(BaseModel):
     faces: Dict[str, VisFace] = Field(default_factory=dict)
     solids: Dict[str, VisSolid] = Field(default_factory=dict)
     auxiliary: List[VisAuxiliaryConstruction] = Field(default_factory=list)
+    perpendicular_marks: List[Dict[str, Any]] = Field(default_factory=list)
+    angle_marks: List[Dict[str, Any]] = Field(default_factory=list)
+    equal_ticks: List[Dict[str, Any]] = Field(default_factory=list)
+    parallel_marks: List[Dict[str, Any]] = Field(default_factory=list)
     drawing_phases: List[Dict[str, Any]] = Field(default_factory=list)
     is_3d: bool = False
 

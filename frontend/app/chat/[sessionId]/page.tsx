@@ -124,6 +124,9 @@ export default function ChatSessionPage() {
   const [drawingPhases, setDrawingPhases] = useState<Array<{ phase: number; label: string; points: string[]; segments: string[][] }> | null>(null);
   const [faces, setFaces] = useState<string[][] | null>(null);
   const [solids, setSolids] = useState<Array<{ type: string; [key: string]: unknown }> | null>(null);
+  const [circles, setCircles] = useState<Array<{ center: string; radius: number }> | null>(null);
+  const [lines, setLines] = useState<Array<[string, string]> | null>(null);
+  const [rays, setRays] = useState<Array<[string, string]> | null>(null);
   const [visGraph, setVisGraph] = useState<import("@/types/geometry").VisualizationGraph | null>(null);
   const [auxiliary, setAuxiliary] = useState<import("@/types/geometry").VisAuxiliaryConstruction[] | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
@@ -184,6 +187,9 @@ export default function ChatSessionPage() {
     );
     setFaces((meta.faces as string[][]) || null);
     setSolids((meta.solids as Array<{ type: string; [key: string]: unknown }>) || null);
+    setCircles((meta.circles as Array<{ center: string; radius: number }>) || null);
+    setLines((meta.lines as Array<[string, string]>) || null);
+    setRays((meta.rays as Array<[string, string]>) || null);
     setVisGraph((meta.visualization_graph as import("@/types/geometry").VisualizationGraph) || (meta.visualizationGraph as import("@/types/geometry").VisualizationGraph) || null);
     setAuxiliary((meta.auxiliary as import("@/types/geometry").VisAuxiliaryConstruction[]) || null);
     setVideoUrl((meta.video_url as string) || (meta.videoUrl as string) || null);
@@ -752,10 +758,11 @@ export default function ChatSessionPage() {
                                 coordinates as Record<string, [number, number]>
                               }
                               polygonOrder={polygonOrder || []}
+                              faces={faces || []}
                               drawingPhases={drawingPhases || []}
-                              circles={[]}
-                              lines={[]}
-                              rays={[]}
+                              circles={circles || []}
+                              lines={lines || []}
+                              rays={rays || []}
                               visualizationGraph={visGraph}
                               auxiliary={auxiliary}
                             />

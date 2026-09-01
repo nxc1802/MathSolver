@@ -2,13 +2,27 @@
 
 import { motion } from "framer-motion";
 import { useMemo, useState, useRef } from "react";
-import { ZoomIn, ZoomOut, RotateCcw } from "lucide-react";
-import type { VisualizationGraph, VisAuxiliaryConstruction, DrawingPhase } from "@/types/geometry";
-import { computeRightAnglePath2D } from "@/lib/geometry-display";
+import { ZoomIn, ZoomOut, RotateCcw, Eye, Layers } from "lucide-react";
+import type {
+  VisualizationGraph,
+  VisAuxiliaryConstruction,
+  DrawingPhase,
+  PerpendicularMark,
+  AngleMark,
+  EqualTickMark,
+  ParallelMark,
+} from "@/types/geometry";
+import {
+  computeRightAnglePath2D,
+  computeAngleArc2D,
+  computeEqualTickSegments2D,
+  computeParallelArrow2D,
+} from "@/lib/geometry-display";
 
 interface StaticGeometryCanvasProps {
-  coordinates?: Record<string, [number, number] | number[]>;
+  coordinates?: Record<string, [number, number] | [number, number, number] | number[]>;
   polygonOrder?: string[];
+  faces?: string[][];
   circles?: Array<{ center: string; radius: number }>;
   lines?: Array<[string, string]>;
   rays?: Array<[string, string]>;
@@ -20,6 +34,7 @@ interface StaticGeometryCanvasProps {
 export default function StaticGeometryCanvas({
   coordinates,
   polygonOrder,
+  faces,
   circles,
   lines,
   rays,
@@ -31,15 +46,21 @@ export default function StaticGeometryCanvas({
   const [scale, setScale] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
+  const [showFaces, setShowFaces] = useState(true);
+  const [showAuxiliary, setShowAuxiliary] = useState(true);
+
   const dragStart = useRef({ x: 0, y: 0 });
   const dragStartOffset = useRef({ x: 0, y: 0 });
 
   const {
     viewBox,
     points,
+    faceFills,
     phasePaths,
-    polygonFillPath,
     rightAnglePaths,
+    angleArcs,
+    equalTicks,
+    parallelArrows,
     circlePaths,
     linePaths,
     rayPaths,
@@ -49,9 +70,12 @@ export default function StaticGeometryCanvas({
       return {
         viewBox: "0 0 100 100",
         points: [],
+        faceFills: [],
         phasePaths: [],
-        polygonFillPath: "",
         rightAnglePaths: [],
+        angleArcs: [],
+        equalTicks: [],
+        parallelArrows: [],
         circlePaths: [],
         linePaths: [],
         rayPaths: [],
@@ -75,7 +99,12 @@ export default function StaticGeometryCanvas({
       maxY = Math.max(maxY, py);
 
       const vMeta = visualizationGraph?.vertices?.[label];
-      const isAux = vMeta?.kind === "AUXILIARY" || vMeta?.role === "foot" || vMeta?.role === "midpoint" || vMeta?.role === "center";
+      const isAux =
+        vMeta?.kind === "AUXILIARY" ||
+        vMeta?.role === "foot" ||
+        vMeta?.role === "midpoint" ||
+        vMeta?.role === "center";
+      const isApex = vMeta?.role === "apex";
 
       return {
         label,
@@ -83,6 +112,7 @@ export default function StaticGeometryCanvas({
         y: py,
         role: vMeta?.role || "vertex",
         isAuxiliary: isAux,
+        isApex,
       };
     });
 
@@ -102,82 +132,188 @@ export default function StaticGeometryCanvas({
       })
       .filter(Boolean) as Array<{ cx: number; cy: number; r: number }>;
 
-    const padding = Math.max((maxX - minX) * 0.25, (maxY - minY) * 0.25, 14);
+    const rawSpanX = Math.max(maxX - minX, 1);
+    const rawSpanY = Math.max(maxY - minY, 1);
+    const maxSpan = Math.max(rawSpanX, rawSpanY);
+    const padding = maxSpan * 0.22;
     const vb = `${minX - padding} ${minY - padding} ${maxX - minX + padding * 2} ${maxY - minY + padding * 2}`;
     const sX = maxX - minX + padding * 2;
+    const markerSize = sX * 0.045;
 
-    // Polygon Fill Path
-    let polyFillD = "";
-    const polyPtsOrder = polygonOrder || (visualizationGraph?.faces ? Object.values(visualizationGraph.faces)[0]?.vertices : null);
-    if (polyPtsOrder && polyPtsOrder.length >= 3) {
-      const ordered = polyPtsOrder
+    // 1. Multi-Face Semi-Transparent Fills
+    const allFaces: Array<{ d: string; role: string; opacity: number }> = [];
+
+    const faceSource =
+      faces && faces.length > 0
+        ? faces.map((verts) => ({ vertices: verts, role: "polygon_face", opacity: 0.12 }))
+        : visualizationGraph?.faces && Object.keys(visualizationGraph.faces).length > 0
+        ? Object.values(visualizationGraph.faces)
+        : polygonOrder && polygonOrder.length >= 3
+        ? [{ vertices: polygonOrder, role: "polygon_face", opacity: 0.12 }]
+        : [];
+
+    faceSource.forEach((f) => {
+      const ordered = f.vertices
         .map((l) => parsedPoints.find((p) => p.label === l))
         .filter(Boolean) as typeof parsedPoints;
       if (ordered.length >= 3) {
-        polyFillD = ordered.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ") + " Z";
+        const d = ordered.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ") + " Z";
+        allFaces.push({
+          d,
+          role: f.role || "polygon_face",
+          opacity: f.opacity || 0.12,
+        });
       }
-    }
+    });
 
-    // Phase Segments (Edges)
-    const resPhasePaths: Array<{ d: string; phase: number; isDashed: boolean }> = [];
+    // 2. Phase Segments (Edges with Solid vs Dashed Classification)
+    const resPhasePaths: Array<{ d: string; role: string; isDashed: boolean; strokeColor: string }> = [];
 
-    // From Visualization Graph edges or drawing phases
     if (visualizationGraph?.edges && Object.keys(visualizationGraph.edges).length > 0) {
-      const p1Segs: string[] = [];
-      const p2Segs: string[] = [];
-
       Object.values(visualizationGraph.edges).forEach((e) => {
         const pt1 = parsedPoints.find((p) => p.label === e.source);
         const pt2 = parsedPoints.find((p) => p.label === e.target);
         if (pt1 && pt2) {
           const d = `M ${pt1.x} ${pt1.y} L ${pt2.x} ${pt2.y}`;
-          if (e.style === "dashed" || e.kind === "AUXILIARY" || e.role === "altitude" || e.role === "median" || e.role === "projection") {
-            p2Segs.push(d);
-          } else {
-            p1Segs.push(d);
-          }
+          const isDashed = Boolean(e.is_hidden) || e.style === "dashed";
+          const isAlt = e.role === "altitude" || e.role === "height";
+          const isDiag = e.role === "diagonal";
+          const isProj = e.role === "projection";
+
+          const color = isAlt
+            ? "#c084fc"
+            : isProj
+            ? "#fbbf24"
+            : isDiag
+            ? "#93c5fd"
+            : isDashed
+            ? "#818cf8"
+            : "#e0e7ff";
+
+          resPhasePaths.push({
+            d,
+            role: e.role,
+            isDashed,
+            strokeColor: color,
+          });
         }
       });
-
-      if (p1Segs.length > 0) resPhasePaths.push({ d: p1Segs.join(" "), phase: 1, isDashed: false });
-      if (p2Segs.length > 0) resPhasePaths.push({ d: p2Segs.join(" "), phase: 2, isDashed: true });
     } else if (drawingPhases && drawingPhases.length > 0) {
       drawingPhases.forEach((phase) => {
         if (!phase.segments || phase.segments.length === 0) return;
-        const segmentsD: string[] = [];
+        const isAux = phase.phase >= 2;
         phase.segments.forEach(([p1Label, p2Label]) => {
           const pt1 = parsedPoints.find((p) => p.label === p1Label);
           const pt2 = parsedPoints.find((p) => p.label === p2Label);
           if (pt1 && pt2) {
-            segmentsD.push(`M ${pt1.x} ${pt1.y} L ${pt2.x} ${pt2.y}`);
+            resPhasePaths.push({
+              d: `M ${pt1.x} ${pt1.y} L ${pt2.x} ${pt2.y}`,
+              role: isAux ? "auxiliary" : "edge",
+              isDashed: isAux,
+              strokeColor: isAux ? "#c084fc" : "#e0e7ff",
+            });
           }
         });
-        if (segmentsD.length > 0) {
-          resPhasePaths.push({ d: segmentsD.join(" "), phase: phase.phase, isDashed: phase.phase >= 2 });
-        }
       });
-    } else if (polyFillD) {
-      resPhasePaths.push({ d: polyFillD, phase: 1, isDashed: false });
     }
 
-    // Right-Angle Markers (Perpendicular feet)
+    // 3. Right-Angle Markers (Perpendicular feet & right angles)
     const rightAngles: string[] = [];
+    const perpList: PerpendicularMark[] = [];
+    if (visualizationGraph?.perpendicular_marks && visualizationGraph.perpendicular_marks.length > 0) {
+      perpList.push(...visualizationGraph.perpendicular_marks);
+    }
     const auxList = auxiliary || visualizationGraph?.auxiliary || [];
-    const markerSize = Math.max(sX * 0.035, 8);
-
     auxList.forEach((aux) => {
-      aux.perpendicular_marks?.forEach((mark) => {
-        const vPt = parsedPoints.find((p) => p.label === mark.vertex);
-        const p1Pt = parsedPoints.find((p) => p.label === mark.lines[0]);
-        const p2Pt = parsedPoints.find((p) => p.label === mark.lines[1]);
-        if (vPt && p1Pt && p2Pt) {
-          const pathD = computeRightAnglePath2D(vPt, p1Pt, p2Pt, markerSize);
-          if (pathD) rightAngles.push(pathD);
+      if (aux.perpendicular_marks && aux.perpendicular_marks.length > 0) {
+        perpList.push(...aux.perpendicular_marks);
+      }
+    });
+
+    perpList.forEach((mark) => {
+      const vPt = parsedPoints.find((p) => p.label === mark.vertex);
+      const p1Pt = parsedPoints.find((p) => p.label === mark.lines[0]);
+      const p2Pt = parsedPoints.find((p) => p.label === mark.lines[1]);
+      if (vPt && p1Pt && p2Pt) {
+        const pathD = computeRightAnglePath2D(vPt, p1Pt, p2Pt, markerSize);
+        if (pathD) rightAngles.push(pathD);
+      }
+    });
+
+    // 4. Angle Arcs (Non-right angles)
+    const arcs: Array<{ path: string; labelX: number; labelY: number; label: string }> = [];
+    const angleList: AngleMark[] = [];
+    if (visualizationGraph?.angle_marks && visualizationGraph.angle_marks.length > 0) {
+      angleList.push(...visualizationGraph.angle_marks);
+    }
+    auxList.forEach((aux) => {
+      if (aux.angle_marks && aux.angle_marks.length > 0) {
+        angleList.push(...aux.angle_marks);
+      }
+    });
+
+    angleList.forEach((mark) => {
+      const vPt = parsedPoints.find((p) => p.label === mark.vertex);
+      const p1Pt = parsedPoints.find((p) => p.label === mark.lines[0]);
+      const p2Pt = parsedPoints.find((p) => p.label === mark.lines[1]);
+      if (vPt && p1Pt && p2Pt) {
+        const res = computeAngleArc2D(vPt, p1Pt, p2Pt, markerSize * 1.5);
+        if (res.path) {
+          arcs.push({
+            path: res.path,
+            labelX: res.labelX,
+            labelY: res.labelY,
+            label: mark.label || `${mark.degrees || ""}`,
+          });
+        }
+      }
+    });
+
+    // 5. Equal Length Ticks
+    const equalTickSegs: Array<{ x1: number; y1: number; x2: number; y2: number }> = [];
+    const tickList: EqualTickMark[] = [];
+    if (visualizationGraph?.equal_ticks && visualizationGraph.equal_ticks.length > 0) {
+      tickList.push(...visualizationGraph.equal_ticks);
+    }
+    auxList.forEach((aux) => {
+      if (aux.equal_ticks && aux.equal_ticks.length > 0) {
+        tickList.push(...aux.equal_ticks);
+      }
+    });
+
+    tickList.forEach((item) => {
+      const p1Pt = parsedPoints.find((p) => p.label === item.segment[0]);
+      const p2Pt = parsedPoints.find((p) => p.label === item.segment[1]);
+      if (p1Pt && p2Pt) {
+        const segs = computeEqualTickSegments2D(p1Pt, p2Pt, item.ticks || 1, markerSize * 0.6);
+        equalTickSegs.push(...segs);
+      }
+    });
+
+    // 6. Parallel Arrows
+    const parallelPaths: string[] = [];
+    const parList: ParallelMark[] = [];
+    if (visualizationGraph?.parallel_marks && visualizationGraph.parallel_marks.length > 0) {
+      parList.push(...visualizationGraph.parallel_marks);
+    }
+    auxList.forEach((aux) => {
+      if (aux.parallel_marks && aux.parallel_marks.length > 0) {
+        parList.push(...aux.parallel_marks);
+      }
+    });
+
+    parList.forEach((item) => {
+      item.segments?.forEach(([p1Label, p2Label]) => {
+        const p1Pt = parsedPoints.find((p) => p.label === p1Label);
+        const p2Pt = parsedPoints.find((p) => p.label === p2Label);
+        if (p1Pt && p2Pt) {
+          const arrowD = computeParallelArrow2D(p1Pt, p2Pt, markerSize * 0.7);
+          if (arrowD) parallelPaths.push(arrowD);
         }
       });
     });
 
-    // Infinite Lines
+    // 7. Infinite Lines
     const resLinePaths: string[] = [];
     (lines || []).forEach(([p1, p2]) => {
       const pt1 = parsedPoints.find((p) => p.label === p1);
@@ -189,7 +325,7 @@ export default function StaticGeometryCanvas({
       }
     });
 
-    // Rays
+    // 8. Rays
     const resRayPaths: string[] = [];
     (rays || []).forEach(([p1, p2]) => {
       const pt1 = parsedPoints.find((p) => p.label === p1);
@@ -204,15 +340,18 @@ export default function StaticGeometryCanvas({
     return {
       viewBox: vb,
       points: parsedPoints,
+      faceFills: allFaces,
       phasePaths: resPhasePaths,
-      polygonFillPath: polyFillD,
       rightAnglePaths: rightAngles,
+      angleArcs: arcs,
+      equalTicks: equalTickSegs,
+      parallelArrows: parallelPaths,
       circlePaths: circleParsed,
       linePaths: resLinePaths,
       rayPaths: resRayPaths,
       spanX: sX,
     };
-  }, [coordinates, polygonOrder, circles, lines, rays, drawingPhases, visualizationGraph, auxiliary]);
+  }, [coordinates, polygonOrder, faces, circles, lines, rays, drawingPhases, visualizationGraph, auxiliary]);
 
   const handleWheel = (e: React.WheelEvent) => {
     if (e.ctrlKey || e.metaKey) {
@@ -272,8 +411,8 @@ export default function StaticGeometryCanvas({
     );
   }
 
-  const r = Math.max(spanX * 0.014, 2.5);
-  const fontSize = Math.max(spanX * 0.038, 7.5);
+  const r = spanX * 0.016;
+  const fontSize = spanX * 0.045;
 
   return (
     <div
@@ -289,7 +428,33 @@ export default function StaticGeometryCanvas({
       <div className="absolute inset-0 bg-grid-pattern opacity-60 pointer-events-none" />
 
       {/* Floating HUD Controls */}
-      <div className="absolute top-3 right-3 flex flex-col gap-1.5 z-20">
+      <div className="absolute top-3 right-3 flex items-center gap-1.5 z-20">
+        <button
+          type="button"
+          onClick={() => setShowFaces((s) => !s)}
+          className={`p-2 border rounded-xl backdrop-blur-md shadow-sm active:scale-95 transition-all text-xs ${
+            showFaces
+              ? "bg-[var(--panel-glass)] text-zinc-200 hover:text-white border-[var(--border)]"
+              : "bg-zinc-800/80 text-zinc-500 border-zinc-700"
+          }`}
+          title={showFaces ? "Ẩn bề mặt mờ đa diện" : "Hiện bề mặt mờ đa diện"}
+        >
+          <Eye className="w-3.5 h-3.5" />
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setShowAuxiliary((s) => !s)}
+          className={`p-2 border rounded-xl backdrop-blur-md shadow-sm active:scale-95 transition-all text-xs ${
+            showAuxiliary
+              ? "bg-[var(--panel-glass)] text-zinc-200 hover:text-white border-[var(--border)]"
+              : "bg-zinc-800/80 text-zinc-500 border-zinc-700"
+          }`}
+          title={showAuxiliary ? "Ẩn ký hiệu phụ & góc" : "Hiện ký hiệu phụ & góc"}
+        >
+          <Layers className="w-3.5 h-3.5" />
+        </button>
+
         <button
           type="button"
           onClick={() => setScale((s) => Math.min(s * 1.25, 6))}
@@ -298,6 +463,7 @@ export default function StaticGeometryCanvas({
         >
           <ZoomIn className="w-3.5 h-3.5" />
         </button>
+
         <button
           type="button"
           onClick={() => setScale((s) => Math.max(s / 1.25, 0.4))}
@@ -306,6 +472,7 @@ export default function StaticGeometryCanvas({
         >
           <ZoomOut className="w-3.5 h-3.5" />
         </button>
+
         <button
           type="button"
           onClick={resetView}
@@ -317,7 +484,7 @@ export default function StaticGeometryCanvas({
       </div>
 
       {/* Mode Badge Header */}
-      <div className="absolute top-3 left-3 z-20">
+      <div className="absolute top-3 left-3 z-20 pointer-events-none">
         <div className="flex items-center gap-2 px-3 py-1 bg-[var(--panel-glass)] border border-[var(--border)] rounded-full backdrop-blur-md shadow-sm">
           <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
           <span className="text-[10px] font-mono font-semibold text-[var(--text-secondary)] uppercase tracking-wider">
@@ -332,6 +499,17 @@ export default function StaticGeometryCanvas({
         className="w-full h-full"
         preserveAspectRatio="xMidYMid meet"
       >
+        <defs>
+          <linearGradient id="baseFaceGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#4f46e5" stopOpacity="0.18" />
+            <stop offset="100%" stopColor="#6366f1" stopOpacity="0.08" />
+          </linearGradient>
+          <linearGradient id="lateralFaceGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#38bdf8" stopOpacity="0.14" />
+            <stop offset="100%" stopColor="#818cf8" stopOpacity="0.06" />
+          </linearGradient>
+        </defs>
+
         <motion.g
           animate={{
             scale,
@@ -345,24 +523,28 @@ export default function StaticGeometryCanvas({
           }
           style={{ originX: "center", originY: "center" }}
         >
-          {/* 1. Subtle Polygon Face Fill */}
-          {polygonFillPath && (
-            <path
-              d={polygonFillPath}
-              fill="rgba(99, 102, 241, 0.12)"
-              stroke="none"
-            />
-          )}
+          {/* 1. Translucent Face Fills with Layered Depth */}
+          {showFaces &&
+            faceFills.map((f, idx) => (
+              <path
+                key={`face-fill-${idx}`}
+                d={f.d}
+                fill={f.role === "base_face" ? "url(#baseFaceGrad)" : "url(#lateralFaceGrad)"}
+                stroke="rgba(99, 102, 241, 0.25)"
+                strokeWidth="1"
+                vectorEffect="non-scaling-stroke"
+              />
+            ))}
 
-          {/* 2. Phase Drawing Segments */}
+          {/* 2. Edges with Solid vs Dashed Classification */}
           {phasePaths.map((p, idx) => (
             <path
               key={`phase-${idx}`}
               d={p.d}
               fill="none"
-              stroke={p.isDashed ? "rgba(192, 132, 252, 0.9)" : "rgba(129, 140, 248, 0.95)"}
-              strokeWidth={p.isDashed ? "1.6" : "2.2"}
-              strokeDasharray={p.isDashed ? "4 3" : "none"}
+              stroke={p.strokeColor}
+              strokeWidth={p.isDashed ? "1.8" : "2.2"}
+              strokeDasharray={p.isDashed ? "6 4" : "none"}
               vectorEffect="non-scaling-stroke"
               strokeLinejoin="round"
               strokeLinecap="round"
@@ -370,19 +552,78 @@ export default function StaticGeometryCanvas({
           ))}
 
           {/* 3. Perpendicular Right-Angle Markers */}
-          {rightAnglePaths.map((d, i) => (
-            <path
-              key={`right-angle-${i}`}
-              d={d}
-              fill="none"
-              stroke="#f59e0b"
-              strokeWidth="1.6"
-              vectorEffect="non-scaling-stroke"
-              strokeLinejoin="miter"
-            />
-          ))}
+          {showAuxiliary &&
+            rightAnglePaths.map((d, i) => (
+              <path
+                key={`right-angle-${i}`}
+                d={d}
+                fill="none"
+                stroke="#f59e0b"
+                strokeWidth="1.6"
+                vectorEffect="non-scaling-stroke"
+                strokeLinejoin="miter"
+              />
+            ))}
 
-          {/* 4. Infinite Lines */}
+          {/* 4. Angle Arcs and Text Labels */}
+          {showAuxiliary &&
+            angleArcs.map((arc, i) => (
+              <g key={`angle-arc-${i}`}>
+                <path
+                  d={arc.path}
+                  fill="none"
+                  stroke="#38bdf8"
+                  strokeWidth="1.4"
+                  vectorEffect="non-scaling-stroke"
+                />
+                {arc.label && (
+                  <text
+                    x={arc.labelX}
+                    y={arc.labelY}
+                    fill="#38bdf8"
+                    fontSize={fontSize * 0.8}
+                    fontFamily="var(--font-geist-mono), monospace"
+                    fontWeight="600"
+                    textAnchor="middle"
+                    dominantBaseline="central"
+                    className="pointer-events-none select-none drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]"
+                  >
+                    {arc.label}
+                  </text>
+                )}
+              </g>
+            ))}
+
+          {/* 5. Equal Length Tick Marks */}
+          {showAuxiliary &&
+            equalTicks.map((seg, i) => (
+              <line
+                key={`equal-tick-${i}`}
+                x1={seg.x1}
+                y1={seg.y1}
+                x2={seg.x2}
+                y2={seg.y2}
+                stroke="#38bdf8"
+                strokeWidth="1.6"
+                vectorEffect="non-scaling-stroke"
+              />
+            ))}
+
+          {/* 6. Parallel Arrow Markers */}
+          {showAuxiliary &&
+            parallelArrows.map((d, i) => (
+              <path
+                key={`par-arrow-${i}`}
+                d={d}
+                fill="none"
+                stroke="#a78bfa"
+                strokeWidth="1.5"
+                vectorEffect="non-scaling-stroke"
+                strokeLinejoin="round"
+              />
+            ))}
+
+          {/* 7. Infinite Lines */}
           {linePaths.map((d, i) => (
             <path
               key={`line-${i}`}
@@ -395,7 +636,7 @@ export default function StaticGeometryCanvas({
             />
           ))}
 
-          {/* 5. Rays */}
+          {/* 8. Rays */}
           {rayPaths.map((d, i) => (
             <path
               key={`ray-${i}`}
@@ -408,7 +649,7 @@ export default function StaticGeometryCanvas({
             />
           ))}
 
-          {/* 6. Circles */}
+          {/* 9. Circles */}
           {circlePaths.map((c, i) => (
             <circle
               key={`circle-${i}`}
@@ -423,22 +664,22 @@ export default function StaticGeometryCanvas({
             />
           ))}
 
-          {/* 7. Vertex Points and Labels */}
+          {/* 10. Vertex Points and Labels */}
           {points.map((p) => (
             <g key={p.label}>
               <circle
                 cx={p.x}
                 cy={p.y}
-                r={p.isAuxiliary ? r * 0.9 : r}
-                fill={p.isAuxiliary ? "#fbbf24" : "#ffffff"}
-                stroke={p.isAuxiliary ? "#d97706" : "#6366f1"}
+                r={p.isApex ? r * 1.15 : p.isAuxiliary ? r * 0.9 : r}
+                fill={p.isApex ? "#818cf8" : p.isAuxiliary ? "#fbbf24" : "#ffffff"}
+                stroke={p.isApex ? "#4338ca" : p.isAuxiliary ? "#d97706" : "#6366f1"}
                 strokeWidth="1.5"
                 vectorEffect="non-scaling-stroke"
               />
               <text
                 x={p.x + r * 1.8}
                 y={p.y - r * 1.8}
-                fill={p.isAuxiliary ? "#fef08a" : "#ffffff"}
+                fill={p.isApex ? "#c7d2fe" : p.isAuxiliary ? "#fef08a" : "#ffffff"}
                 fontSize={fontSize}
                 fontFamily="var(--font-geist-mono), monospace"
                 fontWeight="700"

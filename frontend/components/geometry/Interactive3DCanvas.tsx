@@ -4,9 +4,20 @@ import React, { useMemo, useState } from "react";
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls, Stars, Grid, Html, PerspectiveCamera, Center } from "@react-three/drei";
 import * as THREE from "three";
-import { RotateCcw, Eye } from "lucide-react";
-import type { VisualizationGraph, VisAuxiliaryConstruction, DrawingPhase } from "@/types/geometry";
-import { triangulate3DPolygon, computeRightAngleSegments3D } from "@/lib/geometry-display";
+import { RotateCcw, Eye, Layers, Compass } from "lucide-react";
+import type {
+  VisualizationGraph,
+  VisAuxiliaryConstruction,
+  DrawingPhase,
+  PerpendicularMark,
+  AngleMark,
+  EqualTickMark,
+} from "@/types/geometry";
+import {
+  triangulate3DPolygon,
+  computeRightAngleSegments3D,
+  computeEqualTickSegments3D,
+} from "@/lib/geometry-display";
 
 interface SolidMeta {
   type: string;
@@ -49,25 +60,27 @@ function toTuple3(coords: [number, number, number] | [number, number] | number[]
 }
 
 /**
- * 3D Vertex Point with billboarded label
+ * 3D Vertex Point with billboarded label badge
  */
 function Point3D({
   position,
   label,
   role = "vertex",
   kind = "PRIMARY",
+  showLabel = true,
 }: {
   position: [number, number, number];
   label: string;
   role?: string;
   kind?: string;
+  showLabel?: boolean;
 }) {
   const isAuxiliary = kind === "AUXILIARY" || role === "foot" || role === "midpoint" || role === "center";
   const isApex = role === "apex";
 
   const pointColor = isApex ? "#818cf8" : isAuxiliary ? "#fbbf24" : "#ffffff";
   const emissiveColor = isApex ? "#6366f1" : isAuxiliary ? "#f59e0b" : "#818cf8";
-  const sphereRadius = isApex ? 0.09 : isAuxiliary ? 0.075 : 0.08;
+  const sphereRadius = isApex ? 0.095 : isAuxiliary ? 0.075 : 0.08;
 
   return (
     <group position={position}>
@@ -76,33 +89,35 @@ function Point3D({
         <meshStandardMaterial
           color={pointColor}
           emissive={emissiveColor}
-          emissiveIntensity={0.65}
+          emissiveIntensity={0.7}
           roughness={0.2}
         />
       </mesh>
-      <Html distanceFactor={13} zIndexRange={[100, 0]}>
-        <div className="select-none pointer-events-none -translate-x-1/2 -translate-y-6">
-          <span
-            className={`px-1.5 py-0.5 rounded-md text-[10px] font-mono font-bold whitespace-nowrap shadow-xl border backdrop-blur-md ${
-              isAuxiliary
-                ? "bg-amber-950/80 text-amber-300 border-amber-500/30"
-                : isApex
-                ? "bg-indigo-950/80 text-indigo-300 border-indigo-500/30"
-                : "bg-black/75 text-white border-white/20"
-            }`}
-          >
-            {label}
-          </span>
-        </div>
-      </Html>
+      {showLabel && (
+        <Html distanceFactor={13} zIndexRange={[100, 0]}>
+          <div className="select-none pointer-events-none -translate-x-1/2 -translate-y-6">
+            <span
+              className={`px-1.5 py-0.5 rounded-md text-[10px] font-mono font-bold whitespace-nowrap shadow-xl border backdrop-blur-md transition-all ${
+                isAuxiliary
+                  ? "bg-amber-950/85 text-amber-300 border-amber-500/30"
+                  : isApex
+                  ? "bg-indigo-950/85 text-indigo-300 border-indigo-500/30"
+                  : "bg-black/80 text-white border-white/20"
+              }`}
+            >
+              {label}
+            </span>
+          </div>
+        </Html>
+      )}
     </group>
   );
 }
 
 /**
  * Single 3D Edge with Dynamic Hidden-Line Rendering
- * - When in front/unoccluded: Renders solid (LessEqualDepth)
- * - When occluded behind semi-transparent faces: Renders dashed (GreaterDepth)
+ * - Unoccluded (in front): Renders crisp solid (LessEqualDepth)
+ * - Occluded (behind translucent faces): Renders dimmed dashed (GreaterDepth)
  */
 function DualDepthEdge({
   start,
@@ -122,12 +137,32 @@ function DualDepthEdge({
     return geo;
   }, [start, end]);
 
-  // Color mapping based on visual hierarchy
+  // Color mapping based on visual role hierarchy
   const isAltitude = role === "altitude" || role === "height";
-  const solidColor = isAltitude ? "#c084fc" : isAuxiliary ? "#a78bfa" : "#e0e7ff";
-  const dashedColor = isAltitude ? "#9333ea" : isAuxiliary ? "#818cf8" : "#818cf8";
+  const isProjection = role === "projection" || role === "foot";
+  const isDiagonal = role === "diagonal";
 
-  // If forceDashed (e.g. interior altitude or diagonals inside the solid base), render purely dashed
+  const solidColor = isAltitude
+    ? "#c084fc"
+    : isProjection
+    ? "#fbbf24"
+    : isDiagonal
+    ? "#93c5fd"
+    : isAuxiliary
+    ? "#a78bfa"
+    : "#f1f5f9";
+
+  const dashedColor = isAltitude
+    ? "#9333ea"
+    : isProjection
+    ? "#d97706"
+    : isDiagonal
+    ? "#60a5fa"
+    : isAuxiliary
+    ? "#818cf8"
+    : "#818cf8";
+
+  // Force dashed mode (e.g. interior altitudes or rear base edges)
   if (forceDashed) {
     return (
       <primitive
@@ -137,7 +172,7 @@ function DualDepthEdge({
             new THREE.LineDashedMaterial({
               color: dashedColor,
               dashSize: 0.22,
-              gapSize: 0.14,
+              gapSize: 0.13,
               transparent: true,
               opacity: 0.85,
               depthTest: true,
@@ -154,17 +189,17 @@ function DualDepthEdge({
 
   return (
     <group>
-      {/* Pass 1: Hidden part (behind faces) -> Renders DASHED */}
+      {/* Pass 1: Hidden part (behind faces) -> Renders DASHED with Dimmed Opacity */}
       <primitive
         object={
           new THREE.Line(
             lineGeo,
             new THREE.LineDashedMaterial({
               color: dashedColor,
-              dashSize: 0.24,
-              gapSize: 0.15,
+              dashSize: 0.22,
+              gapSize: 0.14,
               transparent: true,
-              opacity: 0.65,
+              opacity: 0.55,
               depthTest: true,
               depthFunc: THREE.GreaterDepth,
               depthWrite: false,
@@ -176,7 +211,7 @@ function DualDepthEdge({
         }}
       />
 
-      {/* Pass 2: Visible part (in front of faces) -> Renders SOLID */}
+      {/* Pass 2: Visible part (in front of faces) -> Renders SOLID with High Brightness */}
       <primitive
         object={
           new THREE.Line(
@@ -197,20 +232,22 @@ function DualDepthEdge({
 }
 
 /**
- * 3D Semi-transparent Solid Polygonal Faces
- * Rendered with polygonOffset and depthWrite: true to act as geometric occluders for hidden lines.
+ * 3D Translucent Solid Polygonal Faces with Layered Opacity Accumulation
+ * Two-pass rendering:
+ * 1. Occluder pass: writes to depth buffer for dynamic line occlusion
+ * 2. Translucent color pass: DoubleSide frosted glass with natural opacity layering
  */
 function SolidFaces3D({
   faces,
   coordinates,
-  opacity = 0.18,
+  opacity = 0.2,
 }: {
   faces: string[][];
   coordinates: Record<string, [number, number, number] | [number, number] | number[]>;
   opacity?: number;
 }) {
   const { faceGeometries, boundaryLines } = useMemo(() => {
-    const geos: THREE.BufferGeometry[] = [];
+    const geos: Array<{ geo: THREE.BufferGeometry; isBase: boolean }> = [];
     const bLines: Array<[THREE.Vector3, THREE.Vector3]> = [];
 
     faces.forEach((faceVertices) => {
@@ -227,16 +264,16 @@ function SolidFaces3D({
       });
 
       if (validPoints.length >= 3) {
-        // Triangulate polygonal face (supports quads, triangles, n-gons)
+        const isBase = validPoints.every((p) => Math.abs(p[1]) < 0.05); // Y in Three.js = Height (Z in Math)
         const vertices = triangulate3DPolygon(validPoints);
         if (vertices.length > 0) {
           const geo = new THREE.BufferGeometry();
           geo.setAttribute("position", new THREE.Float32BufferAttribute(vertices, 3));
           geo.computeVertexNormals();
-          geos.push(geo);
+          geos.push({ geo, isBase });
         }
 
-        // Add boundary segments
+        // Add subtle boundary lines
         for (let i = 0; i < validVectors.length; i++) {
           const p1 = validVectors[i];
           const p2 = validVectors[(i + 1) % validVectors.length];
@@ -248,27 +285,42 @@ function SolidFaces3D({
     return { faceGeometries: geos, boundaryLines: bLines };
   }, [faces, coordinates]);
 
+  if (opacity <= 0.001) return null;
+
   return (
     <group>
-      {/* 1. Semi-transparent Faces with Depth Write for Dynamic Hidden-Line Occlusion */}
-      {faceGeometries.map((geo, idx) => (
-        <mesh key={`solid-face-${idx}`} geometry={geo}>
-          <meshStandardMaterial
-            color="#6366f1"
-            transparent
-            opacity={opacity}
-            side={THREE.DoubleSide}
-            roughness={0.4}
-            metalness={0.1}
+      {/* 1. Occluder Pass: Writes to depth buffer with polygonOffset to cleanly occlude hidden lines */}
+      {faceGeometries.map(({ geo }, idx) => (
+        <mesh key={`occluder-face-${idx}`} geometry={geo}>
+          <meshBasicMaterial
+            colorWrite={false}
+            depthWrite={true}
+            side={THREE.FrontSide}
             polygonOffset
             polygonOffsetFactor={1}
             polygonOffsetUnits={1}
-            depthWrite={true}
           />
         </mesh>
       ))}
 
-      {/* 2. Subtle Face Boundary Edges */}
+      {/* 2. Frosted Shading Pass: DoubleSide with soft translucent accumulation */}
+      {faceGeometries.map(({ geo, isBase }, idx) => (
+        <mesh key={`solid-face-${idx}`} geometry={geo}>
+          <meshStandardMaterial
+            color={isBase ? "#4f46e5" : "#6366f1"}
+            emissive={isBase ? "#3730a3" : "#4338ca"}
+            emissiveIntensity={0.15}
+            transparent
+            opacity={isBase ? opacity * 0.9 : opacity}
+            side={THREE.DoubleSide}
+            roughness={0.2}
+            metalness={0.1}
+            depthWrite={false}
+          />
+        </mesh>
+      ))}
+
+      {/* 3. Subtle Face Boundary Wireframe Edges */}
       {boundaryLines.map(([p1, p2], idx) => (
         <DualDepthEdge key={`face-edge-${idx}`} start={p1} end={p2} role="face_boundary" />
       ))}
@@ -277,13 +329,13 @@ function SolidFaces3D({
 }
 
 /**
- * 3D Right-Angle Corner Indicators (Perpendicularity Marker)
+ * 3D Right-Angle L-Bracket Indicators
  */
 function RightAngleMarkers3D({
   perpendicularMarks,
   coordinates,
 }: {
-  perpendicularMarks: Array<{ vertex: string; lines: string[] }>;
+  perpendicularMarks: PerpendicularMark[];
   coordinates: Record<string, [number, number, number] | [number, number] | number[]>;
 }) {
   const markerSegments = useMemo(() => {
@@ -291,7 +343,7 @@ function RightAngleMarkers3D({
 
     perpendicularMarks.forEach((mark) => {
       const vCoords = coordinates[mark.vertex];
-      if (!vCoords || mark.lines.length < 2) return;
+      if (!vCoords || !mark.lines || mark.lines.length < 2) return;
 
       const p1Coords = coordinates[mark.lines[0]];
       const p2Coords = coordinates[mark.lines[1]];
@@ -324,6 +376,62 @@ function RightAngleMarkers3D({
                   color: "#f59e0b",
                   linewidth: 1.5,
                   transparent: true,
+                  opacity: 0.95,
+                  depthTest: true,
+                })
+              )
+            }
+          />
+        );
+      })}
+    </group>
+  );
+}
+
+/**
+ * 3D Equal Length Tick Marks
+ */
+function EqualTicks3D({
+  equalTicks,
+  coordinates,
+}: {
+  equalTicks: EqualTickMark[];
+  coordinates: Record<string, [number, number, number] | [number, number] | number[]>;
+}) {
+  const tickSegments = useMemo(() => {
+    const segs: Array<[THREE.Vector3, THREE.Vector3]> = [];
+
+    equalTicks.forEach((item) => {
+      const [p1Label, p2Label] = item.segment;
+      const c1 = coordinates[p1Label];
+      const c2 = coordinates[p2Label];
+      if (!c1 || !c2) return;
+
+      const p1T = toTuple3(c1);
+      const p2T = toTuple3(c2);
+      const ticks = computeEqualTickSegments3D(p1T, p2T, item.ticks || 1, 0.18);
+      ticks.forEach(([start, end]) => {
+        segs.push([new THREE.Vector3(...start), new THREE.Vector3(...end)]);
+      });
+    });
+
+    return segs;
+  }, [equalTicks, coordinates]);
+
+  return (
+    <group>
+      {tickSegments.map(([start, end], idx) => {
+        const geo = new THREE.BufferGeometry().setFromPoints([start, end]);
+        return (
+          <primitive
+            key={`equal-tick-${idx}`}
+            object={
+              new THREE.Line(
+                geo,
+                new THREE.LineBasicMaterial({
+                  color: "#38bdf8",
+                  linewidth: 1.5,
+                  transparent: true,
                   opacity: 0.9,
                   depthTest: true,
                 })
@@ -337,7 +445,7 @@ function RightAngleMarkers3D({
 }
 
 /**
- * Standard 3D Curved Solids (e.g. Sphere)
+ * Standard 3D Curved Solids (Spheres, etc.)
  */
 function Spheres3D({
   solids,
@@ -360,7 +468,7 @@ function Spheres3D({
                 transparent
                 opacity={0.16}
                 side={THREE.DoubleSide}
-                roughness={0.3}
+                roughness={0.25}
                 depthWrite={true}
               />
             </mesh>
@@ -381,7 +489,11 @@ export default function Interactive3DCanvas({
   auxiliary,
 }: Interactive3DCanvasProps) {
   const [resetKey, setResetKey] = useState(0);
-  const [faceOpacity, setFaceOpacity] = useState(0.18);
+  const [opacityMode, setOpacityMode] = useState<"frosted" | "translucent" | "wireframe">("frosted");
+  const [showAuxiliary, setShowAuxiliary] = useState(true);
+  const [showLabels, setShowLabels] = useState(true);
+
+  const faceOpacity = opacityMode === "frosted" ? 0.2 : opacityMode === "translucent" ? 0.38 : 0.0;
 
   const parsedCoordinates = useMemo(() => {
     return coordinates ?? {};
@@ -459,7 +571,7 @@ export default function Interactive3DCanvas({
     return Array.from(edgeMap.values());
   }, [visualizationGraph, drawingPhases, parsedCoordinates]);
 
-  // Extract faces (from visualization_graph.faces or direct faces prop)
+  // Extract faces
   const effectiveFaces = useMemo(() => {
     if (faces && faces.length > 0) return faces;
     if (visualizationGraph?.faces && Object.keys(visualizationGraph.faces).length > 0) {
@@ -470,17 +582,32 @@ export default function Interactive3DCanvas({
 
   // Extract perpendicular marks
   const perpendicularMarks = useMemo(() => {
-    const marks: Array<{ vertex: string; lines: string[] }> = [];
-
-    // From auxiliary constructions
+    const marks: PerpendicularMark[] = [];
+    if (visualizationGraph?.perpendicular_marks && visualizationGraph.perpendicular_marks.length > 0) {
+      marks.push(...visualizationGraph.perpendicular_marks);
+    }
     const auxList = auxiliary || visualizationGraph?.auxiliary || [];
     auxList.forEach((aux) => {
       if (aux.perpendicular_marks && aux.perpendicular_marks.length > 0) {
         marks.push(...aux.perpendicular_marks);
       }
     });
-
     return marks;
+  }, [auxiliary, visualizationGraph]);
+
+  // Extract equal ticks
+  const equalTicks = useMemo(() => {
+    const ticks: EqualTickMark[] = [];
+    if (visualizationGraph?.equal_ticks && visualizationGraph.equal_ticks.length > 0) {
+      ticks.push(...visualizationGraph.equal_ticks);
+    }
+    const auxList = auxiliary || visualizationGraph?.auxiliary || [];
+    auxList.forEach((aux) => {
+      if (aux.equal_ticks && aux.equal_ticks.length > 0) {
+        ticks.push(...aux.equal_ticks);
+      }
+    });
+    return ticks;
   }, [auxiliary, visualizationGraph]);
 
   if (!coordinates || Object.keys(coordinates).length === 0 || vertices.length === 0) {
@@ -499,11 +626,48 @@ export default function Interactive3DCanvas({
       <div className="absolute top-3 right-3 flex items-center gap-1.5 z-20">
         <button
           type="button"
-          onClick={() => setFaceOpacity((o) => (o > 0.1 ? 0.08 : 0.22))}
-          className="p-2 bg-[var(--panel-glass)] hover:bg-white/10 border border-[var(--border)] rounded-xl text-zinc-300 hover:text-white backdrop-blur-md shadow-sm active:scale-95 transition-all"
-          title="Điều chỉnh độ mờ mặt đa diện"
+          onClick={() =>
+            setOpacityMode((m) => (m === "frosted" ? "translucent" : m === "translucent" ? "wireframe" : "frosted"))
+          }
+          className={`p-2 border rounded-xl backdrop-blur-md shadow-sm active:scale-95 transition-all flex items-center gap-1.5 text-xs font-medium ${
+            opacityMode === "wireframe"
+              ? "bg-zinc-800/80 text-zinc-400 border-zinc-700"
+              : opacityMode === "translucent"
+              ? "bg-indigo-950/80 text-indigo-300 border-indigo-500/40"
+              : "bg-[var(--panel-glass)] text-zinc-200 hover:text-white border-[var(--border)]"
+          }`}
+          title={`Chế độ mặt khối: ${opacityMode === "frosted" ? "Mờ nhẹ" : opacityMode === "translucent" ? "Đậm" : "Khung dây"}`}
         >
           <Eye className="w-3.5 h-3.5" />
+          <span className="text-[10px] hidden sm:inline">
+            {opacityMode === "frosted" ? "Mặt mờ" : opacityMode === "translucent" ? "Mặt đậm" : "Khung dây"}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setShowAuxiliary((s) => !s)}
+          className={`p-2 border rounded-xl backdrop-blur-md shadow-sm active:scale-95 transition-all text-xs ${
+            showAuxiliary
+              ? "bg-[var(--panel-glass)] text-zinc-200 hover:text-white border-[var(--border)]"
+              : "bg-zinc-800/80 text-zinc-500 border-zinc-700"
+          }`}
+          title={showAuxiliary ? "Ẩn đường phụ trợ & góc" : "Hiện đường phụ trợ & góc"}
+        >
+          <Layers className="w-3.5 h-3.5" />
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setShowLabels((s) => !s)}
+          className={`p-2 border rounded-xl backdrop-blur-md shadow-sm active:scale-95 transition-all text-xs ${
+            showLabels
+              ? "bg-[var(--panel-glass)] text-zinc-200 hover:text-white border-[var(--border)]"
+              : "bg-zinc-800/80 text-zinc-500 border-zinc-700"
+          }`}
+          title={showLabels ? "Ẩn nhãn điểm" : "Hiện nhãn điểm"}
+        >
+          <Compass className="w-3.5 h-3.5" />
         </button>
 
         <button
@@ -517,7 +681,7 @@ export default function Interactive3DCanvas({
       </div>
 
       {/* Badge Header */}
-      <div className="absolute top-3 left-3 z-20">
+      <div className="absolute top-3 left-3 z-20 pointer-events-none">
         <div className="flex items-center gap-2 px-3 py-1 bg-[var(--panel-glass)] border border-[var(--border)] rounded-full backdrop-blur-md shadow-sm">
           <div className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse" />
           <span className="text-[10px] font-mono font-semibold text-indigo-300 uppercase tracking-wider">
@@ -554,7 +718,7 @@ export default function Interactive3DCanvas({
 
         <Center top>
           <group>
-            {/* 1. Solid Semi-transparent Faces (Actual closed 3D solids) */}
+            {/* 1. Translucent Solid Faces with Accumulated Shading */}
             {effectiveFaces.length > 0 && (
               <SolidFaces3D
                 faces={effectiveFaces}
@@ -576,19 +740,27 @@ export default function Interactive3DCanvas({
             ))}
 
             {/* 3. Auxiliary Perpendicular Right-Angle Markers */}
-            {perpendicularMarks.length > 0 && (
+            {showAuxiliary && perpendicularMarks.length > 0 && (
               <RightAngleMarkers3D
                 perpendicularMarks={perpendicularMarks}
                 coordinates={parsedCoordinates}
               />
             )}
 
-            {/* 4. Curved Solids (Spheres, etc.) */}
+            {/* 4. Auxiliary Equal Length Ticks */}
+            {showAuxiliary && equalTicks.length > 0 && (
+              <EqualTicks3D
+                equalTicks={equalTicks}
+                coordinates={parsedCoordinates}
+              />
+            )}
+
+            {/* 5. Curved Solids (Spheres, etc.) */}
             {solids && solids.length > 0 && (
               <Spheres3D solids={solids} coordinates={parsedCoordinates} />
             )}
 
-            {/* 5. Vertices and Labels */}
+            {/* 6. Vertices and Labels */}
             {vertices.map((v) => (
               <Point3D
                 key={v.id}
@@ -596,6 +768,7 @@ export default function Interactive3DCanvas({
                 label={v.label}
                 role={v.role}
                 kind={v.kind}
+                showLabel={showLabels}
               />
             ))}
           </group>

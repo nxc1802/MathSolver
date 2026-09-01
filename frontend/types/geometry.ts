@@ -61,6 +61,23 @@ export interface PerpendicularMark {
   lines: string[]; // [line1_pt, line2_pt]
 }
 
+export interface AngleMark {
+  vertex: string;
+  lines: string[]; // [line1_pt, line2_pt]
+  degrees?: number;
+  label?: string;
+}
+
+export interface EqualTickMark {
+  segment: [string, string];
+  ticks: number; // 1, 2, 3
+}
+
+export interface ParallelMark {
+  segments: Array<[string, string]>;
+  arrows: number; // 1, 2
+}
+
 export interface VisAuxiliaryConstruction {
   id: string;
   type: string; // height, foot, median, bisector, diagonal, center, midpoint, section, projection
@@ -69,6 +86,9 @@ export interface VisAuxiliaryConstruction {
   created_vertices?: string[];
   created_edges?: string[];
   perpendicular_marks?: PerpendicularMark[];
+  angle_marks?: AngleMark[];
+  equal_ticks?: EqualTickMark[];
+  parallel_marks?: ParallelMark[];
   tier?: ImportanceTier;
 }
 
@@ -85,6 +105,10 @@ export interface VisualizationGraph {
   faces: Record<string, VisFace>;
   solids: Record<string, VisSolid>;
   auxiliary: VisAuxiliaryConstruction[];
+  perpendicular_marks?: PerpendicularMark[];
+  angle_marks?: AngleMark[];
+  equal_ticks?: EqualTickMark[];
+  parallel_marks?: ParallelMark[];
   drawing_phases: DrawingPhase[];
   is_3d: boolean;
 }

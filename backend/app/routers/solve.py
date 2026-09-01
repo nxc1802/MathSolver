@@ -353,6 +353,8 @@ async def process_session_job(
                     "faces": result.get("faces", []),
                     "lines": result.get("lines", []),
                     "rays": result.get("rays", []),
+                    "visualization_graph": result.get("visualization_graph"),
+                    "auxiliary": result.get("auxiliary", []),
                     "solution": result.get("solution"),
                     "is_3d": result.get("is_3d", False),
                 },
@@ -474,8 +476,12 @@ async def process_render_job(job_id: str, session_id: str, geometry_data: dict):
                         "drawing_phases": geometry_data.get("drawing_phases", []),
                         "circles": geometry_data.get("circles", []),
                         "solids": geometry_data.get("solids", []),
+                        "faces": geometry_data.get("faces", []),
                         "lines": geometry_data.get("lines", []),
                         "rays": geometry_data.get("rays", []),
+                        "visualization_graph": geometry_data.get("visualization_graph"),
+                        "auxiliary": geometry_data.get("auxiliary", []),
+                        "is_3d": geometry_data.get("is_3d", False),
                     },
                 }).execute()
 
