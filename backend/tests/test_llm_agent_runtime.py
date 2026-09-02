@@ -69,7 +69,7 @@ async def test_key_pool_round_robin_and_cooldown():
 
 @pytest.mark.asyncio
 async def test_agent_runtime_validator_cascade():
-    """Simulates Tier 1 (3.7-flash, medium) failing validation and Tier 2 (3.6-flash, low) succeeding validation on geometry_parser."""
+    """Simulates Tier 1 (3.5-flash-lite, low) failing validation and Tier 2 (3.5-flash, medium) succeeding validation on geometry_parser."""
     call_history = []
     reasoning_efforts = []
 
@@ -77,7 +77,7 @@ async def test_agent_runtime_validator_cascade():
         async def acomplete(self, model: str, messages: list, reasoning_effort: str = None, **kwargs) -> str:
             call_history.append(model)
             reasoning_efforts.append(reasoning_effort)
-            if "3.7" in model:
+            if "lite" in model:
                 return "INVALID_OUTPUT_FROM_TIER_1"
             return '{"type": "pyramid", "analysis": "Valid analysis from Tier 2"}'
 
@@ -96,7 +96,7 @@ async def test_agent_runtime_validator_cascade():
     )
 
     assert res["valid"] is True
-    # Verify that Tier 1 (3.7) was attempted with reasoning_effort='medium' and escalated to Tier 2 (3.6) with reasoning_effort='low'
-    assert any("3.7" in m for m in call_history)
-    assert any("3.6" in m for m in call_history)
-    assert reasoning_efforts == ["medium", "low"]
+    # Verify that Tier 1 (lite) was attempted with reasoning_effort='low' and escalated to Tier 2 with reasoning_effort='medium'
+    assert any("lite" in m for m in call_history)
+    assert any("3.5-flash" in m and "lite" not in m for m in call_history)
+    assert reasoning_efforts == ["low", "medium"]

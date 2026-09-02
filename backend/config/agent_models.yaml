@@ -3,7 +3,7 @@ version: 2
 defaults:
   temperature: 0.1
   max_tokens: 8192
-  timeout_seconds: 60
+  timeout_seconds: 120
 
 retry_policy:
   retryable_errors:
@@ -26,13 +26,10 @@ agents:
       - model: gemini/gemini-3.5-flash-lite
         max_attempts: 1
         reasoning_effort: low
-      - model: gemini/gemini-3.5-flash
-        max_attempts: 1
-        reasoning_effort: low
 
     temperature: 0.1
     max_tokens: 4096
-    timeout_seconds: 60
+    timeout_seconds: 120
 
     confidence_gateway:
       enabled: true
@@ -43,7 +40,7 @@ agents:
         model: gemini/gemini-3.5-flash-lite
         temperature: 0.1
         max_tokens: 4096
-        timeout_seconds: 45
+        timeout_seconds: 60
         max_attempts: 1
         reasoning_effort: low
 
@@ -53,21 +50,17 @@ agents:
     description: "Semantic geometry parsing and Geometry DSL generation"
 
     tiers:
-      - model: gemini/gemini-3.7-flash
-        max_attempts: 1
-        reasoning_effort: medium
-
-      - model: gemini/gemini-3.6-flash
+      - model: gemini/gemini-3.5-flash-lite
         max_attempts: 1
         reasoning_effort: low
 
       - model: gemini/gemini-3.5-flash
         max_attempts: 1
-        reasoning_effort: low
+        reasoning_effort: medium
 
     temperature: 0.1
     max_tokens: 16384
-    timeout_seconds: 60
+    timeout_seconds: 120
 
 
   reasoning_solver:
@@ -76,17 +69,9 @@ agents:
 
     tiers:
       - model: gemini/gemini-3.7-flash
-        max_attempts: 1
+        max_attempts: 2
         reasoning_effort: high
-
-      - model: gemini/gemini-3.6-flash
-        max_attempts: 1
-        reasoning_effort: medium
-
-      - model: gemini/gemini-3.5-flash
-        max_attempts: 1
-        reasoning_effort: low
 
     temperature: 0.1
     max_tokens: 16384
-    timeout_seconds: 60
+    timeout_seconds: 120
