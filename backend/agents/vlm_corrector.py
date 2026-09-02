@@ -104,6 +104,14 @@ If no corrections are needed, set "changed": false and return the original text.
         user_content_parts = []
 
         # Add image content for multimodal input
+        if image_path and not image_url and os.path.exists(image_path):
+            import base64
+            with open(image_path, "rb") as f:
+                b64 = base64.b64encode(f.read()).decode("utf-8")
+                ext = os.path.splitext(image_path)[1].lstrip(".").lower()
+                mime = "image/jpeg" if ext in ("jpg", "jpeg") else ("image/webp" if ext == "webp" else "image/png")
+                image_url = f"data:{mime};base64,{b64}"
+
         if image_url:
             user_content_parts.append({
                 "type": "image_url",
