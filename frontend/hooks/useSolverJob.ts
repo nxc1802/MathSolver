@@ -308,25 +308,40 @@ export function useSolverJob(sessionId: string, token?: string | null) {
   const attachToSolverJob = useCallback((jobId: string) => {
     cleanupSolver();
     solverTerminalRef.current = false;
-    setJob({ phase: 'solving', progress: 20, message: 'Đang kết nối...', jobId });
+    setJob({ phase: 'solving', progress: 20, message: 'Đang xử lý bài toán...', jobId });
     saveActiveJob(sessionId, jobId);
+
+    // Always start HTTP polling alongside WebSocket as a robust fallback
+    startSolverPolling(jobId);
 
     try {
       const ws = new WebSocket(`${getWsBaseUrl()}/ws/${jobId}`);
       solverSocketRef.current = ws;
 
+      let pingInterval: NodeJS.Timeout | null = null;
+      ws.onopen = () => {
+        pingInterval = setInterval(() => {
+          if (ws.readyState === WebSocket.OPEN) {
+            try { ws.send("ping"); } catch { /* ignore */ }
+          }
+        }, 5000);
+      };
+
       ws.onmessage = (event) => {
         try {
+          if (event.data === "pong") return;
           const data = JSON.parse(event.data);
           updateSolverJobState(data);
         } catch { /* ignore */ }
       };
 
       ws.onerror = () => {
+        if (pingInterval) clearInterval(pingInterval);
         startSolverPolling(jobId);
       };
 
       ws.onclose = () => {
+        if (pingInterval) clearInterval(pingInterval);
         if (solverTerminalRef.current) return;
         if (solverSocketRef.current !== null && solverSocketRef.current !== ws) return;
         startSolverPolling(jobId);
@@ -343,27 +358,42 @@ export function useSolverJob(sessionId: string, token?: string | null) {
       ...prev,
       status: 'connecting',
       progress: 20,
-      message: 'Đang kết nối với Animation Server...',
+      message: 'Đang tạo video animation...',
       jobId,
       error: null,
     }));
+
+    // Always start HTTP polling alongside WebSocket as a robust fallback
+    startVideoPolling(jobId);
 
     try {
       const ws = new WebSocket(`${getWsBaseUrl()}/ws/${jobId}`);
       videoSocketRef.current = ws;
 
+      let pingInterval: NodeJS.Timeout | null = null;
+      ws.onopen = () => {
+        pingInterval = setInterval(() => {
+          if (ws.readyState === WebSocket.OPEN) {
+            try { ws.send("ping"); } catch { /* ignore */ }
+          }
+        }, 5000);
+      };
+
       ws.onmessage = (event) => {
         try {
+          if (event.data === "pong") return;
           const data = JSON.parse(event.data);
           updateVideoJobState(data);
         } catch { /* ignore */ }
       };
 
       ws.onerror = () => {
+        if (pingInterval) clearInterval(pingInterval);
         startVideoPolling(jobId);
       };
 
       ws.onclose = () => {
+        if (pingInterval) clearInterval(pingInterval);
         if (videoTerminalRef.current) return;
         if (videoSocketRef.current !== null && videoSocketRef.current !== ws) return;
         startVideoPolling(jobId);

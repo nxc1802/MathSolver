@@ -37,10 +37,24 @@ def register_websocket_routes(app) -> None:
         if job_id not in active_connections:
             active_connections[job_id] = []
         active_connections[job_id].append(websocket)
+
+        # Send immediate ACK so client immediately transitions from 'connecting' to 'processing'
+        try:
+            await websocket.send_json({
+                "status": "processing",
+                "job_id": job_id,
+                "message": "Đang xử lý bài toán..."
+            })
+        except Exception:
+            pass
+
         try:
             while True:
-                await websocket.receive_text()
+                msg = await websocket.receive_text()
+                if msg == "ping":
+                    await websocket.send_text("pong")
         except WebSocketDisconnect:
-            active_connections[job_id].remove(websocket)
-            if not active_connections[job_id]:
-                del active_connections[job_id]
+            if job_id in active_connections and websocket in active_connections[job_id]:
+                active_connections[job_id].remove(websocket)
+                if not active_connections[job_id]:
+                    del active_connections[job_id]
