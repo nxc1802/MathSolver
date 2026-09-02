@@ -68,11 +68,16 @@ agents:
     description: "Program-aided mathematical reasoning with SymPy verification"
 
     tiers:
+      - model: gemini/gemini-3.6-flash
+        max_attempts: 1
+        reasoning_effort: high
+
       - model: gemini/gemini-3.7-flash
-        max_attempts: 2
+        max_attempts: 1
         reasoning_effort: high
 
     temperature: 0.1
     max_tokens: 16384
-    timeout_seconds: 300
+    timeout_seconds: 120
+
 
