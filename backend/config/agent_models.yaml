@@ -69,6 +69,9 @@ agents:
 
     tiers:
       - model: gemini/gemini-3.7-flash
+        max_attempts: 1
+        reasoning_effort: medium
+      - model: gemini/gemini-3.7-flash
         max_attempts: 2
         reasoning_effort: high
 
