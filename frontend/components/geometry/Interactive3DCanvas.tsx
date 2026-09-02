@@ -10,7 +10,6 @@ import type {
   VisAuxiliaryConstruction,
   DrawingPhase,
   PerpendicularMark,
-  AngleMark,
   EqualTickMark,
 } from "@/types/geometry";
 import {

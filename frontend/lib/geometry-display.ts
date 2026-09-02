@@ -221,8 +221,8 @@ export function computeAngleArc2D(
 
   if (len1 < 1e-4 || len2 < 1e-4) return { path: "", labelX: v.x, labelY: v.y };
 
-  let angle1 = Math.atan2(dy1, dx1);
-  let angle2 = Math.atan2(dy2, dx2);
+  const angle1 = Math.atan2(dy1, dx1);
+  const angle2 = Math.atan2(dy2, dx2);
 
   let diff = angle2 - angle1;
   while (diff < -Math.PI) diff += Math.PI * 2;

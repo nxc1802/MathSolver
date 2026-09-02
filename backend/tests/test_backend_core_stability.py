@@ -5,14 +5,13 @@ from fastapi import HTTPException
 
 from app.chat_image_upload import cleanup_session_storage, validate_chat_image_bytes
 from app.session_cache import (
-    _session_owner,
     invalidate_session_owner,
     session_owned_by_user,
 )
 from app.websocket_manager import active_connections, notify_status
 
 
-def test_session_owner_cache():
+def test_session_owner_authoritative_check():
     user_id = str(uuid.uuid4())
     session_id = str(uuid.uuid4())
     fetch_count = 0
@@ -25,14 +24,10 @@ def test_session_owner_cache():
     assert session_owned_by_user(session_id, user_id, mock_owns) is True
     assert fetch_count == 1
 
-    # Hit
-    assert session_owned_by_user(session_id, user_id, mock_owns) is True
-    assert fetch_count == 1
-
-    # Invalidate
     invalidate_session_owner(session_id, user_id)
     assert session_owned_by_user(session_id, user_id, mock_owns) is True
     assert fetch_count == 2
+
 
 
 def test_chat_image_validation_magic_bytes():

@@ -56,6 +56,15 @@ def _assert_session_owner(supabase, session_id: str, user_id, uid: str, op: str)
         )
 
 
+from app.celery_app import is_celery_available
+from app.tasks import (
+    async_solve_session_job,
+    async_render_video_job,
+    solve_session_job_task,
+    render_video_job_task,
+)
+
+
 def _enqueue_solve_common(
     supabase,
     background_tasks: BackgroundTasks,
@@ -66,7 +75,7 @@ def _enqueue_solve_common(
     message_metadata: dict,
     job_id: str,
 ) -> SolveResponse:
-    """Insert user message, job row, enqueue pipeline; update title when first message."""
+    """Insert user message, job row, enqueue pipeline via Celery/BackgroundWorker; update title when first message."""
     client_msg_id = getattr(request, "client_message_id", None)
     if client_msg_id:
         message_metadata["client_message_id"] = client_msg_id
@@ -114,12 +123,41 @@ def _enqueue_solve_common(
             "user_id": user_id,
             "session_id": session_id,
             "status": "processing",
+            "stage": "ocr" if request.image_url else "parsing",
+            "progress": 15 if request.image_url else 35,
             "input_text": request.text,
         }
     ).execute()
     log_step("db_insert", table="jobs", job_id=job_id)
 
-    background_tasks.add_task(process_session_job, job_id, session_id, request, str(user_id))
+    # Dispatch to Celery queue if available; otherwise use Async Background Tasks
+    if is_celery_available():
+        try:
+            solve_session_job_task.delay(
+                job_id, session_id, request.text, request.image_url, str(user_id), client_msg_id
+            )
+            log_step("celery_dispatch", task="solve_session_job", job_id=job_id)
+        except Exception as e:
+            logger.warning("Celery dispatch failed (%s), falling back to BackgroundTasks", e)
+            background_tasks.add_task(
+                async_solve_session_job,
+                job_id,
+                session_id,
+                request.text,
+                request.image_url,
+                str(user_id),
+                client_msg_id,
+            )
+    else:
+        background_tasks.add_task(
+            async_solve_session_job,
+            job_id,
+            session_id,
+            request.text,
+            request.image_url,
+            str(user_id),
+            client_msg_id,
+        )
 
     title_check = supabase.table("sessions").select("title").eq("id", session_id).execute()
     if title_check.data and title_check.data[0]["title"] == "Bài toán mới":
@@ -129,6 +167,7 @@ def _enqueue_solve_common(
 
     log_pipeline_success("solve_accepted", job_id=job_id, session_id=session_id)
     return SolveResponse(job_id=job_id, status="processing")
+
 
 
 @router.post("/{session_id}/ocr_preview", response_model=OcrPreviewResponse)
@@ -318,11 +357,21 @@ async def render_video(
         "user_id": user_id,
         "session_id": session_id,
         "status": "rendering_queued",
+        "stage": "rendering",
+        "progress": 10,
         "input_text": f"Render video requested at {job_id}",
     }).execute()
 
-    # 4. Dispatch background task
-    background_tasks.add_task(process_render_job, job_id, session_id, latest_geometry)
+    # 4. Dispatch Celery task or async background task
+    if is_celery_available():
+        try:
+            render_video_job_task.delay(job_id, session_id, latest_geometry)
+            log_step("celery_dispatch", task="render_video_job", job_id=job_id)
+        except Exception as e:
+            logger.warning("Celery dispatch failed (%s), falling back to BackgroundTasks", e)
+            background_tasks.add_task(async_render_video_job, job_id, session_id, latest_geometry)
+    else:
+        background_tasks.add_task(async_render_video_job, job_id, session_id, latest_geometry)
     
     return RenderVideoResponse(job_id=job_id, status="rendering_queued")
 
@@ -330,217 +379,19 @@ async def render_video(
 async def process_session_job(
     job_id: str, session_id: str, request: SolveRequest, user_id: str
 ):
-    """Tiến trình giải toán ngầm, tạo hình ảnh tĩnh."""
-    from app.websocket_manager import notify_status
+    """Tiến trình giải toán ngầm, tạo hình ảnh tĩnh (backward compatible delegate)."""
+    return await async_solve_session_job(
+        job_id=job_id,
+        session_id=session_id,
+        text=request.text,
+        image_url=request.image_url,
+        user_id=user_id,
+        client_message_id=getattr(request, "client_message_id", None),
+    )
 
-    async def status_update(status: str):
-        await notify_status(job_id, {"status": status, "job_id": job_id})
-
-    supabase = get_supabase()
-    try:
-        history_res = (
-            supabase.table("messages")
-            .select("*")
-            .eq("session_id", session_id)
-            .order("created_at", desc=False)
-            .execute()
-        )
-        history = history_res.data if history_res.data else []
-
-        result = await get_orchestrator().run(
-            request.text,
-            request.image_url,
-            job_id=job_id,
-            session_id=session_id,
-            status_callback=status_update,
-            history=history,
-        )
-
-        status = result.get("status", "error") if "error" not in result else "error"
-
-        supabase.table("jobs").update({"status": status, "result": result}).eq(
-            "id", job_id
-        ).execute()
-
-        supabase.table("messages").insert(
-            {
-                "session_id": session_id,
-                "role": "assistant",
-                "type": "analysis" if "error" not in result else "error",
-                "content": (
-                    result.get("semantic_analysis", "Đã có lỗi xảy ra.")
-                    if "error" not in result
-                    else result["error"]
-                ),
-                "metadata": {
-                    "job_id": job_id,
-                    "coordinates": result.get("coordinates"),
-                    "geometry_dsl": result.get("geometry_dsl"),
-                    "polygon_order": result.get("polygon_order", []),
-                    "drawing_phases": result.get("drawing_phases", []),
-                    "circles": result.get("circles", []),
-                    "solids": result.get("solids", []),
-                    "faces": result.get("faces", []),
-                    "lines": result.get("lines", []),
-                    "rays": result.get("rays", []),
-                    "visualization_graph": result.get("visualization_graph"),
-                    "auxiliary": result.get("auxiliary", []),
-                    "solution": result.get("solution"),
-                    "is_3d": result.get("is_3d", False),
-                },
-            }
-        ).execute()
-
-        await notify_status(job_id, {"status": status, "job_id": job_id, "result": result})
-
-    except Exception as e:
-        logger.exception("Error processing session job %s", job_id)
-        error_msg = format_error_for_user(e)
-        supabase = get_supabase()
-        supabase.table("jobs").update(
-            {"status": "error", "result": {"error": str(e)}}
-        ).eq("id", job_id).execute()
-        supabase.table("messages").insert(
-            {
-                "session_id": session_id,
-                "role": "assistant",
-                "type": "error",
-                "content": error_msg,
-                "metadata": {"job_id": job_id},
-            }
-        ).execute()
-        await notify_status(job_id, {"status": "error", "job_id": job_id, "error": error_msg})
 
 async def process_render_job(job_id: str, session_id: str, geometry_data: dict):
-    """Tiến trình render video qua External Manim API."""
-    from app.websocket_manager import notify_status
-    from manim_client import ManimClient, build_visualization_spec
-    from manim_client.schemas import ErrorCode
-    from app.errors import format_error_for_user
+    """Tiến trình render video qua External Manim API (backward compatible delegate)."""
+    return await async_render_video_job(job_id=job_id, session_id=session_id, geometry_data=geometry_data)
 
-    await notify_status(job_id, {"status": "rendering_queued", "job_id": job_id})
-    supabase = get_supabase()
-
-    try:
-        manim_url = os.getenv("MANIM_SERVICE_URL", "https://cuong2004-manim-agent.hf.space")
-        manim_token = os.getenv("MANIM_INTERNAL_TOKEN")
-        client = ManimClient(base_url=manim_url, internal_token=manim_token)
-
-        vis_spec = build_visualization_spec(geometry_data)
-        logger.info(f"[RenderJob] Submitting job {job_id} to External Manim API...")
-
-        resp = await client.submit_render_job(vis_spec)
-        if resp.status == "failed":
-            err_code = resp.get_error_code() or ErrorCode.MANIM_REQUEST_FAILED
-            err_msg = resp.get_error_message() or "Không thể gửi yêu cầu tạo video tới máy chủ Manim."
-            if supabase:
-                supabase.table("jobs").update({
-                    "status": "error",
-                    "result": {"error": {"code": err_code, "message": err_msg}}
-                }).eq("id", job_id).execute()
-                if session_id:
-                    supabase.table("messages").insert({
-                        "session_id": session_id,
-                        "role": "assistant",
-                        "type": "error",
-                        "content": f"Không thể tạo video: {err_msg}",
-                        "metadata": {"job_id": job_id, "error_code": err_code},
-                    }).execute()
-            await notify_status(job_id, {"status": "error", "job_id": job_id, "error": err_msg, "error_code": err_code})
-            return
-
-        manim_job_id = resp.job_id
-        if supabase:
-            supabase.table("jobs").update({
-                "status": "rendering",
-                "result": {"manim_job_id": str(manim_job_id)}
-            }).eq("id", job_id).execute()
-        await notify_status(job_id, {"status": "rendering", "job_id": job_id, "manim_job_id": str(manim_job_id)})
-
-        # Poll for completion
-        poll_timeout = float(os.getenv("MANIM_POLL_TIMEOUT", "600.0"))
-        status_resp = await client.wait_for_completion(manim_job_id, poll_interval=3.0, max_wait=poll_timeout)
-        video_url = status_resp.video_url
-
-        if status_resp.status == "failed" or not video_url:
-            err_code = status_resp.get_error_code() or ErrorCode.MANIM_RENDER_FAILED
-            err_msg = status_resp.get_error_message() or "Tiến trình dựng video Manim thất bại."
-            if supabase:
-                supabase.table("jobs").update({
-                    "status": "error",
-                    "result": {"error": {"code": err_code, "message": err_msg}}
-                }).eq("id", job_id).execute()
-                if session_id:
-                    supabase.table("messages").insert({
-                        "session_id": session_id,
-                        "role": "assistant",
-                        "type": "error",
-                        "content": f"Không thể tạo video: {err_msg}",
-                        "metadata": {"job_id": job_id, "error_code": err_code},
-                    }).execute()
-            await notify_status(job_id, {"status": "error", "job_id": job_id, "error": err_msg, "error_code": err_code})
-            return
-
-        final_result = geometry_data.copy()
-        final_result["video_url"] = video_url
-        final_result["manim_job_id"] = str(manim_job_id)
-
-        if supabase:
-            supabase.table("jobs").update({
-                "status": "success",
-                "result": final_result
-            }).eq("id", job_id).execute()
-
-            if session_id:
-                supabase.table("messages").insert({
-                    "session_id": session_id,
-                    "role": "assistant",
-                    "type": "analysis",
-                    "content": geometry_data.get("semantic_analysis", "🎬 Video minh họa hình học đã hoàn tất."),
-                    "metadata": {
-                        "job_id": job_id,
-                        "video_url": video_url,
-                        "coordinates": geometry_data.get("coordinates"),
-                        "geometry_dsl": geometry_data.get("geometry_dsl"),
-                        "polygon_order": geometry_data.get("polygon_order", []),
-                        "drawing_phases": geometry_data.get("drawing_phases", []),
-                        "circles": geometry_data.get("circles", []),
-                        "solids": geometry_data.get("solids", []),
-                        "faces": geometry_data.get("faces", []),
-                        "lines": geometry_data.get("lines", []),
-                        "rays": geometry_data.get("rays", []),
-                        "visualization_graph": geometry_data.get("visualization_graph"),
-                        "auxiliary": geometry_data.get("auxiliary", []),
-                        "is_3d": geometry_data.get("is_3d", False),
-                    },
-                }).execute()
-
-        await notify_status(job_id, {
-            "status": "success",
-            "job_id": job_id,
-            "result": final_result,
-            "video_url": video_url,
-        })
-        logger.info(f"[RenderJob] SUCCESS for job {job_id}: video_url={video_url}")
-
-    except Exception as e:
-        logger.exception(f"[RenderJob] FAILED to render video: {e}")
-        safe_msg = format_error_for_user(e)
-        if supabase:
-            try:
-                supabase.table("jobs").update({
-                    "status": "error",
-                    "result": {"error": {"code": ErrorCode.INTERNAL_ERROR, "message": safe_msg}}
-                }).eq("id", job_id).execute()
-                if session_id:
-                    supabase.table("messages").insert({
-                        "session_id": session_id,
-                        "role": "assistant",
-                        "type": "error",
-                        "content": f"Lỗi render video: {safe_msg}",
-                        "metadata": {"job_id": job_id, "error_code": ErrorCode.INTERNAL_ERROR},
-                    }).execute()
-            except Exception as db_e:
-                logger.error(f"Failed to record render error in DB: {db_e}")
-        await notify_status(job_id, {"status": "error", "job_id": job_id, "error": safe_msg, "error_code": ErrorCode.INTERNAL_ERROR})
 

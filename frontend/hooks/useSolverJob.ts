@@ -14,6 +14,7 @@ export type SolverPhase =
 
 export interface JobState {
   phase: SolverPhase;
+  stage?: string | null;
   progress: number;
   message: string;
   result?: JobResult | null;
@@ -41,20 +42,28 @@ export interface VideoJobState {
 
 const solveStatusMessages: Record<string, string> = {
   processing: "Đang xử lý bài toán...",
+  queued: "Đang chờ xử lý trong hàng đợi...",
   ocr: "Đang quét dữ liệu ảnh...",
   parsing: "Đang phân tích cấu trúc hình học...",
+  geometry: "Đang dựng cấu trúc hình học...",
   solving: "Đang giải hệ phương trình...",
   success: "Hoàn thành!",
-  error: "Có lỗi xảy ra."
+  completed: "Hoàn thành!",
+  error: "Có lỗi xảy ra.",
+  failed: "Có lỗi xảy ra."
 };
 
 const solveStatusToPhase: Record<string, SolverPhase> = {
   processing: 'ocr',
+  queued: 'ocr',
   ocr: 'ocr',
   parsing: 'parsing',
+  geometry: 'solving',
   solving: 'solving',
   success: 'success',
-  error: 'error'
+  completed: 'success',
+  error: 'error',
+  failed: 'error'
 };
 
 const videoStatusMessages: Record<string, string> = {
@@ -69,9 +78,11 @@ const videoStatusMessages: Record<string, string> = {
   error: "Không thể tạo animation."
 };
 
-/** Normalize poll row (Supabase) or WS payload to { status, result, error, video_url }. */
+/** Normalize poll row (Supabase) or WS payload to { status, stage, progress, result, error, video_url }. */
 export function normalizeJobPayload(raw: unknown): {
   status?: string;
+  stage?: string;
+  progress?: number;
   result?: unknown;
   error?: string;
   video_url?: string;
@@ -79,11 +90,13 @@ export function normalizeJobPayload(raw: unknown): {
   if (!raw || typeof raw !== "object") return null;
   const o = raw as Record<string, unknown>;
   const status = typeof o.status === "string" ? o.status : undefined;
+  const stage = typeof o.stage === "string" ? o.stage : undefined;
+  const progress = typeof o.progress === "number" ? o.progress : undefined;
   const result = "result" in o ? o.result : undefined;
   const error = typeof o.error === "string" ? o.error : undefined;
   const video_url = typeof o.video_url === "string" ? o.video_url : undefined;
   if (!status) return null;
-  return { status, result, error, video_url };
+  return { status, stage, progress, result, error, video_url };
 }
 
 export function useSolverJob(sessionId: string, token?: string | null) {
@@ -539,7 +552,10 @@ export function useSolverJob(sessionId: string, token?: string | null) {
 
     void verifyAndAttach();
 
-    return cleanupAll;
+    return () => {
+      cancelled = true;
+      cleanupAll();
+    };
   }, [sessionId, token, cleanupAll]);
 
   const resetJob = useCallback(() => {

@@ -18,7 +18,8 @@ def test_normalize_adds_job_id_and_parses_result_json_string():
     out = normalize_job_row_for_client(row)
     assert out["job_id"] == jid
     assert out["id"] == jid
-    assert out["status"] == "success"
+    assert out["status"] in ("completed", "success")
+    assert out["progress"] == 100
     assert isinstance(out["result"], dict)
     assert out["result"]["coordinates"]["A"] == [0, 1]
     assert isinstance(out["user_id"], str)

@@ -1,19 +1,14 @@
-"""TTL in-memory cache để giảm truy vấn Supabase lặp lại (quyền sở hữu session)."""
+"""Deterministic session ownership verification (Server-authoritative, no process-local drift)."""
 
 from __future__ import annotations
 
 from typing import Callable
-
-from cachetools import TTLCache
-
 from app.logutil import log_step
-
-_session_owner: TTLCache[tuple[str, str], bool] = TTLCache(maxsize=4096, ttl=45)
 
 
 def invalidate_session_owner(session_id: str, user_id: str) -> None:
-    _session_owner.pop((session_id, user_id), None)
-    log_step("cache_invalidate", target="session_owner", session_id=session_id, user_id=user_id)
+    """No-op for backward compatibility now that ownership is direct DB authoritative."""
+    log_step("session_owner_check", target="session_owner", session_id=session_id, user_id=user_id)
 
 
 def session_owned_by_user(
@@ -21,11 +16,11 @@ def session_owned_by_user(
     user_id: str,
     fetch: Callable[[], bool],
 ) -> bool:
-    key = (session_id, user_id)
-    if key in _session_owner:
-        log_step("cache_hit", kind="session_owner", session_id=session_id)
-        return _session_owner[key]
-    log_step("cache_miss", kind="session_owner", session_id=session_id)
+    """
+    Direct authoritative ownership check via provided fetch function.
+    Eliminates multi-worker drift by always evaluating against the authoritative DB.
+    """
     ok = fetch()
-    _session_owner[key] = ok
+    log_step("session_owner_verified", session_id=session_id, user_id=user_id, is_owner=ok)
     return ok
+
