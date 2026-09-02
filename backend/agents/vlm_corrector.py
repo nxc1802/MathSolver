@@ -41,6 +41,83 @@ class VLMCorrectorAgent:
         self.config = config or OCRCorrectionConfig()
         self.llm_service = get_llm_service()
 
+    async def extract_direct(
+        self,
+        image_url: Optional[str] = None,
+        image_path: Optional[str] = None,
+    ) -> CanonicalOCRResult:
+        """
+        Direct multimodal VLM OCR extraction from image.
+        Accurately transcribes Vietnamese text, mathematical formulas, and LaTeX symbols.
+        """
+        if not image_url and not image_path:
+            logger.warning("[VLMCorrector] No image provided for direct extraction")
+            return CanonicalOCRResult(text="", confidence=0.0)
+
+        # Convert local image to base64 data URI if needed
+        if image_path and not image_url and os.path.exists(image_path):
+            import base64
+            with open(image_path, "rb") as f:
+                b64 = base64.b64encode(f.read()).decode("utf-8")
+                ext = os.path.splitext(image_path)[1].lstrip(".").lower()
+                mime = "image/jpeg" if ext in ("jpg", "jpeg") else ("image/webp" if ext == "webp" else "image/png")
+                image_url = f"data:{mime};base64,{b64}"
+
+        if not image_url:
+            return CanonicalOCRResult(text="", confidence=0.0)
+
+        system_prompt = """You are a High-Precision Math OCR Vision Agent for Vietnamese mathematical and geometry problems.
+
+=== YOUR TASK ===
+Carefully transcribe all printed/handwritten text, mathematical formulas, geometric terms, and notation from the image into Markdown format.
+Use standard LaTeX math syntax:
+- Inline formulas and geometric variables: $...$ (e.g. $ABCD$, $SO=12$, $(MED)$)
+- Display math equations: $$...$$
+
+=== STRICT RULES ===
+1. READ & TRANSCRIBE ONLY: Transcribe exactly what is visible in the image.
+2. DO NOT SOLVE: Do not solve the problem or add your own calculations.
+3. PRESERVE VIETNAMESE ACCENTS & DIACRITICS: Ensure all Vietnamese words have correct diacritics and correct spelling.
+4. Output ONLY the raw transcribed text. Do NOT wrap your output in markdown code blocks (such as ```markdown)."""
+
+        user_content_parts = [
+            {"type": "image_url", "image_url": {"url": image_url}},
+            {"type": "text", "text": "Please transcribe the entire math problem from this image accurately."},
+        ]
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_content_parts},
+        ]
+
+        try:
+            raw_response = await self.llm_service.acomplete(
+                model=self.config.model,
+                messages=messages,
+                temperature=self.config.temperature,
+                max_tokens=self.config.max_tokens,
+                timeout=self.config.timeout_seconds,
+                agent_name="vlm_ocr_direct",
+            )
+            text = raw_response.strip()
+            # Clean possible markdown code fences
+            m = re.match(r"^```(?:markdown|latex|text)?\s*(.*?)\s*```$", text, re.DOTALL)
+            if m:
+                text = m.group(1).strip()
+
+            return CanonicalOCRResult(
+                text=text,
+                confidence=0.98,
+                metadata={"engine": "vlm_direct", "model": self.config.model},
+            )
+        except Exception as e:
+            logger.error(f"[VLMCorrector] Direct VLM extraction failed: {e}")
+            return CanonicalOCRResult(
+                text="",
+                confidence=0.0,
+                metadata={"error": str(e)},
+            )
+
     async def correct(
         self,
         ocr_result: CanonicalOCRResult,

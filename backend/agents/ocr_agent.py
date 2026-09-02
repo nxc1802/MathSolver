@@ -1,10 +1,10 @@
 """
-OCR Agent (v5.3).
+OCR Agent (v5.4).
 Pure visual perception agent responsible for recognizing text, mathematical formulas, and layout
-from geometry problem images using Pix2Text.
-Strictly adheres to the Design Principle:
-- OCR only extracts and structures visual content without LLM hallucinations or semantic alteration.
-- Emits structured CanonicalOCRResult for downstream Problem Parser / VLM.
+from geometry problem images.
+Supports two configurable engines via agent_models.yaml:
+- 'vlm' (default): Direct high-precision, zero-RAM multimodal VLM (Gemini Vision).
+- 'pix2text': Local PyTorch/ONNX Pix2Text engine with Confidence Gateway.
 """
 
 from __future__ import annotations
@@ -13,52 +13,77 @@ import logging
 from typing import Any, Dict, Optional
 
 from vision_ocr.canonical_schema import CanonicalOCRResult
-from vision_ocr.pipeline import OcrVisionPipeline
 
 logger = logging.getLogger(__name__)
 
 
 class ImprovedOCRAgent:
     """
-    Math OCR Agent (v5.3).
-    Wraps ``OcrVisionPipeline`` (Pix2Text) and produces CanonicalOCRResult.
+    Math OCR Agent (v5.4).
+    Dynamically routes to Direct Multimodal VLM or Local Pix2Text Engine based on config.
     """
 
     def __init__(self, **kwargs):
-        self._vision = OcrVisionPipeline()
-        logger.info("[ImprovedOCRAgent] Math OCR Vision Pipeline ready (Pix2Text Engine).")
+        self._vision = None
+        self._vlm_corrector = None
+        logger.info("[ImprovedOCRAgent] Math OCR Agent ready (Configurable VLM / Pix2Text).")
+
+    def _get_engine_mode(self) -> str:
+        try:
+            from config.loader import load_agent_config
+            cfg = load_agent_config("ocr")
+            return getattr(cfg, "ocr_engine", "vlm") or "vlm"
+        except Exception:
+            return "vlm"
+
+    async def process_image_canonical(self, image_path: str) -> CanonicalOCRResult:
+        """
+        Processes image and returns full CanonicalOCRResult structure.
+        """
+        mode = self._get_engine_mode()
+        if mode == "vlm":
+            from agents.vlm_corrector import VLMCorrectorAgent
+            if self._vlm_corrector is None:
+                self._vlm_corrector = VLMCorrectorAgent()
+            return await self._vlm_corrector.extract_direct(image_path=image_path)
+        else:
+            if self._vision is None:
+                from vision_ocr.pipeline import OcrVisionPipeline
+                self._vision = OcrVisionPipeline()
+            return await self._vision.process_image_canonical(image_path)
 
     async def process_image(self, image_path: str) -> str:
         """
         Processes image and returns reconstructed Markdown text containing inline and display LaTeX.
         """
-        canonical = await self._vision.process_image_canonical(image_path)
+        canonical = await self.process_image_canonical(image_path)
         return canonical.text
-
-    async def process_image_canonical(self, image_path: str) -> CanonicalOCRResult:
-        """
-        Processes image and returns full CanonicalOCRResult structure:
-        - text: Markdown string with LaTeX formulas
-        - latex: List of all extracted mathematical expressions
-        - elements: Region bounding boxes and classifications
-        - reading_order: Document sequential layout reading order
-        - confidence: Extraction confidence score
-        """
-        return await self._vision.process_image_canonical(image_path)
-
-    async def process_url(self, url: str) -> str:
-        """
-        Fetches image from URL and returns reconstructed Markdown text with LaTeX.
-        """
-        return await self._vision.process_url(url)
 
     async def process_url_canonical(self, url: str) -> CanonicalOCRResult:
         """
         Fetches image from URL and returns full CanonicalOCRResult.
         """
-        return await self._vision.process_url_canonical(url)
+        mode = self._get_engine_mode()
+        if mode == "vlm":
+            from agents.vlm_corrector import VLMCorrectorAgent
+            if self._vlm_corrector is None:
+                self._vlm_corrector = VLMCorrectorAgent()
+            return await self._vlm_corrector.extract_direct(image_url=url)
+        else:
+            if self._vision is None:
+                from vision_ocr.pipeline import OcrVisionPipeline
+                self._vision = OcrVisionPipeline()
+            return await self._vision.process_url_canonical(url)
+
+    async def process_url(self, url: str) -> str:
+        """
+        Fetches image from URL and returns reconstructed Markdown text with LaTeX.
+        """
+        canonical = await self.process_url_canonical(url)
+        return canonical.text
 
 
 class OCRAgent(ImprovedOCRAgent):
     """Alias for backward compatibility."""
     pass
+

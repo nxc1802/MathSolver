@@ -50,6 +50,9 @@ class AgentConfig(BaseModel):
     reasoning_effort: Optional[Literal["low", "medium", "high"]] = Field(
         default=None, description="Reasoning effort for thinking models"
     )
+    ocr_engine: Optional[Literal["vlm", "pix2text", "auto"]] = Field(
+        default="vlm", description="OCR engine: 'vlm' (default direct multimodal VLM) or 'pix2text' (local OCR)"
+    )
     confidence_gateway: Optional[ConfidenceGatewayConfig] = Field(
         default=None, description="OCR confidence gateway config (only for OCR agent)"
     )

@@ -20,7 +20,8 @@ agents:
 
   ocr:
     name: ocr
-    description: "Local visual OCR using Pix2Text. Pure perception — no LLM hallucination."
+    description: "Visual OCR for math and geometry problems. Default: high-precision direct VLM."
+    ocr_engine: vlm  # Options: 'vlm' (default direct multimodal VLM, 0 RAM/CPU, accurate Vietnamese) | 'pix2text' (local OCR engine with confidence gateway)
 
     tiers:
       - model: gemini/gemini-3.5-flash-lite
@@ -29,7 +30,7 @@ agents:
 
     temperature: 0.1
     max_tokens: 4096
-    timeout_seconds: 120
+    timeout_seconds: 60
 
     confidence_gateway:
       enabled: true
@@ -43,6 +44,7 @@ agents:
         timeout_seconds: 60
         max_attempts: 1
         reasoning_effort: low
+
 
 
   geometry_parser:
