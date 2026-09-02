@@ -35,10 +35,6 @@ async def async_solve_session_job(
         norm_status = JobStateMachine.normalize_status(status)
         norm_stage = JobStateMachine.normalize_stage(stage or status)
         update_data = {"status": norm_status.value}
-        if norm_stage:
-            update_data["stage"] = norm_stage.value
-        if progress is not None:
-            update_data["progress"] = progress
 
         if supabase:
             try:
@@ -86,8 +82,6 @@ async def async_solve_session_job(
         if supabase:
             supabase.table("jobs").update({
                 "status": final_status.value,
-                "stage": None,
-                "progress": 100 if final_status == JobStatus.COMPLETED else 0,
                 "result": result,
             }).eq("id", job_id).execute()
 
@@ -146,7 +140,6 @@ async def async_solve_session_job(
             try:
                 supabase.table("jobs").update({
                     "status": JobStatus.FAILED.value,
-                    "progress": 0,
                     "result": {"error": str(e)},
                 }).eq("id", job_id).execute()
 
@@ -219,8 +212,6 @@ async def async_render_video_job(job_id: str, session_id: str, geometry_data: Di
         if supabase:
             supabase.table("jobs").update({
                 "status": JobStatus.PROCESSING.value,
-                "stage": JobStage.RENDERING.value,
-                "progress": 40,
                 "result": {"manim_job_id": str(manim_job_id)},
             }).eq("id", job_id).execute()
 
@@ -267,7 +258,6 @@ async def async_render_video_job(job_id: str, session_id: str, geometry_data: Di
         if supabase:
             supabase.table("jobs").update({
                 "status": JobStatus.COMPLETED.value,
-                "progress": 100,
                 "result": final_result,
             }).eq("id", job_id).execute()
 

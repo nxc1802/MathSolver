@@ -123,8 +123,6 @@ def _enqueue_solve_common(
             "user_id": user_id,
             "session_id": session_id,
             "status": "processing",
-            "stage": "ocr" if request.image_url else "parsing",
-            "progress": 15 if request.image_url else 35,
             "input_text": request.text,
         }
     ).execute()
@@ -357,8 +355,6 @@ async def render_video(
         "user_id": user_id,
         "session_id": session_id,
         "status": "rendering_queued",
-        "stage": "rendering",
-        "progress": 10,
         "input_text": f"Render video requested at {job_id}",
     }).execute()
 
