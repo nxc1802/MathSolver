@@ -138,7 +138,6 @@ Output ONLY a JSON object with this EXACT structure (no markdown, no extra keys)
                 agent="geometry_parser",
                 messages=messages,
                 validator=self._validate_parser_output,
-                temperature_override=0.1,
             )
         except Exception as e:
             logger.warning(f"[GeometryParserAgent] Agent runtime cascade failed: {e}. Using fallback structure.")

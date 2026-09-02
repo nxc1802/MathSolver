@@ -6,18 +6,18 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 from llm.service import get_llm_service, LLMService
-from agents.runtime import get_agent_runtime, AgentRuntime
+from config.loader import load_agent_config
 
 
 class MultiLayerLLMClient:
     """
-    Backward-compatible client adapter that delegates all completions to the high-performance
-    AgentRuntime & LLMService infrastructure.
+    Backward-compatible client adapter that delegates completions to LLMService.
+    Uses agent config for defaults but allows callers to override temperature/max_tokens
+    for ad-hoc usage (e.g. knowledge queries, chat completions).
     """
 
     def __init__(self):
         self.service: LLMService = get_llm_service()
-        self.runtime: AgentRuntime = get_agent_runtime()
 
     async def chat_completions_create(
         self,
@@ -28,12 +28,17 @@ class MultiLayerLLMClient:
         max_tokens: Optional[int] = None,
         **kwargs
     ) -> str:
-        return await self.runtime.run(
-            agent=agent,
+        config = load_agent_config(agent)
+        model = config.tiers[0].model if config.tiers else "gemini/gemini-3.7-flash"
+        return await self.service.acomplete(
+            model=model,
             messages=messages,
+            temperature=temperature if temperature is not None else config.temperature,
+            max_tokens=max_tokens if max_tokens is not None else config.max_tokens,
+            timeout=config.timeout_seconds,
             response_format=response_format,
-            temperature_override=temperature,
-            max_tokens_override=max_tokens,
+            reasoning_effort=config.reasoning_effort,
+            agent_name=agent,
             **kwargs
         )
 

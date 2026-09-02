@@ -1,0 +1,47 @@
+[
+  {
+    "id": "geo_01_square_pyramid",
+    "category": "3d_pyramid",
+    "problem_text": "Cho hình chóp S.ABCD có đáy ABCD là hình vuông cạnh a=4. Cạnh bên SA vuông góc với mặt phẳng đáy và SA=6. Tính thể tích khối chóp S.ABCD.",
+    "expected_type": "pyramid",
+    "expected_entities": ["S", "A", "B", "C", "D"],
+    "expected_dsl": "PYRAMID(S_ABCD)\nSQUARE(ABCD)\nLENGTH(AB, 4)\nLENGTH(SA, 6)\nPERPENDICULAR_PLANE(SA, ABCD)",
+    "expected_answer": "32"
+  },
+  {
+    "id": "geo_02_cube",
+    "category": "3d_cube",
+    "problem_text": "Cho hình lập phương ABCD.A1B1C1D1 có cạnh bằng 5. Tính thể tích khối lập phương.",
+    "expected_type": "cube",
+    "expected_entities": ["A", "B", "C", "D", "A1", "B1", "C1", "D1"],
+    "expected_dsl": "CUBE(ABCD_A1B1C1D1)\nLENGTH(AB, 5)",
+    "expected_answer": "125"
+  },
+  {
+    "id": "geo_03_triangular_prism",
+    "category": "3d_prism",
+    "problem_text": "Cho lăng trụ đứng ABC.A1B1C1 có đáy ABC là tam giác vuông tại A, AB=3, AC=4. Chiều cao lăng trụ AA1=6. Tính thể tích khối lăng trụ.",
+    "expected_type": "prism",
+    "expected_entities": ["A", "B", "C", "A1", "B1", "C1"],
+    "expected_dsl": "PRISM(ABC_A1B1C1)\nPOINT(A, 0, 0, 0)\nPOINT(B, 3, 0, 0)\nPOINT(C, 0, 4, 0)\nPOINT(A1, 0, 0, 6)\nPOINT(B1, 3, 0, 6)\nPOINT(C1, 0, 4, 6)\nLENGTH(AA1, 6)\nPERPENDICULAR_PLANE(AA1, ABC)",
+    "expected_answer": "36"
+  },
+  {
+    "id": "geo_04_cone",
+    "category": "3d_cone",
+    "problem_text": "Cho hình nón có bán kính đáy r=3 và chiều cao h=4. Tính thể tích khối nón.",
+    "expected_type": "cone",
+    "expected_entities": ["S", "O"],
+    "expected_dsl": "CONE(S_O, 3, 4)",
+    "expected_answer": "12*pi"
+  },
+  {
+    "id": "geo_05_2d_rectangle",
+    "category": "2d_polygon",
+    "problem_text": "Cho hình chữ nhật ABCD có AB=6, BC=8. Tính diện tích hình chữ nhật ABCD.",
+    "expected_type": "rectangle",
+    "expected_entities": ["A", "B", "C", "D"],
+    "expected_dsl": "RECTANGLE(ABCD)\nLENGTH(AB, 6)\nLENGTH(BC, 8)",
+    "expected_answer": "48"
+  }
+]

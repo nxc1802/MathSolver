@@ -97,7 +97,6 @@ Output your complete explanation, followed by a structured JSON block enclosed i
             agent="reasoning_solver",
             messages=messages,
             validator=_validator,
-            temperature_override=0.1,
         )
 
     def _process_and_execute(self, raw_text: str, target: str) -> Dict[str, Any]:

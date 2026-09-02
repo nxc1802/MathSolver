@@ -371,18 +371,33 @@ class DSLParser:
                 logger.debug(f"[DSLParser]   + SPHERE: center={center}, r={radius}")
                 continue
 
-            # CONE(S, O, r) or CONE(S_O, r) or CONE(S, O, r, h)
-            m = re.match(r'CONE\(([^,]+)(?:,\s*([^,]+))?,\s*([\d\.]+)(?:,\s*([\d\.]+))?\)', line)
-            if m:
+            # CONE(S, O, r) or CONE(S, O, r, h) or CONE(S_O, r) or CONE(S_O, r, h)
+            m4 = re.match(r'CONE\(([A-Za-z0-9\']+),\s*([A-Za-z0-9\']+),\s*([\d\.]+)(?:,\s*([\d\.]+))?\)', line)
+            m2 = re.match(r'CONE\(([A-Za-z0-9\']+(?:_[A-Za-z0-9\']+)?),\s*([\d\.]+)(?:,\s*([\d\.]+))?\)', line)
+            if m4 and not ('_' in m4.group(1) and m4.group(2).replace('.', '', 1).isdigit()):
                 is_3d = True
-                if m.group(2):
-                    apex, center = m.group(1).strip(), m.group(2).strip()
-                elif '_' in m.group(1):
-                    apex, center = [p.strip() for p in m.group(1).split('_', 1)]
+                apex, center = m4.group(1).strip(), m4.group(2).strip()
+                radius = float(m4.group(3))
+                height = float(m4.group(4)) if m4.group(4) else None
+                ensure_point(apex)
+                ensure_point(center)
+                segments.append([apex, center])
+                constraints.append(Constraint(type='segment', targets=[apex, center], value=0))
+                constraints.append(Constraint(type='cone', targets=[apex, center], value=radius))
+                if height is not None:
+                    constraints.append(Constraint(type='length', targets=[apex, center], value=height))
+                solids.append({"type": "cone", "apex": apex, "center": center, "radius": radius, "height": height})
+                logger.debug(f"[DSLParser]   + CONE: apex={apex}, center={center}, r={radius}, h={height}")
+                continue
+            elif m2:
+                is_3d = True
+                raw_pts = m2.group(1).strip()
+                if '_' in raw_pts:
+                    apex, center = [p.strip() for p in raw_pts.split('_', 1)]
                 else:
-                    apex, center = m.group(1).strip(), 'O'
-                radius = float(m.group(3))
-                height = float(m.group(4)) if m.group(4) else None
+                    apex, center = raw_pts, 'O'
+                radius = float(m2.group(2))
+                height = float(m2.group(3)) if m2.group(3) else None
                 ensure_point(apex)
                 ensure_point(center)
                 segments.append([apex, center])

@@ -1,6 +1,6 @@
 import pytest
 import asyncio
-from typing import Tuple, Any
+from typing import Tuple, Any, Dict, List
 from config.schemas import ModelTier, AgentConfig, AgentModelsConfig
 from config.loader import load_agent_config, AgentConfigResolver
 from config.settings import Settings, parse_comma_separated_keys
@@ -18,8 +18,8 @@ def test_parse_comma_separated_keys():
 
 
 def test_agent_models_config_schema_validation():
-    tier1 = ModelTier(model="gemini/gemini-2.5-flash", max_attempts=2)
-    tier2 = ModelTier(model="gemini/gemini-2.5-pro", max_attempts=1)
+    tier1 = ModelTier(model="gemini/gemini-3.5-flash-lite", max_attempts=1, reasoning_effort="low")
+    tier2 = ModelTier(model="gemini/gemini-3.5-flash", max_attempts=1, reasoning_effort="medium")
     agent = AgentConfig(
         name="test_agent",
         description="Testing agent schema",
@@ -28,10 +28,12 @@ def test_agent_models_config_schema_validation():
         max_tokens=4096,
         timeout_seconds=60,
     )
-    config = AgentModelsConfig(version=1, agents={"test_agent": agent})
-    assert config.version == 1
+    config = AgentModelsConfig(version=2, agents={"test_agent": agent})
+    assert config.version == 2
     assert "test_agent" in config.agents
     assert len(config.agents["test_agent"].tiers) == 2
+    assert config.agents["test_agent"].tiers[0].reasoning_effort == "low"
+    assert config.agents["test_agent"].tiers[1].reasoning_effort == "medium"
 
 
 def test_error_classifier():
@@ -67,13 +69,15 @@ async def test_key_pool_round_robin_and_cooldown():
 
 @pytest.mark.asyncio
 async def test_agent_runtime_validator_cascade():
-    """Simulates Tier 1 (3.7-flash) failing validation and Tier 2 (3.6-flash) succeeding validation on analyzer."""
+    """Simulates Tier 1 (3.5-flash-lite, low) failing validation and Tier 2 (3.5-flash, medium) succeeding validation on geometry_parser."""
     call_history = []
+    reasoning_efforts = []
 
     class MockLLMService:
-        async def acomplete(self, model: str, messages: list, **kwargs) -> str:
+        async def acomplete(self, model: str, messages: list, reasoning_effort: str = None, **kwargs) -> str:
             call_history.append(model)
-            if "3.7" in model:
+            reasoning_efforts.append(reasoning_effort)
+            if "lite" in model:
                 return "INVALID_OUTPUT_FROM_TIER_1"
             return '{"type": "pyramid", "analysis": "Valid analysis from Tier 2"}'
 
@@ -86,12 +90,13 @@ async def test_agent_runtime_validator_cascade():
 
     messages = [{"role": "user", "content": "Analyze problem"}]
     res = await runtime.run(
-        agent="input_analyzer",
+        agent="geometry_parser",
         messages=messages,
         validator=mock_validator,
     )
 
     assert res["valid"] is True
-    # Verify that Tier 1 (3.7) was attempted and escalated to Tier 2 (3.6)
-    assert any("3.7" in m for m in call_history)
-    assert any("3.6" in m for m in call_history)
+    # Verify that Tier 1 (lite) was attempted with reasoning_effort='low' and escalated to Tier 2 with reasoning_effort='medium'
+    assert any("lite" in m for m in call_history)
+    assert any("3.5-flash" in m and "lite" not in m for m in call_history)
+    assert reasoning_efforts == ["low", "medium"]

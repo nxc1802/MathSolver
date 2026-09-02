@@ -1,10 +1,9 @@
-version: 1
+version: 2
 
 defaults:
-  temperature: 1.0
+  temperature: 0.1
   max_tokens: 8192
   timeout_seconds: 120
-  reasoning_effort: medium
 
 retry_policy:
   retryable_errors:
@@ -12,175 +11,67 @@ retry_policy:
     - timeout
     - connection
     - server_error
+
   non_retryable_errors:
     - invalid_request
     - authentication
-  max_total_attempts: 5
 
 agents:
-  input_analyzer:
-    name: input_analyzer
-    description: "Analyze input and extract mathematical structure, entities, and constraints"
+
+  ocr:
+    name: ocr
+    description: "Local visual OCR using Pix2Text. Pure perception — no LLM hallucination."
+
     tiers:
-      - model: gemini/gemini-3.7-flash
+      - model: gemini/gemini-3.5-flash-lite
         max_attempts: 1
-      - model: gemini/gemini-3.6-flash
-        max_attempts: 1
-      - model: gemini/gemini-3.5-flash
-        max_attempts: 1
-      - model: gemini/gemini-2.5-flash
-        max_attempts: 1
-    temperature: 1.0
+        reasoning_effort: low
+
+    temperature: 0.1
     max_tokens: 4096
+    timeout_seconds: 120
 
-  analyzer:
-    name: analyzer
-    description: "Alias for input_analyzer"
-    tiers:
-      - model: gemini/gemini-3.7-flash
-        max_attempts: 1
-      - model: gemini/gemini-3.6-flash
-        max_attempts: 1
-      - model: gemini/gemini-3.5-flash
-        max_attempts: 1
-      - model: gemini/gemini-2.5-flash
-        max_attempts: 1
-    temperature: 1.0
-    max_tokens: 4096
+    confidence_gateway:
+      enabled: true
+      threshold: 0.85
 
-  problem_parser:
-    name: problem_parser
-    description: "Parse problem text into structured mathematical AST"
-    tiers:
-      - model: gemini/gemini-3.7-flash
+      correction:
+        enabled: true
+        model: gemini/gemini-3.5-flash-lite
+        temperature: 0.1
+        max_tokens: 4096
+        timeout_seconds: 60
         max_attempts: 1
-      - model: gemini/gemini-3.6-flash
-        max_attempts: 1
-      - model: gemini/gemini-3.5-flash
-        max_attempts: 1
-      - model: gemini/gemini-2.5-flash
-        max_attempts: 1
-    temperature: 1.0
-    max_tokens: 8192
+        reasoning_effort: low
 
-  parser:
-    name: parser
-    description: "Alias for problem_parser"
-    tiers:
-      - model: gemini/gemini-3.7-flash
-        max_attempts: 1
-      - model: gemini/gemini-3.6-flash
-        max_attempts: 1
-      - model: gemini/gemini-3.5-flash
-        max_attempts: 1
-      - model: gemini/gemini-2.5-flash
-        max_attempts: 1
-    temperature: 1.0
-    max_tokens: 8192
 
   geometry_parser:
     name: geometry_parser
-    description: "Generate geometric DSL, points, faces, solids, and spatial constraints"
-    tiers:
-      - model: gemini/gemini-3.7-flash
-        max_attempts: 1
-      - model: gemini/gemini-3.6-flash
-        max_attempts: 1
-      - model: gemini/gemini-3.5-flash
-        max_attempts: 1
-      - model: gemini/gemini-2.5-flash
-        max_attempts: 1
-    temperature: 1.0
-    max_tokens: 16384
+    description: "Semantic geometry parsing and Geometry DSL generation"
 
-  geometry:
-    name: geometry
-    description: "Alias for geometry_parser"
     tiers:
-      - model: gemini/gemini-3.7-flash
+      - model: gemini/gemini-3.5-flash-lite
         max_attempts: 1
-      - model: gemini/gemini-3.6-flash
-        max_attempts: 1
+        reasoning_effort: low
+
       - model: gemini/gemini-3.5-flash
         max_attempts: 1
-      - model: gemini/gemini-2.5-flash
-        max_attempts: 1
-    temperature: 1.0
+        reasoning_effort: medium
+
+    temperature: 0.1
     max_tokens: 16384
+    timeout_seconds: 120
+
 
   reasoning_solver:
     name: reasoning_solver
-    description: "Program-aided SymPy and analytical symbolic step-by-step reasoning"
+    description: "Program-aided mathematical reasoning with SymPy verification"
+
     tiers:
       - model: gemini/gemini-3.7-flash
-        max_attempts: 1
-      - model: gemini/gemini-3.6-flash
-        max_attempts: 1
-      - model: gemini/gemini-3.5-flash
-        max_attempts: 1
-      - model: gemini/gemini-2.5-flash
-        max_attempts: 1
-    temperature: 1.0
+        max_attempts: 2
+        reasoning_effort: high
+
+    temperature: 0.1
     max_tokens: 16384
-    reasoning_effort: high
-
-  solver:
-    name: solver
-    description: "Alias for reasoning_solver"
-    tiers:
-      - model: gemini/gemini-3.7-flash
-        max_attempts: 1
-      - model: gemini/gemini-3.6-flash
-        max_attempts: 1
-      - model: gemini/gemini-3.5-flash
-        max_attempts: 1
-      - model: gemini/gemini-2.5-flash
-        max_attempts: 1
-    temperature: 1.0
-    max_tokens: 16384
-    reasoning_effort: high
-
-  visualization_planner:
-    name: visualization_planner
-    description: "Plan 2D/3D camera viewpoints, highlights, annotations, and camera angles"
-    tiers:
-      - model: gemini/gemini-3.7-flash
-        max_attempts: 1
-      - model: gemini/gemini-3.6-flash
-        max_attempts: 1
-      - model: gemini/gemini-3.5-flash
-        max_attempts: 1
-      - model: gemini/gemini-2.5-flash
-        max_attempts: 1
-    temperature: 1.0
-    max_tokens: 8192
-
-  code_generator:
-    name: code_generator
-    description: "Generate executable Manim and Python animation scripts"
-    tiers:
-      - model: gemini/gemini-3.7-flash
-        max_attempts: 1
-      - model: gemini/gemini-3.6-flash
-        max_attempts: 1
-      - model: gemini/gemini-3.5-flash
-        max_attempts: 1
-      - model: gemini/gemini-2.5-flash
-        max_attempts: 1
-    temperature: 1.0
-    max_tokens: 16384
-
-  reviewer:
-    name: reviewer
-    description: "Review mathematical correctness and visual geometry consistency"
-    tiers:
-      - model: gemini/gemini-3.7-flash
-        max_attempts: 1
-      - model: gemini/gemini-3.6-flash
-        max_attempts: 1
-      - model: gemini/gemini-3.5-flash
-        max_attempts: 1
-      - model: gemini/gemini-2.5-flash
-        max_attempts: 1
-    temperature: 1.0
-    max_tokens: 8192
+    timeout_seconds: 120

@@ -11,7 +11,7 @@ from manim_client.client import ManimClient
 from manim_client.schemas import build_visualization_spec
 from solver.dsl_parser import DSLParser
 from solver.engine import GeometryEngine
-from solver.validator import GeometryValidator
+from solver.validator import GeometryValidator, GeometryStatus
 
 logger = logging.getLogger(__name__)
 
@@ -125,9 +125,20 @@ class Orchestrator:
 
         # 2. Gather input text (OCR or direct)
         input_text = text
+        ocr_metadata = {}
         if image_url:
-            input_text = await ocr_from_image_url(image_url, self.ocr_agent)
-            _step_io("step1_ocr", input_val=image_url, output_val=input_text)
+            ocr_result = await ocr_from_image_url(image_url, self.ocr_agent)
+            input_text = ocr_result.text
+            ocr_metadata = {
+                "ocr_confidence": ocr_result.confidence,
+                "vlm_correction": ocr_result.metadata.get("vlm_correction", False),
+                "original_confidence": ocr_result.metadata.get("original_confidence"),
+            }
+            _step_io("step1_ocr", input_val=image_url, output_val={
+                "text_len": len(input_text),
+                "confidence": ocr_result.confidence,
+                "vlm_correction": ocr_metadata.get("vlm_correction"),
+            })
         else:
             _step_io("step1_ocr", input_val="(no image)", output_val=text)
 
@@ -137,6 +148,7 @@ class Orchestrator:
         coordinates = {}
         is_3d = False
         dsl_code = ""
+        geometry_status = GeometryStatus.FAILED
         semantic_json: Dict[str, Any] = {}
 
         # 3. GeometryParserAgent Loop (Semantic Parsing + DSL Generation)
@@ -186,6 +198,7 @@ class Orchestrator:
                 )
 
                 if val_res.is_valid:
+                    geometry_status = GeometryStatus.VALID
                     logger.info(
                         "[Orchestrator] geometry solved and validated job_id=%s is_3d=%s n_coords=%d",
                         job_id,
@@ -194,7 +207,9 @@ class Orchestrator:
                     )
                     break
                 else:
-                    feedback = f"Geometry validation failed: {val_res.error_summary}. Please correct the DSL to satisfy all constraints."
+                    structured_fb = val_res.to_structured_feedback()
+                    import json as _json
+                    feedback = f"Geometry validation failed. Structured errors:\n{_json.dumps(structured_fb, ensure_ascii=False, indent=2)}\nPlease correct the DSL to satisfy all constraints."
                     _step_io("step4_validate_geometry", input_val=f"attempt {attempt + 1}", output_val=feedback)
             else:
                 feedback = "Geometry solver failed to find a valid solution for the given constraints. Parallelism or lengths might be inconsistent."
@@ -203,7 +218,8 @@ class Orchestrator:
             if attempt == MAX_RETRIES:
                 # 1. If engine_result produced valid non-empty coordinates, accept them gracefully on final attempt
                 if engine_result and coordinates and len(coordinates) >= 3:
-                    logger.warning("[Orchestrator] Proceeding with solved coordinates on final attempt despite minor validation warnings")
+                    geometry_status = GeometryStatus.DEGRADED
+                    logger.warning("[Orchestrator] Proceeding with DEGRADED coordinates on final attempt despite validation warnings")
                     break
 
                 # 2. If engine_result is empty, attempt a relaxed solver pass with primary constraints only
@@ -217,13 +233,15 @@ class Orchestrator:
                         if relaxed_result and relaxed_result.get("coordinates"):
                             engine_result = relaxed_result
                             coordinates = relaxed_result.get("coordinates", {})
-                            logger.info("[Orchestrator] Relaxed constraint solve succeeded as fallback")
+                            geometry_status = GeometryStatus.DEGRADED
+                            logger.info("[Orchestrator] Relaxed constraint solve succeeded as DEGRADED fallback")
                             break
                     except Exception as e:
                         logger.warning(f"[Orchestrator] Relaxed solve attempt warning: {e}")
 
                 # 3. If geometry coordinates still cannot be solved, proceed to DeepMath solver so the user still gets the math steps & answer
-                logger.warning("[Orchestrator] Geometry engine exhausted attempts; proceeding with semantic data for DeepMath solve")
+                geometry_status = GeometryStatus.FAILED
+                logger.warning("[Orchestrator] Geometry engine exhausted attempts (FAILED); proceeding with semantic data for DeepMath solve")
                 engine_result = engine_result or {"coordinates": {}, "is_3d": is_3d, "drawing_phases": []}
                 break
 
@@ -290,6 +308,8 @@ class Orchestrator:
         return {
             "status": "success",
             "job_id": job_id,
+            "geometry_status": geometry_status.value,
+            "ocr_metadata": ocr_metadata,
             "geometry_dsl": dsl_code,
             "coordinates": coordinates,
             "polygon_order": (engine_result or {}).get("polygon_order", []),

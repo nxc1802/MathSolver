@@ -7,12 +7,47 @@ from __future__ import annotations
 
 import logging
 import math
+from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 
 from .models import Constraint
 
 logger = logging.getLogger(__name__)
+
+
+class GeometryStatus(str, Enum):
+    """Geometry validation outcome status."""
+    VALID = "valid"
+    DEGRADED = "degraded"
+    FAILED = "failed"
+
+
+class StructuredError:
+    """Machine-readable validation error for LLM repair feedback."""
+
+    def __init__(
+        self,
+        error_type: str,
+        constraint: str,
+        expected: str = "",
+        actual: str = "",
+        instruction: str = "Correct the DSL to satisfy this constraint.",
+    ):
+        self.error_type = error_type
+        self.constraint = constraint
+        self.expected = expected
+        self.actual = actual
+        self.instruction = instruction
+
+    def to_dict(self) -> Dict[str, str]:
+        return {
+            "error_type": self.error_type,
+            "constraint": self.constraint,
+            "expected": self.expected,
+            "actual": self.actual,
+            "instruction": self.instruction,
+        }
 
 
 class ValidationResult:
@@ -22,11 +57,15 @@ class ValidationResult:
         errors: Optional[List[str]] = None,
         warnings: Optional[List[str]] = None,
         checked_count: int = 0,
+        status: GeometryStatus = GeometryStatus.VALID,
+        structured_errors: Optional[List[StructuredError]] = None,
     ):
         self.is_valid = is_valid
         self.errors = errors or []
         self.warnings = warnings or []
         self.checked_count = checked_count
+        self.status = status
+        self.structured_errors = structured_errors or []
 
     @property
     def error_summary(self) -> str:
@@ -37,10 +76,20 @@ class ValidationResult:
     def to_dict(self) -> Dict[str, Any]:
         return {
             "is_valid": self.is_valid,
+            "status": self.status.value,
             "errors": self.errors,
             "warnings": self.warnings,
             "checked_count": self.checked_count,
             "error_summary": self.error_summary,
+        }
+
+    def to_structured_feedback(self) -> Dict[str, Any]:
+        """Returns structured feedback JSON for LLM repair loops."""
+        return {
+            "status": self.status.value,
+            "error_count": len(self.errors),
+            "details": [e.to_dict() for e in self.structured_errors[:5]],
+            "instruction": "Correct the DSL to satisfy all constraints listed above.",
         }
 
 
@@ -336,6 +385,43 @@ class GeometryValidator:
                                     )
 
         is_valid = len(errors) == 0
+        status = GeometryStatus.VALID if is_valid else GeometryStatus.FAILED
+
+        # Build structured errors for LLM repair feedback
+        structured_errors: List[StructuredError] = []
+        for err_msg in errors:
+            # Parse error messages into structured format
+            if "Length constraint violated" in err_msg:
+                structured_errors.append(StructuredError(
+                    error_type="constraint_violation",
+                    constraint=err_msg.split(":")[0] if ":" in err_msg else err_msg,
+                    expected=err_msg,
+                    actual="",
+                    instruction="Correct the DSL length values to match the constraint.",
+                ))
+            elif "Perpendicularity violated" in err_msg:
+                structured_errors.append(StructuredError(
+                    error_type="constraint_violation",
+                    constraint=err_msg.split(":")[0] if ":" in err_msg else err_msg,
+                    expected="dot(v1, v2) = 0",
+                    actual=err_msg,
+                    instruction="Correct the DSL to ensure perpendicularity constraint is satisfied.",
+                ))
+            elif "Parallelism violated" in err_msg:
+                structured_errors.append(StructuredError(
+                    error_type="constraint_violation",
+                    constraint=err_msg.split(":")[0] if ":" in err_msg else err_msg,
+                    expected="cross(v1, v2) = 0",
+                    actual=err_msg,
+                    instruction="Correct the DSL to ensure parallelism constraint is satisfied.",
+                ))
+            else:
+                structured_errors.append(StructuredError(
+                    error_type="validation_error",
+                    constraint=err_msg,
+                    instruction="Correct the DSL to resolve this validation error.",
+                ))
+
         if not is_valid:
             logger.warning(f"[GeometryValidator] Validation FAILED with {len(errors)} errors: {errors[:3]}")
         else:
@@ -346,4 +432,6 @@ class GeometryValidator:
             errors=errors,
             warnings=warnings,
             checked_count=checked,
+            status=status,
+            structured_errors=structured_errors,
         )

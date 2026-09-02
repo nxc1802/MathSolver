@@ -6,6 +6,9 @@ class ModelTier(BaseModel):
     """Configuration for a specific model tier within an agent's cascade."""
     model: str = Field(..., description="Provider/Model string, e.g. gemini/gemini-2.5-flash")
     max_attempts: int = Field(default=1, ge=1, le=5, description="Max attempts with this model tier")
+    reasoning_effort: Optional[Literal["low", "medium", "high"]] = Field(
+        default=None, description="Reasoning effort for this specific model tier"
+    )
 
     @field_validator("model")
     @classmethod
@@ -14,6 +17,26 @@ class ModelTier(BaseModel):
         if not v:
             raise ValueError("Model identifier cannot be empty")
         return v
+
+
+class OCRCorrectionConfig(BaseModel):
+    """Configuration for optional VLM-based OCR correction."""
+    enabled: bool = Field(default=True, description="Whether VLM correction is enabled when gateway triggers")
+    model: str = Field(default="gemini/gemini-3.5-flash-lite", description="VLM model for OCR correction")
+    temperature: float = Field(default=0.1, ge=0.0, le=2.0, description="VLM correction temperature")
+    max_tokens: int = Field(default=4096, gt=0, description="Max output tokens for VLM correction")
+    timeout_seconds: int = Field(default=60, gt=0, description="VLM correction timeout")
+    max_attempts: int = Field(default=1, ge=1, le=3, description="Max VLM correction attempts")
+    reasoning_effort: Optional[Literal["low", "medium", "high"]] = Field(
+        default="low", description="Reasoning effort for VLM OCR correction"
+    )
+
+
+class ConfidenceGatewayConfig(BaseModel):
+    """OCR confidence gateway configuration."""
+    enabled: bool = Field(default=True, description="Enable confidence-based gateway")
+    threshold: float = Field(default=0.85, ge=0.0, le=1.0, description="Confidence threshold below which VLM correction triggers")
+    correction: OCRCorrectionConfig = Field(default_factory=OCRCorrectionConfig)
 
 
 class AgentConfig(BaseModel):
@@ -27,6 +50,9 @@ class AgentConfig(BaseModel):
     reasoning_effort: Optional[Literal["low", "medium", "high"]] = Field(
         default=None, description="Reasoning effort for thinking models"
     )
+    confidence_gateway: Optional[ConfidenceGatewayConfig] = Field(
+        default=None, description="OCR confidence gateway config (only for OCR agent)"
+    )
 
 
 class RetryPolicyConfig(BaseModel):
@@ -37,7 +63,6 @@ class RetryPolicyConfig(BaseModel):
     non_retryable_errors: List[str] = Field(
         default_factory=lambda: ["invalid_request", "authentication"]
     )
-    max_total_attempts: int = Field(default=5, ge=1, le=10)
 
 
 class AgentModelsConfig(BaseModel):

@@ -23,16 +23,15 @@ class AgentRuntime:
         messages: List[Dict[str, Any]],
         validator: Optional[Callable[[str], Union[Tuple[bool, Any], Any]]] = None,
         response_format: Optional[Dict[str, Any]] = None,
-        temperature_override: Optional[float] = None,
-        max_tokens_override: Optional[int] = None,
         **kwargs
     ) -> Any:
         """
         Executes an agent run across tiered model cascades with validator-guided escalation.
+        Temperature and max_tokens are always resolved from AgentConfig (single source of truth).
         """
         config: AgentConfig = load_agent_config(agent)
-        temperature = temperature_override if temperature_override is not None else config.temperature
-        max_tokens = max_tokens_override if max_tokens_override is not None else config.max_tokens
+        temperature = config.temperature
+        max_tokens = config.max_tokens
 
         last_error = None
         current_messages = list(messages)
@@ -47,6 +46,7 @@ class AgentRuntime:
                 )
 
                 try:
+                    tier_reasoning_effort = tier.reasoning_effort if tier.reasoning_effort is not None else config.reasoning_effort
                     raw_output = await self.llm_service.acomplete(
                         model=tier.model,
                         messages=current_messages,
@@ -54,7 +54,7 @@ class AgentRuntime:
                         max_tokens=max_tokens,
                         timeout=config.timeout_seconds,
                         response_format=response_format,
-                        reasoning_effort=config.reasoning_effort,
+                        reasoning_effort=tier_reasoning_effort,
                         agent_name=agent,
                         tier_index=tier_idx,
                         **kwargs
